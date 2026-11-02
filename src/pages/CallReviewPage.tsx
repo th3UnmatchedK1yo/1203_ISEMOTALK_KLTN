@@ -3,7 +3,7 @@ import { Link, useParams } from 'react-router-dom'
 import { ArrowLeft, Check, Save, AlertTriangle, RefreshCw } from 'lucide-react'
 import {
   ApiError, clock, emotionColors, emotionLabels, getCall, percent,
-  provenanceLabel, saveReview, type CallDetail, type Emotion, type Moment, type ReviewPatch,
+  provenanceLabel, resolveApiUrl, saveReview, type CallDetail, type Emotion, type Moment, type ReviewPatch,
   type ReviewPayload,
 } from '@/api/isemotalk'
 
@@ -152,7 +152,7 @@ export function CallReviewPage() {
 
     <section className="rounded-lg border bg-white p-4">
       <h2 className="mb-3 text-sm font-semibold">Âm thanh & dòng thời gian</h2>
-      {call.audioUrl ? <audio key={call.id} ref={audioRef} controls preload="metadata" src={call.audioUrl} className="w-full"
+      {call.audioUrl ? <audio key={call.id} ref={audioRef} controls preload="metadata" src={resolveApiUrl(call.audioUrl)} className="w-full"
         onTimeUpdate={e=>setCurrentTime(e.currentTarget.currentTime)}
         onSeeked={e=>setCurrentTime(e.currentTarget.currentTime)}
         onError={()=>setError('Không phát được file audio. Kiểm tra server/data/uploads và endpoint audio.')}
