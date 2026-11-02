@@ -65,7 +65,41 @@ export interface CallItem {
   updatedAt: string
 }
 
+export type StageKey = 'validate' | 'transcribe' | 'diarize' | 'emotion' | 'finalize'
+export interface StageEntry {
+  stage: StageKey
+  state: 'pending' | 'running' | 'done' | 'skipped' | 'failed'
+  startedAt?: string
+  endedAt?: string
+  detail?: string
+}
+
+export interface ComponentHealth {
+  adapter: string
+  ready: boolean
+  mock: boolean
+  verified?: boolean
+  detail: string
+}
+export interface InferenceHealth {
+  status: 'ok' | 'degraded'
+  mode: 'mock' | 'real' | 'mixed'
+  device: string
+  ffmpeg: boolean
+  components: {
+    asr: ComponentHealth
+    diarization: ComponentHealth
+    ser: ComponentHealth
+  }
+}
+export interface SystemStatus {
+  api: 'ok'
+  inference: { reachable: boolean; error?: string } & Partial<InferenceHealth>
+}
+
 export interface CallDetail extends CallItem {
+  stageLog: StageEntry[]
+  attempts: number
   audioUrl: string | null
   audioName: string | null
   peaks: number[] | null
@@ -215,6 +249,33 @@ export function saveReview(id: string, payload: ReviewPayload): Promise<CallDeta
 export function getAnalytics(signal?: AbortSignal): Promise<Analytics> {
   return json<Analytics>('/api/analytics', { signal })
     .then(data => requireShape(data, x => !!x.totals && !!x.review && !!x.customerEmotion, '/api/analytics'))
+}
+
+export function getSystemStatus(signal?: AbortSignal): Promise<SystemStatus> {
+  return json<SystemStatus>('/api/system/status', { signal })
+    .then(data => requireShape(data, x => x.api === 'ok' && !!x.inference, '/api/system/status'))
+}
+
+export function uploadRecording(form: FormData): Promise<{ id: string }> {
+  return json<{ id: string }>('/api/calls/upload', { method: 'POST', body: form })
+    .then(data => requireShape(data, x => typeof x.id === 'string', '/api/calls/upload'))
+}
+
+export function importAnalysis(form: FormData): Promise<{ id: string }> {
+  return json<{ id: string }>('/api/calls/import', { method: 'POST', body: form })
+    .then(data => requireShape(data, x => typeof x.id === 'string', '/api/calls/import'))
+}
+
+export function retryProcessing(id: string): Promise<{ id: string }> {
+  return json<{ id: string }>('/api/calls/' + encodeURIComponent(id) + '/retry', { method: 'POST' })
+}
+
+export const stageLabels: Record<StageKey, string> = {
+  validate: 'Kiểm tra âm thanh',
+  transcribe: 'Chuyển giọng nói thành văn bản',
+  diarize: 'Nhận diện người nói',
+  emotion: 'Phân tích cảm xúc',
+  finalize: 'Tổng hợp kết quả',
 }
 
 export const emotionLabels: Record<Emotion, string> = {
