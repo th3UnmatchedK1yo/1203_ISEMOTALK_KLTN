@@ -163,7 +163,7 @@ export class Pipeline {
         )
         const speakerSource: SpeakerSource = r.speakerSource === 'channel' ? 'channel' : r.speakerSource === 'mock' ? 'mock' : 'unassigned'
         repo.updateCall(this.db, id, { provenance: r.provenance, speakerSource })
-        return { detail: `${r.segments.length} câu${r.provenance === 'mock' ? ' · mô phỏng' : ''}` }
+        return { detail: `${r.segments.length} câu · ${r.provenance === 'mock' ? 'ASR mô phỏng' : 'ASR thật (cần đối chiếu transcript)'}` }
       }
 
       case 'diarize': {
