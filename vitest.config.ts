@@ -5,7 +5,7 @@ export default defineConfig({
   resolve: { alias: { '@': path.resolve(__dirname, './src') } },
   test: {
     environment: 'node',
-    include: ['server/tests/**/*.test.ts'],
+    include: ['server/tests/**/*.test.ts', 'src/api/**/*.test.ts'],
     testTimeout: 15_000,
   },
 })
