@@ -4,10 +4,21 @@ import { loadConfig } from './config'
 import { openDb } from './db'
 import { HttpInferenceClient } from './inference/client'
 import { Pipeline } from './pipeline'
+import { seedDemo } from './seed'
 
 const config = loadConfig()
 fs.mkdirSync(config.uploadsDir, { recursive: true })
 const db = openDb(config.dbFile)
+
+// Auto-initialize a brand new LOCAL dev database with explicitly labeled mock data.
+// Never overwrite, delete or duplicate existing records or their human reviews.
+if (process.env.NODE_ENV !== 'production' && process.env.ISEMO_AUTO_SEED !== '0') {
+  const count = (db.prepare('SELECT COUNT(*) AS n FROM calls').get() as { n: number }).n
+  if (count === 0) {
+    const result = seedDemo(db, config)
+    console.log('[api] Empty development DB: created ' + result.created + ' synthetic demo calls (provenance=mock).')
+  }
+}
 const client = new HttpInferenceClient(config.inferenceUrl)
 const pipeline = new Pipeline(db, config, client, (m, e) => console.error(`[pipeline] ${m}`, e ?? ''))
 pipeline.resume()
