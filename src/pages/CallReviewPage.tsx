@@ -157,8 +157,8 @@ export function CallReviewPage() {
     }
   }
 
-  if (loading) return <p className="p-6 text-slate-500">Đang tải cuộc gọi từ SQLite…</p>
-  if (!call) return <div className="space-y-3"><Link to="/calls" className="text-blue-700">← Danh sách cuộc gọi</Link><p role="alert" className="text-red-700">{error || 'Không tìm thấy cuộc gọi.'}</p></div>
+  if (loading) return <p className="p-6 text-slate-700">Đang tải cuộc gọi từ SQLite…</p>
+  if (!call) return <div className="space-y-3"><Link to="/calls" className="text-teal-800">← Danh sách cuộc gọi</Link><p role="alert" className="text-red-700">{error || 'Không tìm thấy cuộc gọi.'}</p></div>
   const selected = call.utterances.find(u => u.id === selectedId) ?? null
   const current = call.utterances.find(u => currentTime >= u.start && currentTime < u.end)
   const selectedMoment = call.moments.find(m => m.id === selectedMomentId)
@@ -168,16 +168,16 @@ export function CallReviewPage() {
   return <div className="space-y-4">
     <header className="flex flex-wrap items-start justify-between gap-3">
       <div className="space-y-1">
-        <Link to="/calls" className="inline-flex items-center gap-1 text-sm text-slate-600 hover:text-blue-700"><ArrowLeft size={15}/> Danh sách cuộc gọi</Link>
-        <h1 className="text-xl font-semibold">{call.id} · {call.title}</h1>
-        <p className="text-sm text-slate-500">{call.agentName || 'Chưa có nhân viên'} / {call.customerName || 'Chưa có khách hàng'} · {clock(call.duration)} · {reviewStatus}</p>
+        <Link to="/calls" className="inline-flex items-center gap-1 text-sm text-slate-700 hover:text-teal-800"><ArrowLeft size={15}/> Danh sách cuộc gọi</Link>
+        <h1 className="text-2xl font-semibold tracking-tight text-[#12394d]">{call.id} · {call.title}</h1>
+        <p className="text-sm text-slate-700">{call.agentName || 'Chưa có nhân viên'} / {call.customerName || 'Chưa có khách hàng'} · {clock(call.duration)} · {reviewStatus}</p>
       </div>
       <div className="flex items-center gap-2">
         <span className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">{provenanceLabel(call.provenance)}</span>
-        <button disabled={!dirty || saving || call.status !== 'ready'} onClick={() => void save()} className="inline-flex items-center gap-2 rounded-md bg-slate-900 px-4 py-2 text-sm text-white disabled:opacity-40"><Save size={15}/>{saving ? 'Đang lưu…' : 'Lưu đánh giá'}</button>
+        <button disabled={!dirty || saving || call.status !== 'ready'} onClick={() => void save()} className="inline-flex items-center gap-2 rounded-md bg-[#0E5665] px-4 py-2 text-sm text-white disabled:opacity-40"><Save size={15}/>{saving ? 'Đang lưu…' : 'Lưu đánh giá'}</button>
       </div>
     </header>
-    {call.provenance === 'mock' && <p className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-900">
+    {call.provenance === 'mock' && <p className="rounded-md border border-blue-200 bg-teal-50 px-3 py-2 text-sm text-blue-900">
       {call.source === 'results_import'
         ? 'Bản ghi demo seed: WAV tổng hợp không chứa lời nói thật, transcript và nhãn cảm xúc đều mô phỏng.'
         : 'Đây là file ghi âm được tải lên từ máy của bạn, nhưng ít nhất một bước ASR/SER hiện đang mô phỏng. Không xem dự đoán là kết quả mô hình nghiên cứu.'}
@@ -192,8 +192,8 @@ export function CallReviewPage() {
       <ol className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
         {call.stageLog.map(step => <li key={step.stage} className="rounded-md border border-amber-100 bg-white p-2 text-xs">
           <strong>{stageLabels[step.stage]}</strong>
-          <p className="mt-1 text-slate-500">{step.state === 'done' ? 'Hoàn thành' : step.state === 'skipped' ? 'Bỏ qua' : step.state === 'running' ? 'Đang thực hiện' : step.state === 'failed' ? 'Lỗi' : 'Đang chờ'}</p>
-          {step.detail && <p className="mt-1 text-slate-500">{step.detail}</p>}
+          <p className="mt-1 text-slate-700">{step.state === 'done' ? 'Hoàn thành' : step.state === 'skipped' ? 'Bỏ qua' : step.state === 'running' ? 'Đang thực hiện' : step.state === 'failed' ? 'Lỗi' : 'Đang chờ'}</p>
+          {step.detail && <p className="mt-1 text-slate-700">{step.detail}</p>}
         </li>)}
       </ol>
       {call.status !== 'failed' && <p className="mt-3 text-xs text-amber-800">Trạng thái được cập nhật tự động. Không đóng cửa sổ backend trong lúc xử lý.</p>}
@@ -202,55 +202,55 @@ export function CallReviewPage() {
     {saveMessage && <p role="status" className="rounded-md border border-green-200 bg-green-50 p-3 text-sm text-green-800">{saveMessage}</p>}
     {dirty && !saveMessage && <p className="text-xs font-medium text-amber-700">Có thay đổi chưa lưu</p>}
 
-    <section className="rounded-lg border bg-white p-4">
-      <h2 className="mb-3 text-sm font-semibold">Âm thanh & dòng thời gian</h2>
+    <section className="rounded-xl border border-[#c4d4dc] bg-white p-5 shadow-sm">
+      <h2 className="mb-4 text-base font-semibold text-[#12394d]">Âm thanh & dòng thời gian</h2>
       {call.audioUrl ? <audio key={call.id} ref={audioRef} controls preload="metadata" src={resolveApiUrl(call.audioUrl)} className="w-full"
         onTimeUpdate={e=>setCurrentTime(e.currentTarget.currentTime)}
         onSeeked={e=>setCurrentTime(e.currentTarget.currentTime)}
         onError={()=>setError('Không phát được file audio. Kiểm tra server/data/uploads và endpoint audio.')}
-      /> : <p className="text-sm text-slate-500">Cuộc gọi chưa có file audio.</p>}
-      <div className="mt-3 flex justify-between text-xs font-mono text-slate-500"><span>{clock(currentTime)}</span><span>{clock(totalTime)}</span></div>
+      /> : <p className="text-sm text-slate-700">Cuộc gọi chưa có file audio.</p>}
+      <div className="mt-3 flex justify-between text-xs font-mono text-slate-700"><span>{clock(currentTime)}</span><span>{clock(totalTime)}</span></div>
       <div className="relative mt-1 h-9 overflow-hidden rounded bg-slate-100" role="group" aria-label="Dòng thời gian cảm xúc">
         {call.utterances.filter(u=>u.fused).map(u=><button key={u.id} title={clock(u.start)+' · '+emotionLabels[u.fused!.emotion]} aria-label={'Đến '+clock(u.start)}
           onClick={()=>{setSelectedId(u.id);seek(u.start)}} className="absolute top-0 h-full hover:brightness-90"
           style={{left:(u.start/totalTime*100)+'%',width:(Math.max(0.4,(u.end-u.start)/totalTime*100))+'%',background:emotionColors[u.fused!.emotion]}}/>)}
         <div className="pointer-events-none absolute top-0 h-full w-0.5 bg-slate-950" style={{left:(Math.min(100,currentTime/totalTime*100))+'%'}}/>
       </div>
-      <div className="mt-2 flex flex-wrap gap-3 text-xs text-slate-600">{allEmotions.map(e=><span key={e} className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded" style={{background:emotionColors[e]}}/>{emotionLabels[e]}</span>)}</div>
+      <div className="mt-2 flex flex-wrap gap-3 text-xs text-slate-700">{allEmotions.map(e=><span key={e} className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded" style={{background:emotionColors[e]}}/>{emotionLabels[e]}</span>)}</div>
     </section>
 
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1.7fr)_minmax(295px,1fr)]">
-      <section className="rounded-lg border bg-white">
-        <div className="border-b p-4"><h2 className="font-semibold">Bản ghi hội thoại</h2><p className="text-xs text-slate-500">Bấm vào câu để phát từ thời điểm tương ứng và chỉnh nhãn.</p></div>
-        <div className="max-h-[550px] divide-y overflow-y-auto">
+      <section className="rounded-xl border border-[#c4d4dc] bg-white shadow-sm">
+        <div className="border-b border-[#d6e2e8] px-5 py-4"><h2 className="text-base font-semibold text-[#12394d]">Bản ghi hội thoại</h2><p className="text-xs text-slate-700">Bấm vào câu để phát từ thời điểm tương ứng và chỉnh nhãn.</p></div>
+        <div className="max-h-[600px] divide-y divide-[#e0e9ed] overflow-y-auto">
           {call.utterances.map(u=>{
             const active = current?.id === u.id
             const chosen = selectedId === u.id
             const p = patches[u.id]
-            return <button key={u.id} onClick={()=>{setSelectedId(u.id);setSelectedMomentId(null);seek(u.start)}} className={'block w-full p-4 text-left hover:bg-slate-50 '+(chosen?'bg-blue-50 ':'')+(active?'border-l-4 border-blue-600':'border-l-4 border-transparent')}>
+            return <button key={u.id} onClick={()=>{setSelectedId(u.id);setSelectedMomentId(null);seek(u.start)}} className={'block w-full p-4 text-left hover:bg-teal-50/70 '+(chosen?'bg-blue-50 ':'')+(active?'border-l-4 border-[#087985]':'border-l-4 border-transparent')}>
               <div className="mb-1 flex flex-wrap items-center gap-2 text-xs">
-                <span className="font-mono text-slate-500">{clock(u.start)}–{clock(u.end)}</span>
+                <span className="font-mono text-slate-700">{clock(u.start)}–{clock(u.end)}</span>
                 <span className="font-semibold">{u.speaker==='agent'?'Nhân viên':u.speaker==='customer'?'Khách hàng':'Chưa rõ người nói'}</span>
                 {u.fused && <span className="rounded bg-slate-100 px-2 py-0.5" style={{color:emotionColors[u.fused.emotion]}}>{emotionLabels[u.fused.emotion]} · {percent(u.fused.confidence)}</span>}
                 {p?.decision==='corrected' && p.emotion && <span className="text-amber-700">Đã sửa → {emotionLabels[p.emotion]}</span>}
                 {p?.decision==='confirmed' && <span className="text-green-700">Đã xác nhận</span>}
               </div>
-              <p className="text-sm leading-6">{p?.text ?? u.text}</p>
+              <p className="text-base leading-7 text-[#17364b]">{p?.text ?? u.text}</p>
             </button>
           })}
-          {call.utterances.length===0 && <p className="p-6 text-sm text-slate-500">Chưa có transcript.</p>}
+          {call.utterances.length===0 && <p className="p-6 text-sm text-slate-700">Chưa có transcript.</p>}
         </div>
       </section>
 
       <div className="space-y-4">
         <section className="rounded-lg border bg-white p-4">
           <h2 className="font-semibold">Đánh giá từng câu</h2>
-          {!selected ? <p className="mt-3 text-sm text-slate-500">Chọn một câu từ transcript.</p> : <>
-            <p className="mt-2 text-xs text-slate-500">Câu #{selected.idx+1} · {clock(selected.start)} · {selected.speaker}</p>
-            <p className="mt-2 text-sm">{patches[selected.id]?.text ?? selected.text}</p>
+          {!selected ? <p className="mt-3 text-sm text-slate-700">Chọn một câu từ transcript.</p> : <>
+            <p className="mt-2 text-xs text-slate-700">Câu #{selected.idx+1} · {clock(selected.start)} · {selected.speaker}</p>
+            <p className="mt-2 text-base">{patches[selected.id]?.text ?? selected.text}</p>
             <div className="mt-4 space-y-2 rounded-md bg-slate-50 p-3 text-sm">
               {([['Âm thanh',selected.acoustic],['Văn bản',selected.lexical],['Kết hợp',selected.fused]] as const).map(([label,p])=>
-                <div key={label} className="flex justify-between gap-2"><span className="text-slate-500">{label}</span><strong>{p?emotionLabels[p.emotion]+' · '+percent(p.confidence):'Chưa có'}</strong></div>)}
+                <div key={label} className="flex justify-between gap-2"><span className="text-slate-700">{label}</span><strong>{p?emotionLabels[p.emotion]+' · '+percent(p.confidence):'Chưa có'}</strong></div>)}
             </div>
             <div className="mt-4 flex gap-2">
               <button disabled={!selected.fused} onClick={()=>edit(selected.id,{decision:'confirmed',emotion:null})} className="inline-flex flex-1 items-center justify-center gap-1 rounded-md border px-3 py-2 text-sm disabled:opacity-40"><Check size={15}/> Xác nhận</button>
@@ -280,15 +280,15 @@ export function CallReviewPage() {
         <section className="rounded-lg border bg-white p-4">
           <h2 className="font-semibold">Khoảnh khắc quan trọng ({call.moments.length})</h2>
           <div className="mt-2 max-h-48 space-y-2 overflow-y-auto">
-            {call.moments.map(m=><button key={m.id} onClick={()=>selectMoment(m)} className={'block w-full rounded-md border p-2 text-left text-sm hover:bg-slate-50 '+(selectedMomentId===m.id?'border-blue-500 bg-blue-50':'')}>
+            {call.moments.map(m=><button key={m.id} onClick={()=>selectMoment(m)} className={'block w-full rounded-md border p-2 text-left text-sm hover:bg-teal-50/70 '+(selectedMomentId===m.id?'border-blue-500 bg-blue-50':'')}>
               <strong>{clock(m.start)}</strong> · {m.description}
             </button>)}
-            {call.moments.length===0 && <p className="text-sm text-slate-500">Chưa có khoảnh khắc được phát hiện.</p>}
+            {call.moments.length===0 && <p className="text-sm text-slate-700">Chưa có khoảnh khắc được phát hiện.</p>}
           </div>
           {selectedMoment && <div className="mt-3 flex gap-2 text-xs">
             <button onClick={()=>{setMomentChanges(p=>({...p,[selectedMoment.id]:{relevance:true,note:p[selectedMoment.id]?.note??selectedMoment.note}}));setDirty(true)}} className="rounded border px-2 py-1.5">Có liên quan</button>
             <button onClick={()=>{setMomentChanges(p=>({...p,[selectedMoment.id]:{relevance:false,note:p[selectedMoment.id]?.note??selectedMoment.note}}));setDirty(true)}} className="rounded border px-2 py-1.5">Không liên quan</button>
-            <span className="self-center text-slate-500">{momentChanges[selectedMoment.id]?.relevance===true?'Đã chọn: liên quan':momentChanges[selectedMoment.id]?.relevance===false?'Đã chọn: không':selectedMoment.relevance===null?'Chưa đánh giá':selectedMoment.relevance?'Liên quan':'Không liên quan'}</span>
+            <span className="self-center text-slate-700">{momentChanges[selectedMoment.id]?.relevance===true?'Đã chọn: liên quan':momentChanges[selectedMoment.id]?.relevance===false?'Đã chọn: không':selectedMoment.relevance===null?'Chưa đánh giá':selectedMoment.relevance?'Liên quan':'Không liên quan'}</span>
           </div>}
         </section>
         <section className="rounded-lg border bg-white p-4">
@@ -296,11 +296,11 @@ export function CallReviewPage() {
           <label className="mt-3 block text-sm" htmlFor="overall-note">Ghi chú tổng thể</label>
           <textarea id="overall-note" value={overallNote} onChange={e=>{setOverallNote(e.target.value);setDirty(true)}} maxLength={5000} rows={3} className="mt-1 w-full rounded border p-2 text-sm"/>
           <label className="mt-3 flex items-center gap-2 text-sm"><input type="checkbox" checked={markReviewed} onChange={e=>{setMarkReviewed(e.target.checked);setDirty(true)}}/> Đánh dấu đã hoàn tất xem xét</label>
-          <button onClick={()=>void save()} disabled={!dirty||saving||call.status!=='ready'} className="mt-4 flex w-full items-center justify-center gap-2 rounded-md bg-slate-900 px-3 py-2 text-sm text-white disabled:opacity-40"><Save size={15}/>{saving?'Đang lưu…':'Lưu vào SQLite'}</button>
-          <a className="mt-3 block text-sm text-blue-700 hover:underline" href={'/api/calls/'+encodeURIComponent(call.id)+'/export.csv'}>Xuất kết quả CSV</a>
+          <button onClick={()=>void save()} disabled={!dirty||saving||call.status!=='ready'} className="mt-4 flex w-full items-center justify-center gap-2 rounded-md bg-[#0E5665] px-3 py-2 text-sm text-white disabled:opacity-40"><Save size={15}/>{saving?'Đang lưu…':'Lưu vào SQLite'}</button>
+          <a className="mt-3 block text-sm text-teal-800 hover:underline" href={'/api/calls/'+encodeURIComponent(call.id)+'/export.csv'}>Xuất kết quả CSV</a>
         </section>
       </div>
     </div>
-    <p className="flex items-center gap-2 text-xs text-slate-500"><AlertTriangle size={14}/> Nhãn gốc của mô hình vẫn được giữ riêng; chỉnh sửa của QA không ghi đè prediction.</p>
+    <p className="flex items-center gap-2 text-xs text-slate-700"><AlertTriangle size={14}/> Nhãn gốc của mô hình vẫn được giữ riêng; chỉnh sửa của QA không ghi đè prediction.</p>
   </div>
 }

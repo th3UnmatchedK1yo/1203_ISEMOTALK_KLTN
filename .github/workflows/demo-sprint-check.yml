@@ -5,10 +5,12 @@ on:
     branches:
       - feat/demo-sprint-api-20261102
       - feat/real-audio-intake-20261102
+      - feat/readability-theme-20261102
   pull_request:
     branches:
       - main
       - feat/demo-sprint-api-20261102
+      - feat/real-audio-intake-20261102
   workflow_dispatch:
 
 permissions:
