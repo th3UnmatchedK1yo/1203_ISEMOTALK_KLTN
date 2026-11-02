@@ -47,3 +47,13 @@ jobs:
       - name: Offline ASR unit tests (no weights or GPU)
         working-directory: inference
         run: python -m unittest discover -s tests -p "test_*.py" -v
+      - name: Validate PowerShell setup script syntax
+        shell: pwsh
+        run: |
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path 'scripts/enable-offline-asr.ps1').Path, [ref]$tokens, [ref]$errors) | Out-Null
+          if ($errors.Count -gt 0) {
+            $errors | ForEach-Object { Write-Error $_.ToString() }
+            exit 1
+          }
