@@ -29,3 +29,17 @@ server/data/*.db-wal
 server/data/*.db-shm
 server/data/uploads/*
 !server/data/uploads/.gitkeep
+
+# SER research artifacts are private and should never enter the web Git repo
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+*.onnx
+*.joblib
+*.bundle
+*.tar.gz
+research_backups/
+inference/private/
+inference/verification.json
+dataset_package/
