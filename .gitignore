@@ -8,3 +8,24 @@ dist/
 .idea/
 coverage/
 *.log
+
+# Build artifacts & temp
+*.tsbuildinfo
+vite.config.js
+vite.config.d.ts
+__inspect_db.py
+__sample_db.py
+
+# Python venv & cache
+.venv/
+*/.venv/
+__pycache__/
+*/__pycache__/
+*.pyc
+
+# Local databases and uploads
+server/data/*.db
+server/data/*.db-wal
+server/data/*.db-shm
+server/data/uploads/*
+!server/data/uploads/.gitkeep
