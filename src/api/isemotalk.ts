@@ -128,19 +128,57 @@ export class ApiError extends Error {
   }
 }
 
+// In local development connect directly to the Express API. This also works when
+// Vite was launched before its proxy config was updated (a common HMR pitfall).
+// For a deployed build, same-origin /api remains the default.
+const apiOrigin = (
+  import.meta.env.VITE_API_BASE_URL ??
+  (import.meta.env.DEV ? 'http://127.0.0.1:3001' : '')
+).replace(/\\/$/, '')
+
+export function resolveApiUrl(url: string | null): string | undefined {
+  if (!url) return undefined
+  if (/^https?:\\/\\//.test(url)) return url
+  return apiOrigin + (url.startsWith('/') ? url : '/' + url)
+}
+
+function requireShape<T>(value: T, valid: (input: T) => boolean, endpoint: string): T {
+  if (!valid(value)) {
+    throw new ApiError('API ' + endpoint + ' trả cấu trúc dữ liệu không hợp lệ. Kiểm tra cổng backend và phiên bản code.', 502)
+  }
+  return value
+}
+
 async function json<T>(url: string, options: RequestInit = {}): Promise<T> {
   let response: Response
   try {
-    response = await fetch(url, options)
+    response = await fetch(resolveApiUrl(url)!, { ...options, headers: { Accept: 'application/json', ...(options.headers ?? {}) } })
   } catch (error) {
     if (error instanceof Error && error.name === 'AbortError') throw error
-    throw new ApiError('Không kết nối được API. Hãy kiểm tra backend tại cổng 3001.', 0)
+    throw new ApiError('Không kết nối được Express API tại cổng 3001. Mở PowerShell và chạy npm run dev:api.', 0)
   }
 
-  const body: unknown = await response.json().catch(() => null)
+  const contentType = response.headers.get('content-type') ?? ''
+  if (!contentType.toLowerCase().includes('application/json')) {
+    throw new ApiError(
+      'API trả về nội dung không phải JSON (' + (contentType || 'không có Content-Type') +
+      '). Có thể request /api đang bị Vite trả về index.html. Hãy kiểm tra backend cổng 3001.',
+      response.status,
+    )
+  }
+  let body: unknown
+  try {
+    body = await response.json()
+  } catch {
+    throw new ApiError('Không đọc được JSON từ Express API.', response.status)
+  }
+
   if (!response.ok) {
     const errorBody = body as { error?: string; code?: string } | null
-    throw new ApiError(errorBody?.error ?? 'Yêu cầu API thất bại.', response.status, errorBody?.code)
+    throw new ApiError(errorBody?.error ?? 'API trả lỗi HTTP ' + response.status + '.', response.status, errorBody?.code)
+  }
+  if (body == null || typeof body !== 'object') {
+    throw new ApiError('API không trả dữ liệu JSON hợp lệ.', 502)
   }
   return body as T
 }
@@ -158,10 +196,12 @@ export function getCalls(
   params.set('page', String(filters.page ?? 1))
   params.set('pageSize', String(filters.pageSize ?? 15))
   return json<CallList>('/api/calls?' + params.toString(), { signal })
+    .then(data => requireShape(data, x => Array.isArray(x.items) && typeof x.total === 'number' && !!x.counts, '/api/calls'))
 }
 
 export function getCall(id: string, signal?: AbortSignal): Promise<CallDetail> {
   return json<CallDetail>('/api/calls/' + encodeURIComponent(id), { signal })
+    .then(data => requireShape(data, x => Array.isArray(x.utterances) && Array.isArray(x.moments) && typeof x.version === 'number', '/api/calls/:id'))
 }
 
 export function saveReview(id: string, payload: ReviewPayload): Promise<CallDetail> {
@@ -169,11 +209,12 @@ export function saveReview(id: string, payload: ReviewPayload): Promise<CallDeta
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
-  })
+  }).then(data => requireShape(data, x => Array.isArray(x.utterances) && typeof x.version === 'number', '/api/calls/:id/review'))
 }
 
 export function getAnalytics(signal?: AbortSignal): Promise<Analytics> {
   return json<Analytics>('/api/analytics', { signal })
+    .then(data => requireShape(data, x => !!x.totals && !!x.review && !!x.customerEmotion, '/api/analytics'))
 }
 
 export const emotionLabels: Record<Emotion, string> = {
