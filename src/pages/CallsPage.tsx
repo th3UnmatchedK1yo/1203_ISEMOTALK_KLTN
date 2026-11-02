@@ -1,257 +1,83 @@
-﻿import { useState, useMemo } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Search, Filter, User, Calendar, Clock, AlertTriangle } from 'lucide-react'
-import { Card, CardContent } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
-import { Avatar, AvatarFallback } from '@/components/ui/avatar'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationPrevious, PaginationNext, PaginationEllipsis } from '@/components/ui/pagination'
-import { generateMockCalls, mockAgents } from '@/data/mockData'
-import { formatDate, formatDuration } from '@/lib/utils'
-import { getReviewStatusColor, getProcessingStatusColor } from '@/lib/utils'
-import { PriorityBadge } from '@/components/ui/PriorityBadge'
-import { EmotionBadge } from '@/components/ui/EmotionBadge'
-import type { Call } from '@/types'
-import { REVIEW_STATUS_LABELS, PROCESSING_STATUS_LABELS } from '@/types'
+import { AlertCircle, Search, RefreshCw } from 'lucide-react'
+import { getCalls, clock, emotionLabels, provenanceLabel, type CallList, type CallItem } from '@/api/isemotalk'
 
-const ITEMS_PER_PAGE = 10
+const priorities = { high: 'Cao', medium: 'Trung bình', low: 'Thấp' }
+const reviews = { unreviewed: 'Chưa xem xét', in_progress: 'Đang xem xét', reviewed: 'Đã xem xét' }
+const processing = { ready: 'Sẵn sàng', queued: 'Đang chờ', processing: 'Đang xử lý', failed: 'Lỗi' }
 
 export function CallsPage() {
   const navigate = useNavigate()
-  const calls = useMemo(() => generateMockCalls(), [])
-  
   const [search, setSearch] = useState('')
-  const [agentFilter, setAgentFilter] = useState<string>('all')
-  const [priorityFilter, setPriorityFilter] = useState<string>('all')
-  const [reviewStatusFilter, setReviewStatusFilter] = useState<string>('all')
-  const [currentPage, setCurrentPage] = useState(1)
+  const [priority, setPriority] = useState('')
+  const [review, setReview] = useState('')
+  const [page, setPage] = useState(1)
+  const [refresh, setRefresh] = useState(0)
+  const [data, setData] = useState<CallList | null>(null)
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(true)
 
-  const filteredCalls = useMemo(() => {
-    return calls.filter((call) => {
-      const matchesSearch = search === '' || 
-        call.id.toLowerCase().includes(search.toLowerCase()) ||
-        call.customer.name.toLowerCase().includes(search.toLowerCase()) ||
-        call.agent.name.toLowerCase().includes(search.toLowerCase())
-      
-      const matchesAgent = agentFilter === 'all' || call.agent.id === agentFilter
-      const matchesPriority = priorityFilter === 'all' || call.reviewPriority === priorityFilter
-      const matchesReviewStatus = reviewStatusFilter === 'all' || call.reviewStatus === reviewStatusFilter
-      
-      return matchesSearch && matchesAgent && matchesPriority && matchesReviewStatus
-    })
-  }, [calls, search, agentFilter, priorityFilter, reviewStatusFilter])
+  useEffect(() => {
+    const ac = new AbortController()
+    setLoading(true)
+    setError('')
+    getCalls({ search, priority, review, page, pageSize: 10 }, ac.signal)
+      .then(setData)
+      .catch((e: Error) => { if (!ac.signal.aborted) setError(e.message) })
+      .finally(() => { if (!ac.signal.aborted) setLoading(false) })
+    return () => ac.abort()
+  }, [search, priority, review, page, refresh])
 
-  const totalPages = Math.ceil(filteredCalls.length / ITEMS_PER_PAGE)
-  const paginatedCalls = filteredCalls.slice(
-    (currentPage - 1) * ITEMS_PER_PAGE,
-    currentPage * ITEMS_PER_PAGE
-  )
-
+  const select = 'h-9 rounded-md border bg-white px-3 text-sm'
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">Danh sách cuộc gọi</h1>
-          <p className="text-sm text-muted-foreground">
-            Xem xét và phân loại các cuộc gọi theo mức độ ưu tiên
-          </p>
+    <div className="space-y-5">
+      <header className="flex flex-wrap items-center justify-between gap-3">
+        <div><h1 className="text-2xl font-semibold">Danh sách cuộc gọi</h1>
+          <p className="mt-1 text-sm text-slate-500">Chọn cuộc gọi để nghe, phân tích và đánh giá. Nguồn mô phỏng được ghi rõ.</p>
         </div>
-        <div className="text-sm text-slate-500">
-          {filteredCalls.length} cuộc gọi
-        </div>
+        <button onClick={() => setRefresh(n => n + 1)} className="inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm hover:bg-slate-50"><RefreshCw size={15}/> Tải lại</button>
+      </header>
+      {data && <p className="text-sm text-slate-600">Tổng cộng <strong>{data.counts.total}</strong> cuộc gọi · <strong>{data.counts.attention}</strong> cần ưu tiên · <strong>{data.counts.failed}</strong> lỗi</p>}
+      <div className="flex flex-wrap items-center gap-3">
+        <label className="relative flex-1 min-w-[220px]"><Search className="absolute left-3 top-2.5 text-slate-400" size={17}/>
+          <input className="h-9 w-full rounded-md border pl-9 pr-3 text-sm" placeholder="Tìm mã, tiêu đề, khách hàng…" value={search} onChange={e => {setSearch(e.target.value);setPage(1)}}/>
+        </label>
+        <select aria-label="Lọc ưu tiên" className={select} value={priority} onChange={e => {setPriority(e.target.value);setPage(1)}}>
+          <option value="">Mọi mức ưu tiên</option><option value="high">Cao</option><option value="medium">Trung bình</option><option value="low">Thấp</option>
+        </select>
+        <select aria-label="Lọc đánh giá" className={select} value={review} onChange={e => {setReview(e.target.value);setPage(1)}}>
+          <option value="">Mọi trạng thái đánh giá</option><option value="unreviewed">Chưa xem</option><option value="in_progress">Đang xem</option><option value="reviewed">Đã xem</option>
+        </select>
       </div>
-
-      <Card>
-        <CardContent className="pt-6">
-          <div className="flex flex-col gap-4 md:flex-row md:items-center">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                placeholder="Tìm kiếm theo mã cuộc gọi, tên..."
-                value={search}
-                onChange={(e) => { setSearch(e.target.value); setCurrentPage(1) }}
-                className="pl-9"
-              />
-            </div>
-
-            <Select value={agentFilter} onValueChange={(v) => { setAgentFilter(v); setCurrentPage(1) }}>
-              <SelectTrigger className="w-[180px]">
-                <User className="mr-2 h-4 w-4" />
-                <SelectValue placeholder="Agent" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Tất cả Agent</SelectItem>
-                {mockAgents.map((agent) => (
-                  <SelectItem key={agent.id} value={agent.id}>
-                    {agent.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            <Select value={priorityFilter} onValueChange={(v) => { setPriorityFilter(v); setCurrentPage(1) }}>
-              <SelectTrigger className="w-[160px]">
-                <Filter className="mr-2 h-4 w-4" />
-                <SelectValue placeholder="Mức ưu tiên" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Tất cả</SelectItem>
-                <SelectItem value="high">Mức cao</SelectItem>
-                <SelectItem value="medium">Mức trung bình</SelectItem>
-                <SelectItem value="low">Mức thấp</SelectItem>
-              </SelectContent>
-            </Select>
-
-            <Select value={reviewStatusFilter} onValueChange={(v) => { setReviewStatusFilter(v); setCurrentPage(1) }}>
-              <SelectTrigger className="w-[160px]">
-                <SelectValue placeholder="Trạng thái" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Tất cả</SelectItem>
-                <SelectItem value="unreviewed">Chưa xem</SelectItem>
-                <SelectItem value="needs_review">Cần xem xét</SelectItem>
-                <SelectItem value="reviewed">Đã xem xét</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardContent className="p-0">
-          <div className="divide-y">
-            {paginatedCalls.map((call) => (
-              <CallRow key={call.id} call={call} onClick={() => navigate(`/calls/${call.id}`)} />
-            ))}
-          </div>
-          {paginatedCalls.length === 0 && (
-            <div className="p-8 text-center text-muted-foreground">
-              Không tìm thấy cuộc gọi nào
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {totalPages > 1 && (
-        <Pagination>
-          <PaginationContent>
-            <PaginationItem>
-              <PaginationPrevious 
-                onClick={() => currentPage > 1 && setCurrentPage(currentPage - 1)}
-                className={currentPage === 1 ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
-              />
-            </PaginationItem>
-            
-            {Array.from({ length: totalPages }, (_, i) => i + 1)
-              .filter((page) => page === 1 || page === totalPages || (page >= currentPage - 1 && page <= currentPage + 1))
-              .map((page, idx, arr) => {
-                const showEllipsisBefore = idx > 0 && arr[idx - 1] !== page - 1
-                return (
-                  <span key={page} className="flex items-center">
-                    {showEllipsisBefore && <PaginationEllipsis />}
-                    <PaginationItem>
-                      <PaginationLink
-                        isActive={currentPage === page}
-                        onClick={() => setCurrentPage(page)}
-                        className="cursor-pointer"
-                      >
-                        {page}
-                      </PaginationLink>
-                    </PaginationItem>
-                  </span>
-                )
-              })}
-            
-            <PaginationItem>
-              <PaginationNext
-                onClick={() => currentPage < totalPages && setCurrentPage(currentPage + 1)}
-                className={currentPage === totalPages ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
-              />
-            </PaginationItem>
-          </PaginationContent>
-        </Pagination>
-      )}
-    </div>
-  )
-}
-
-interface CallRowProps {
-  call: Call
-  onClick: () => void
-}
-
-function CallRow({ call, onClick }: CallRowProps) {
-  const hasModalityDisagreement = call.summary.modalityDisagreementCount > 0
-  const negativeRatio = (call.summary.negativeEmotionRatio * 100).toFixed(0)
-
-  return (
-    <div
-      onClick={onClick}
-      className="flex items-center gap-4 p-4 hover:bg-accent/50 cursor-pointer transition-colors"
-    >
-      <Avatar className="h-10 w-10">
-        <AvatarFallback className="bg-primary/10 text-primary text-sm">
-          {call.agent.avatar}
-        </AvatarFallback>
-      </Avatar>
-
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 mb-1">
-          <span className="font-medium">{call.customer.name}</span>
-          <span className="text-sm text-slate-400">•</span>
-          <span className="text-sm text-slate-500">{call.agent.name}</span>
-        </div>
-        <div className="flex items-center gap-3 text-sm text-slate-500">
-          <span>{call.id}</span>
-          <span className="flex items-center gap-1">
-            <Calendar className="h-3 w-3" />
-            {formatDate(call.startTime)}
-          </span>
-          <span className="flex items-center gap-1">
-            <Clock className="h-3 w-3" />
-            {formatDuration(call.duration)}
-          </span>
-        </div>
+      {error && <div role="alert" className="flex gap-2 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700"><AlertCircle size={17}/>{error}</div>}
+      <div className="overflow-x-auto rounded-lg border bg-white">
+        <table className="w-full min-w-[800px] text-left text-sm">
+          <thead className="border-b bg-slate-50 text-slate-600"><tr>
+            <th className="px-4 py-3">Cuộc gọi</th><th className="px-4 py-3">Nhân viên / Khách hàng</th><th className="px-4 py-3">Thời lượng</th>
+            <th className="px-4 py-3">Cảm xúc</th><th className="px-4 py-3">Ưu tiên</th><th className="px-4 py-3">Đánh giá</th><th className="px-4 py-3">Xử lý</th>
+          </tr></thead>
+          <tbody className="divide-y">
+            {data?.items.map((call: CallItem) => <tr key={call.id} className="cursor-pointer hover:bg-slate-50 focus-within:bg-slate-50" onClick={() => navigate('/calls/'+encodeURIComponent(call.id))}>
+              <td className="px-4 py-3"><button className="text-left font-medium text-blue-700 hover:underline" onClick={e => {e.stopPropagation();navigate('/calls/'+encodeURIComponent(call.id))}}>{call.id} · {call.title}</button>
+                <div className="mt-1 text-xs text-slate-500">{provenanceLabel(call.provenance)}</div></td>
+              <td className="px-4 py-3">{call.agentName || '—'}<div className="text-xs text-slate-500">{call.customerName || '—'}</div></td>
+              <td className="px-4 py-3 font-mono">{clock(call.duration)}</td>
+              <td className="px-4 py-3">{call.dominantEmotion ? emotionLabels[call.dominantEmotion] : '—'}</td>
+              <td className="px-4 py-3">{priorities[call.priority]}</td>
+              <td className="px-4 py-3">{reviews[call.reviewStatus]}</td>
+              <td className="px-4 py-3">{processing[call.status]}</td>
+            </tr>)}
+            {!loading && data?.items.length === 0 && <tr><td colSpan={7} className="p-8 text-center text-slate-500">Không tìm thấy cuộc gọi phù hợp.</td></tr>}
+            {loading && <tr><td colSpan={7} className="p-8 text-center text-slate-500">Đang tải dữ liệu từ SQLite…</td></tr>}
+          </tbody>
+        </table>
       </div>
-
-      <div className="flex-shrink-0">
-        <PriorityBadge priority={call.reviewPriority} size="sm" showIcon />
-      </div>
-
-      <div className="hidden lg:flex items-center gap-4 text-sm">
-        <EmotionBadge emotion={call.summary.dominantEmotion} size="sm" />
-        
-        <div className="text-center min-w-[50px]">
-          <div className={`text-sm font-medium ${parseInt(negativeRatio) > 30 ? 'text-red-600' : 'text-slate-600'}`}>
-            {negativeRatio}%
-          </div>
-          <div className="text-xs text-slate-400">Tiêu cực</div>
-        </div>
-
-        <div className="text-center min-w-[50px]">
-          <div className={`text-sm font-medium ${call.summary.criticalMomentCount > 2 ? 'text-red-600' : 'text-slate-600'}`}>
-            {call.summary.criticalMomentCount}
-          </div>
-          <div className="text-xs text-slate-400">Quan trọng</div>
-        </div>
-
-        <div className={`flex items-center gap-1 min-w-[40px] ${hasModalityDisagreement ? 'text-amber-600' : 'text-slate-400'}`}>
-          {hasModalityDisagreement && <AlertTriangle className="h-3.5 w-3.5" />}
-          <span className="text-sm">{call.summary.modalityDisagreementCount}</span>
-        </div>
-      </div>
-
-      <div className="flex-shrink-0">
-        <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium ${getReviewStatusColor(call.reviewStatus)}`}>
-          {REVIEW_STATUS_LABELS[call.reviewStatus]}
-        </span>
-      </div>
-
-      <div className="flex-shrink-0">
-        <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium ${getProcessingStatusColor(call.processingStatus)}`}>
-          {PROCESSING_STATUS_LABELS[call.processingStatus]}
-        </span>
-      </div>
+      {data && <div className="flex items-center justify-between text-sm"><span>{data.total} kết quả</span><div className="flex items-center gap-3">
+        <button disabled={page <= 1} onClick={() => setPage(p => Math.max(1,p-1))} className="rounded border px-3 py-1.5 disabled:opacity-40">Trước</button>
+        <span>Trang {page} / {Math.max(1,Math.ceil(data.total / data.pageSize))}</span>
+        <button disabled={page * data.pageSize >= data.total} onClick={() => setPage(p => p+1)} className="rounded border px-3 py-1.5 disabled:opacity-40">Sau</button>
+      </div></div>}
     </div>
   )
 }
