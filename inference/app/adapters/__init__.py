@@ -4,6 +4,7 @@ from __future__ import annotations
 from ..config import Settings
 from .base import AsrAdapter, DiarizerAdapter, SerAdapter
 from .asr_phowhisper import PhoWhisperAsr
+from .asr_faster_whisper import FasterWhisperAsr
 from .diarization import NoDiarizer, PyannoteDiarizer
 from .mock import MockAsr, MockDiarizer, MockSer
 from .ser_checkpoint import CheckpointSer
@@ -14,7 +15,9 @@ def build_asr(s: Settings) -> AsrAdapter:
         return MockAsr()
     if s.asr == "phowhisper":
         return PhoWhisperAsr(s.asr_model, s.asr_device)
-    raise ValueError(f"ISEMO_ASR không hợp lệ: {s.asr!r} (mock | phowhisper)")
+    if s.asr in ("faster_whisper", "faster-whisper"):
+        return FasterWhisperAsr(s.asr_model, s.asr_device)
+    raise ValueError(f"ISEMO_ASR không hợp lệ: {s.asr!r} (mock | phowhisper | faster_whisper)")
 
 
 def build_diarizer(s: Settings) -> DiarizerAdapter:
