@@ -131,14 +131,14 @@ export class ApiError extends Error {
 // In local development connect directly to the Express API. This also works when
 // Vite was launched before its proxy config was updated (a common HMR pitfall).
 // For a deployed build, same-origin /api remains the default.
-const apiOrigin = (
+const requestedApiOrigin: string =
   import.meta.env.VITE_API_BASE_URL ??
   (import.meta.env.DEV ? 'http://127.0.0.1:3001' : '')
-).replace(/\\/$/, '')
+const apiOrigin = requestedApiOrigin.endsWith('/') ? requestedApiOrigin.slice(0, -1) : requestedApiOrigin
 
 export function resolveApiUrl(url: string | null): string | undefined {
   if (!url) return undefined
-  if (/^https?:\\/\\//.test(url)) return url
+  if (url.startsWith('http://') || url.startsWith('https://')) return url
   return apiOrigin + (url.startsWith('/') ? url : '/' + url)
 }
 
