@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { AlertCircle, Search, RefreshCw } from 'lucide-react'
+import { Link, useNavigate } from 'react-router-dom'
+import { AlertCircle, Search, RefreshCw, Upload } from 'lucide-react'
 import { getCalls, clock, emotionLabels, provenanceLabel, type CallList, type CallItem } from '@/api/isemotalk'
 
 const priorities = { high: 'Cao', medium: 'Trung bình', low: 'Thấp' }
@@ -36,7 +36,8 @@ export function CallsPage() {
         <div><h1 className="text-2xl font-semibold">Danh sách cuộc gọi</h1>
           <p className="mt-1 text-sm text-slate-500">Chọn cuộc gọi để nghe, phân tích và đánh giá. Nguồn mô phỏng được ghi rõ.</p>
         </div>
-        <button onClick={() => setRefresh(n => n + 1)} className="inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm hover:bg-slate-50"><RefreshCw size={15}/> Tải lại</button>
+        <div className="flex items-center gap-2"><button onClick={() => setRefresh(n => n + 1)} className="inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm hover:bg-slate-50"><RefreshCw size={15}/> Tải lại</button>
+        <Link to="/calls/new" className="inline-flex items-center gap-2 rounded-md bg-slate-900 px-3 py-2 text-sm text-white hover:bg-slate-700"><Upload size={15}/> Thêm cuộc gọi</Link></div>
       </header>
       {data && <p className="text-sm text-slate-600">Tổng cộng <strong>{data.counts.total}</strong> cuộc gọi · <strong>{data.counts.attention}</strong> cần ưu tiên · <strong>{data.counts.failed}</strong> lỗi</p>}
       <div className="flex flex-wrap items-center gap-3">

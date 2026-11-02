@@ -3,7 +3,7 @@ import { Link, useParams } from 'react-router-dom'
 import { ArrowLeft, Check, Save, AlertTriangle, RefreshCw } from 'lucide-react'
 import {
   ApiError, clock, emotionColors, emotionLabels, getCall, percent,
-  provenanceLabel, resolveApiUrl, saveReview, type CallDetail, type Emotion, type Moment, type ReviewPatch,
+  provenanceLabel, resolveApiUrl, saveReview, retryProcessing, stageLabels, type CallDetail, type Emotion, type Moment, type ReviewPatch,
   type ReviewPayload,
 } from '@/api/isemotalk'
 
@@ -64,6 +64,39 @@ export function CallReviewPage() {
   }, [callId])
 
   useEffect(() => { void load() }, [load])
+
+  // After upload, the Express backend processes the recording asynchronously.
+  // Poll the persisted job status and enable review only when the call is ready.
+  useEffect(() => {
+    if (!callId || !call || (call.status !== 'queued' && call.status !== 'processing')) return
+    let active = true
+    const timer = window.setInterval(() => {
+      void getCall(callId).then(next => {
+        if (!active) return
+        setCall(next)
+        if (next.status === 'ready') {
+          setPatches(normalizedPatches(next))
+          setOverallNote(next.overallNote)
+          setSelectedId(next.utterances[0]?.id ?? null)
+          setDirty(false)
+          setSaveMessage('Xử lý xong — có thể nghe và đánh giá.')
+        }
+      }).catch((e: Error) => { if (active) setError(e.message) })
+    }, 2500)
+    return () => { active = false; window.clearInterval(timer) }
+  }, [callId, call?.status])
+
+  const retry = async () => {
+    if (!callId) return
+    setError('')
+    try {
+      await retryProcessing(callId)
+      await load()
+    } catch (e) {
+      setError((e as Error).message)
+    }
+  }
+
   useEffect(() => {
     const warn = (e: BeforeUnloadEvent) => {
       if (dirty) { e.preventDefault(); e.returnValue = '' }
@@ -144,8 +177,27 @@ export function CallReviewPage() {
         <button disabled={!dirty || saving || call.status !== 'ready'} onClick={() => void save()} className="inline-flex items-center gap-2 rounded-md bg-slate-900 px-4 py-2 text-sm text-white disabled:opacity-40"><Save size={15}/>{saving ? 'Đang lưu…' : 'Lưu đánh giá'}</button>
       </div>
     </header>
-    {call.provenance === 'mock' && <p className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-900">Đây là transcript và nhãn cảm xúc mô phỏng; WAV seed là âm thanh tổng hợp, không chứa lời nói thật. Dùng để kiểm tra quy trình QA, không phải demo chất lượng mô hình SER.</p>}
-    {call.status !== 'ready' && <p className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm">Cuộc gọi chưa sẵn sàng: {call.status}{call.error ? ' · '+call.error : ''}. Chỉ có thể lưu review khi xử lý xong.</p>}
+    {call.provenance === 'mock' && <p className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-900">
+      {call.source === 'results_import'
+        ? 'Bản ghi demo seed: WAV tổng hợp không chứa lời nói thật, transcript và nhãn cảm xúc đều mô phỏng.'
+        : 'Đây là file ghi âm được tải lên từ máy của bạn, nhưng ít nhất một bước ASR/SER hiện đang mô phỏng. Không xem dự đoán là kết quả mô hình nghiên cứu.'}
+    </p>}
+    {call.status !== 'ready' && <section className="rounded-md border border-amber-200 bg-amber-50 p-4 text-sm">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <strong>{call.status === 'failed' ? 'Xử lý thất bại' : 'Đang xử lý file ghi âm'} · {call.progress}%</strong>
+        {call.status === 'failed' && <button onClick={()=>void retry()} className="rounded-md border border-amber-400 px-3 py-1.5 text-xs hover:bg-amber-100">Thử xử lý lại</button>}
+      </div>
+      {call.error && <p role="alert" className="mt-2 text-red-700">{call.error}</p>}
+      <div className="mt-3 h-2 overflow-hidden rounded-full bg-amber-100"><div className="h-full bg-amber-500 transition-all" style={{width: Math.max(0, Math.min(100, call.progress))+'%'}}/></div>
+      <ol className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
+        {call.stageLog.map(step => <li key={step.stage} className="rounded-md border border-amber-100 bg-white p-2 text-xs">
+          <strong>{stageLabels[step.stage]}</strong>
+          <p className="mt-1 text-slate-500">{step.state === 'done' ? 'Hoàn thành' : step.state === 'skipped' ? 'Bỏ qua' : step.state === 'running' ? 'Đang thực hiện' : step.state === 'failed' ? 'Lỗi' : 'Đang chờ'}</p>
+          {step.detail && <p className="mt-1 text-slate-500">{step.detail}</p>}
+        </li>)}
+      </ol>
+      {call.status !== 'failed' && <p className="mt-3 text-xs text-amber-800">Trạng thái được cập nhật tự động. Không đóng cửa sổ backend trong lúc xử lý.</p>}
+    </section>}
     {error && <p role="alert" className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error} <button className="ml-2 underline" onClick={() => { if (window.confirm('Tải lại sẽ bỏ các thay đổi chưa lưu. Tiếp tục?')) void load() }}><RefreshCw size={13} className="inline"/> Tải lại</button></p>}
     {saveMessage && <p role="status" className="rounded-md border border-green-200 bg-green-50 p-3 text-sm text-green-800">{saveMessage}</p>}
     {dirty && !saveMessage && <p className="text-xs font-medium text-amber-700">Có thay đổi chưa lưu</p>}
@@ -210,6 +262,17 @@ export function CallReviewPage() {
               <option value="">Chọn nhãn khác dự đoán…</option>
               {allEmotions.filter(e=>e!==selected.fused?.emotion).map(e=><option key={e} value={e}>{emotionLabels[e]}</option>)}
             </select>
+            <label className="mt-3 block text-sm font-medium" htmlFor="speaker-select">Người nói (có thể sửa nếu tách giọng sai)</label>
+            <select id="speaker-select" className="mt-1 w-full rounded-md border p-2 text-sm"
+              value={patches[selected.id]?.speaker ?? selected.speaker}
+              onChange={e=>edit(selected.id,{speaker:e.target.value as 'agent'|'customer'|'unknown'})}>
+              <option value="unknown">Chưa xác định</option><option value="agent">Nhân viên</option><option value="customer">Khách hàng</option>
+            </select>
+            <label className="mt-3 block text-sm font-medium" htmlFor="transcript-edit">Sửa transcript nếu ASR nhận sai</label>
+            <textarea id="transcript-edit" rows={3} maxLength={4000}
+              value={patches[selected.id]?.text ?? selected.text}
+              onChange={e=>edit(selected.id,{text:e.target.value})}
+              className="mt-1 w-full rounded-md border p-2 text-sm"/>
             <label className="mt-3 block text-sm font-medium" htmlFor="utterance-note">Ghi chú câu nói</label>
             <textarea id="utterance-note" rows={3} maxLength={2000} value={patches[selected.id]?.note??''} onChange={e=>edit(selected.id,{note:e.target.value})} className="mt-1 w-full rounded-md border p-2 text-sm" placeholder="Nhận xét của người đánh giá…"/>
           </>}

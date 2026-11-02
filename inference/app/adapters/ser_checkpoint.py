@@ -45,7 +45,7 @@ def verification_path(config_path: Path) -> Path:
 def read_verification(config_path: Path) -> tuple[bool, str]:
     vp = verification_path(config_path)
     if not vp.is_file():
-        return False, "chưa có verification.json — chạy: python -m app.verify --manifest <tệp.jsonl>"
+        return False, "chưa có verification.json — chạy: python -m app.verify --manifest <tệp.jsonl> --min-macro-f1 <ngưỡng>"
     try:
         v = json.loads(vp.read_text(encoding="utf-8"))
     except json.JSONDecodeError:

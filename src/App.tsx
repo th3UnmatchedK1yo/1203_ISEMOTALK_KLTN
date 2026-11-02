@@ -3,6 +3,7 @@ import { AppShell } from './components/layout/AppShell'
 import { CallsPage } from './pages/CallsPage'
 import { CallReviewPage } from './pages/CallReviewPage'
 import { AnalyticsPage } from './pages/AnalyticsPage'
+import { UploadCallPage } from './pages/UploadCallPage'
 
 function App() {
   return (
@@ -10,6 +11,7 @@ function App() {
       <Routes>
         <Route path="/" element={<CallsPage />} />
         <Route path="/calls" element={<CallsPage />} />
+        <Route path="/calls/new" element={<UploadCallPage />} />
         <Route path="/calls/:callId" element={<CallReviewPage />} />
         <Route path="/analytics" element={<AnalyticsPage />} />
       </Routes>

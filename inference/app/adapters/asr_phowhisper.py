@@ -28,7 +28,7 @@ class PhoWhisperAsr:
     def status(self) -> Status:
         if not _have("torch", "transformers"):
             return Status(self.name, False, False,
-                          "Chưa cài torch/transformers. Chạy: pip install -r requirements-gpu.txt")
+                          "Chưa cài torch/transformers; xem docs/REAL_INFERENCE_SETUP.md và kiểm tra dung lượng/GPU trước khi cài.")
         state = "đã nạp" if self._pipe is not None else "sẽ nạp khi dùng lần đầu"
         return Status(self.name, True, False, f"{self.model_id} ({state})")
 
@@ -36,7 +36,7 @@ class PhoWhisperAsr:
         if self._pipe is not None:
             return self._pipe
         if not _have("torch", "transformers"):
-            raise ModelNotReady("Chưa cài torch/transformers cho PhoWhisper (xem inference/README.md).")
+            raise ModelNotReady("Chưa cài torch/transformers cho PhoWhisper (xem docs/REAL_INFERENCE_SETUP.md).")
         import torch
         from transformers import pipeline
 

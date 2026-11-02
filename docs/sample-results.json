@@ -1,0 +1,29 @@
+{
+  "call": {
+    "title": "Ví dụ định dạng import (không phải kết quả AI thật)",
+    "agentName": "Demo",
+    "customerName": "Demo"
+  },
+  "utterances": [
+    {
+      "start": 0,
+      "end": 4.5,
+      "text": "Xin chào, tôi có thể hỗ trợ gì cho bạn?",
+      "speaker": "agent",
+      "fused": {
+        "emotion": "neutral",
+        "confidence": 0.8
+      }
+    },
+    {
+      "start": 4.5,
+      "end": 9.2,
+      "text": "Tôi muốn hỏi về đơn hàng của mình.",
+      "speaker": "customer",
+      "fused": {
+        "emotion": "neutral",
+        "confidence": 0.7
+      }
+    }
+  ]
+}
