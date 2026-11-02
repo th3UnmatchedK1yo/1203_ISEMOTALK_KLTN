@@ -66,7 +66,7 @@ class FasterWhisperAsr:
 
     def __init__(self, model_id: str = "Systran/faster-whisper-small", device: str = "cpu") -> None:
         self.model_id = model_id
-        self.device = device
+        self.device = 'cpu' if device == 'auto' else device
         self._model = None
         self._lock = threading.Lock()
 
