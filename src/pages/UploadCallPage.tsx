@@ -73,6 +73,10 @@ export function UploadCallPage() {
       setError('FastAPI chưa kết nối. Để xử lý audio cần khởi động inference service tại cổng 8001. Bạn vẫn có thể nhập kết quả JSON/CSV mà không cần audio.')
       return
     }
+    if (needsInferenceService && !inference?.ffmpeg) {
+      setError('FastAPI chưa thấy ffmpeg/ffprobe. Hãy cài và kiểm tra chúng trên PATH trước khi tải audio.')
+      return
+    }
     if (mode === 'recording' && (!asr?.ready && !transcript)) {
       setError('ASR chưa sẵn sàng. Hãy thêm transcript có timestamp hoặc cấu hình mô hình ASR trong inference/.env.')
       return
