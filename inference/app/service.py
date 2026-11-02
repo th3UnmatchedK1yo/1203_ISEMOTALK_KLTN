@@ -144,6 +144,12 @@ class InferenceService:
     def device(self) -> str:
         import importlib.util
 
+        if self.asr.name == "faster_whisper":
+            # CTranslate2-based ASR does not need PyTorch. A separate SER
+            # checkpoint adapter may still need torch later.
+            asr_device = getattr(self.asr, "device", "cpu")
+            return f"{asr_device} (CTranslate2 ASR, không yêu cầu PyTorch)"
+
         if importlib.util.find_spec("torch") is None:
             return "cpu (chưa cài torch)"
         import torch
