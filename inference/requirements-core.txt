@@ -1,0 +1,5 @@
+# Lightweight FastAPI runtime only; no ML weights or GPU downloads.
+fastapi>=0.115,<1
+uvicorn>=0.30,<1
+pydantic>=2.7,<3
+numpy>=1.26,<3
