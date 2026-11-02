@@ -1,7 +1,7 @@
 # Local SER recovery inventory (no extraction, no downloads)
 # PowerShell 5.1+; from the ISEmoTalk repository:
 #   powershell -ExecutionPolicy Bypass -File scripts/diagnose-ser-local.ps1
-#   powershell -ExecutionPolicy Bypass -File scripts/diagnose-ser-local.ps1 -BackupDir "D:\Backup\SER"
+#   -BackupDir is optional; pass ONLY a folder that actually exists.
 param(
   [string]$BackupDir = (Join-Path $env:USERPROFILE 'Downloads')
 )
@@ -9,8 +9,20 @@ $ErrorActionPreference = 'Continue'
 
 Write-Host "===== ISEmoTalk / SER local checks (read-only) ====="
 Write-Host "Backup folder: $BackupDir"
-Write-Host "Free C: drive:"
-Get-PSDrive C | Select-Object Name, Used, Free | Format-Table -AutoSize
+Write-Host "Available filesystem drives (GiB):"
+Get-PSDrive -PSProvider FileSystem |
+  Select-Object Name,
+    @{Name='UsedGiB';Expression={[math]::Round($_.Used / 1GB, 2)}},
+    @{Name='FreeGiB';Expression={[math]::Round($_.Free / 1GB, 2)}} |
+  Format-Table -AutoSize
+$cDrive = Get-PSDrive -Name C -ErrorAction SilentlyContinue
+if ($cDrive -and $cDrive.Free -lt 8GB) {
+  Write-Warning ("C: has only {0:N2} GiB free. DO NOT install large models or extract the full research archives yet." -f ($cDrive.Free / 1GB))
+}
+$backupExists = Test-Path -LiteralPath $BackupDir -PathType Container
+if (-not $backupExists) {
+  Write-Warning ("Backup folder does not exist: {0}. Default original location: {1}" -f $BackupDir, (Join-Path $env:USERPROFILE 'Downloads'))
+}
 
 Write-Host "NVIDIA GPU:"
 if (Get-Command nvidia-smi -ErrorAction SilentlyContinue) {
@@ -34,19 +46,22 @@ if (Test-Path -LiteralPath $py) {
 }
 
 Write-Host "Saved research archives (top-level, no recursive disk scan):"
-if (Test-Path -LiteralPath $BackupDir) {
+if ($backupExists) {
   Get-ChildItem -LiteralPath $BackupDir -File -ErrorAction SilentlyContinue |
     Where-Object { $_.Name -like 'SER_*' -and ($_.Name -like '*20261007*' -or $_.Name -like '*BACKUP*') } |
     Select-Object Name, @{Name='MB';Expression={[math]::Round($_.Length / 1MB, 1)}} |
     Format-Table -AutoSize
 } else {
-  Write-Host 'Backup directory not found'
+  Write-Host 'Archive listing skipped (backup directory does not exist).'
 }
 
 Write-Host "Known-important H5 checkpoint archive:"
-$worktree = Get-ChildItem -LiteralPath $BackupDir -File -ErrorAction SilentlyContinue |
-  Where-Object { $_.Name -like 'SER_WORKTREE_RESULTS_20261007*.tar.gz' } |
-  Select-Object -First 1
+$worktree = $null
+if ($backupExists) {
+  $worktree = Get-ChildItem -LiteralPath $BackupDir -File -ErrorAction SilentlyContinue |
+    Where-Object { $_.Name -like 'SER_WORKTREE_RESULTS_20261007*.tar.gz' } |
+    Select-Object -First 1
+}
 
 if ($null -ne $worktree) {
   Write-Host "Found: $($worktree.Name), $([math]::Round($worktree.Length/1MB, 1)) MB"
@@ -58,8 +73,10 @@ if ($null -ne $worktree) {
   } else {
     Write-Host 'tar not found; cannot list archive entries'
   }
+} elseif ($backupExists) {
+  Write-Warning 'SER_WORKTREE_RESULTS_20261007.tar.gz was not found in this existing backup folder.'
 } else {
-  Write-Warning 'SER_WORKTREE_RESULTS_20261007.tar.gz NOT FOUND at this location. This is the archive holding nine H5 model.pt files per the October handoff.'
+  Write-Host 'Checkpoint archive check skipped because the specified backup folder does not exist.'
 }
 
 Write-Host "Existing Hugging Face cache folders:"
