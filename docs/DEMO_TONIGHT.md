@@ -5,6 +5,33 @@ This branch wires the existing React interface to the Express + SQLite backend, 
 
 **Important honesty note:** Audio files from `npm run seed:demo` are artificially synthesized buzz/tone WAV files, **not recordings of spoken dialogue**. Their associated transcripts, speakers, emotion predictions, and confidences are mock data. This setup demonstrates the software workflow (audio position, review, persistence, analytics) and **must not be represented as accurate speech transcription or trained-model inference**.
 
+## FIX 02/11/2026: API responds but React is blank
+
+Root cause: the previous React client silently converted a non-JSON response into `null`. When an already-running Vite instance returned its HTML `index.html` for `/api/*` (e.g. because the new proxy config had not loaded), the Calls table remained blank and Analytics displayed endless loading.
+
+**Fix:** In Vite development mode, the API client now calls `http://127.0.0.1:3001` directly (the Express backend already enables CORS). The audio player uses the same origin. Non-JSON and malformed responses now show a meaningful error. Set `VITE_API_BASE_URL` only if you intentionally use a different API location. Production builds continue to use same-origin `/api` by default.
+
+**Local update from the old demo branch:**
+
+```powershell
+git status
+git fetch origin
+git switch feat/demo-sprint-api-20261102
+git pull --ff-only origin feat/demo-sprint-api-20261102
+```
+
+If `git status` shows local uncommitted changes and switch/pull refuses, preserve them and resolve the conflict first; do not run `git reset --hard` or `git clean`.
+
+Start the API and frontend in two terminals (see commands below) and open:
+- `http://127.0.0.1:3001/api/calls` — JSON with 13 calls in the user's original local DB
+- `http://127.0.0.1:3001/api/analytics` — JSON with 102 utterances in the user's original local DB
+- `http://localhost:5173/calls` — populated table
+- `http://localhost:5173/analytics` — visible statistics
+
+The API now automatically seeds **only a completely empty development database** (unless `ISEMO_AUTO_SEED=0`). Existing calls, recordings, corrections and review decisions are never overwritten or duplicated by this startup behavior.
+
+If the browser still shows the previous code, stop and restart the Vite dev server, then hard-refresh with Ctrl+Shift+R.
+
 ## Run on Windows PowerShell
 
 From the project root, using the **existing installed dependencies**:
@@ -60,6 +87,10 @@ Review conflicts (HTTP 409) are shown to the user, not silently overwritten.
 - Authentication and cloud hosting.
 
 ## Verification status
+
+GitHub Actions includes a frontend build, backend typecheck and existing backend test checks for this demo branch. Check the latest CI run before merging. Actual audio playback and save/reload behavior must still be verified locally because the local SQLite data and synthetic WAV files are not committed.
+
+
 
 This branch was authored by reviewing the GitHub source and API DTOs. **End-to-end browser execution and tests have not yet been performed in the user's Windows environment.** Before presenting, run `npm run build`, `npm run typecheck:server`, and `npm test` when feasible, then perform the reload-and-persistence demonstration. If errors occur, preserve any data and avoid destructive cleanup.
 
