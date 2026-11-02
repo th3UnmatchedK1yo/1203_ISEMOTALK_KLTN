@@ -33,7 +33,7 @@ def _env(name: str, default: str = "") -> str:
 class Settings:
     # mock | real. "real" selects phowhisper + stereo + checkpoint unless a component is overridden.
     mode: str
-    asr: str  # mock | phowhisper
+    asr: str  # mock | phowhisper | faster_whisper
     diarization: str  # mock | none | pyannote
     ser: str  # mock | checkpoint
     # Only audio under this directory may be read (the Express backend's upload folder).
@@ -50,16 +50,17 @@ class Settings:
     def load() -> "Settings":
         mode = _env("MODE", "mock").lower()
         real = mode == "real"
+        asr_kind = _env("ASR", "phowhisper" if real else "mock").lower()
         return Settings(
             mode=mode,
-            asr=_env("ASR", "phowhisper" if real else "mock").lower(),
+            asr=asr_kind,
             diarization=_env("DIARIZATION", "none" if real else "mock").lower(),
             ser=_env("SER", "checkpoint" if real else "mock").lower(),
             uploads_dir=Path(_env("UPLOADS_DIR", str((ROOT.parent / "server" / "data" / "uploads"))))
             .expanduser()
             .resolve(),
-            asr_model=_env("ASR_MODEL", "vinai/PhoWhisper-small"),
-            asr_device=_env("ASR_DEVICE", "auto").lower(),
+            asr_model=_env("ASR_MODEL", "Systran/faster-whisper-small" if asr_kind in ("faster_whisper", "faster-whisper") else "vinai/PhoWhisper-small"),
+            asr_device=_env("ASR_DEVICE", "cpu" if asr_kind in ("faster_whisper", "faster-whisper") else "auto").lower(),
             ser_factory=_env("SER_FACTORY"),
             ser_config=_env("SER_CONFIG"),
             allow_unverified=_env("ALLOW_UNVERIFIED", "0") in ("1", "true", "yes"),
