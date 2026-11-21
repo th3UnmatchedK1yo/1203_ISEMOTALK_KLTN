@@ -132,10 +132,9 @@ const fmtClock = (s: number): string => {
 export function detectMoments(utterances: Utterance[]): Moment[] {
   const moments: Moment[] = []
   const ordered = [...utterances].sort((a, b) => a.start - b.start)
-  const hasCustomer = ordered.some((u) => u.speaker === 'customer')
-  // The customer's emotional arc is what QA cares about. If speakers are not
-  // assigned yet, fall back to every utterance rather than reporting nothing.
-  const arc = ordered.filter((u) => u.fused && (hasCustomer ? u.speaker === 'customer' : true))
+  // Never attribute an unknown or agent turn to the customer. When diarization
+  // is unavailable, customer-specific escalation/recovery must remain unreported.
+  const arc = ordered.filter((u) => u.fused && u.speaker === 'customer')
 
   for (let i = 1; i < arc.length; i++) {
     const prev = arc[i - 1]
@@ -272,8 +271,8 @@ export function derive(utterances: Utterance[]): CallDerived {
     }
   }
   const moments = detectMoments(utterances)
-  const hasCustomer = predicted.some((u) => u.speaker === 'customer')
-  const basis = hasCustomer ? predicted.filter((u) => u.speaker === 'customer') : predicted
+  // No customer assignment means there is no defensible customer-risk score.
+  const basis = predicted.filter((u) => u.speaker === 'customer')
 
   const weight = (u: Utterance) => Math.max(u.end - u.start, 0.5)
   const totalW = basis.reduce((a, u) => a + weight(u), 0)
@@ -282,7 +281,7 @@ export function derive(utterances: Utterance[]): CallDerived {
 
   const tally: Record<Emotion, number> = { neutral: 0, happy: 0, sad: 0, angry: 0 }
   for (const u of basis) tally[u.fused!.emotion] += weight(u)
-  const dominantEmotion = (Object.entries(tally).sort((a, b) => b[1] - a[1])[0][0] as Emotion) ?? null
+  const dominantEmotion = totalW > 0 ? (Object.entries(tally).sort((a, b) => b[1] - a[1])[0][0] as Emotion) : null
 
   const escalationCount = moments.filter((m) => m.type === 'escalation').length
   const recoveryCount = moments.filter((m) => m.type === 'recovery').length
