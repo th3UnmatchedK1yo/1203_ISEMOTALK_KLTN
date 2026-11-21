@@ -44,6 +44,7 @@ $config = [ordered]@{
   "ISEMO_ASR" = "faster_whisper"
   "ISEMO_ASR_MODEL" = "Systran/faster-whisper-small"
   "ISEMO_ASR_DEVICE" = "cpu"
+  "ISEMO_ASR_CPU_THREADS" = "4"
   "ISEMO_DIARIZATION" = "none"
   "ISEMO_SER" = "mock"
   "ISEMO_ALLOW_UNVERIFIED" = "0"

@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import type { DB } from './db'
-import { EMOTIONS, detectMoments } from './domain'
+import { EMOTIONS, detectMoments, momentEvidenceKey } from './domain'
 import * as repo from './repo'
 
 export class HttpError extends Error {
@@ -49,6 +49,10 @@ export function applyReview(db: DB, callId: string, input: ReviewInput): repo.Ca
       throw new HttpError(409, 'Cuộc gọi đã được cập nhật ở nơi khác. Hãy tải lại trước khi lưu.', { code: 'version_conflict', currentVersion: row.version })
 
     const existing = new Map(repo.getUtterances(db, callId).map((u) => [u.id, u]))
+    const previousMoments = new Map(detectMoments([...existing.values()]).map((m) => [m.id, momentEvidenceKey(m)]))
+    // Bind legacy verdicts to their evidence before applying any speaker edits.
+    const bindLegacy = db.prepare('UPDATE moment_reviews SET evidence_key=? WHERE call_id=? AND moment_id=? AND evidence_key IS NULL')
+    for (const [mid, key] of previousMoments) bindLegacy.run(key, callId, mid)
     const upd = db.prepare(
       `UPDATE utterances SET text=?, speaker=?, review_decision=?, review_emotion=?, review_note=?, flagged=? WHERE call_id=? AND id=?`,
     )
@@ -80,24 +84,29 @@ export function applyReview(db: DB, callId: string, input: ReviewInput): repo.Ca
       )
     }
 
-    const valid = new Set(detectMoments(repo.getUtterances(db, callId)).map((m) => m.id))
+    const currentMoments = new Map(detectMoments(repo.getUtterances(db, callId)).map((m) => [m.id, momentEvidenceKey(m)]))
     const mup = db.prepare(
-      `INSERT INTO moment_reviews (call_id, moment_id, relevance, note) VALUES (?,?,?,?)
-       ON CONFLICT(call_id, moment_id) DO UPDATE SET relevance=excluded.relevance, note=excluded.note`,
+      `INSERT INTO moment_reviews (call_id, moment_id, relevance, note, evidence_key) VALUES (?,?,?,?,?)
+       ON CONFLICT(call_id, moment_id) DO UPDATE SET relevance=excluded.relevance, note=excluded.note, evidence_key=excluded.evidence_key`,
     )
     for (const [mid, m] of Object.entries(input.moments)) {
-      if (!valid.has(mid)) throw new HttpError(400, `Không có khoảnh khắc "${mid}" trong cuộc gọi này.`)
-      mup.run(callId, mid, m.relevance === null ? null : m.relevance ? 1 : 0, (m.note ?? '').trim())
+      const key = previousMoments.get(mid) ?? currentMoments.get(mid)
+      if (!key) throw new HttpError(400, `Không có khoảnh khắc "${mid}" trong cuộc gọi này.`)
+      mup.run(callId, mid, m.relevance === null ? null : m.relevance ? 1 : 0, (m.note ?? '').trim(), key)
     }
 
-    const active =
+    const momentActivity = (db.prepare('SELECT moment_id, evidence_key, relevance, note FROM moment_reviews WHERE call_id=?').all(callId) as Array<{ moment_id: string; evidence_key: string | null; relevance: number | null; note: string }>)
+      .some((m) => m.evidence_key === currentMoments.get(m.moment_id) && (m.relevance !== null || m.note !== ''))
+
+    const overallNote = input.overallNote !== undefined ? input.overallNote.trim() : row.overall_note
+    const active = overallNote !== '' ||
       (db
         .prepare(
           `SELECT COUNT(*) AS n FROM utterances WHERE call_id=? AND (review_decision IS NOT NULL OR flagged=1
              OR review_note != ? OR text != orig_text OR speaker != orig_speaker)`,
         )
         .get(callId, '') as { n: number }).n > 0 ||
-      (db.prepare('SELECT COUNT(*) AS n FROM moment_reviews WHERE call_id=? AND (relevance IS NOT NULL OR note != ?)').get(callId, '') as { n: number }).n > 0
+      momentActivity
 
     let reviewStatus = row.review_status as string
     if (input.complete === true) reviewStatus = 'reviewed'
@@ -107,8 +116,8 @@ export function applyReview(db: DB, callId: string, input: ReviewInput): repo.Ca
     repo.refreshDerived(db, callId) // speaker edits change the customer arc
     repo.updateCall(db, callId, {
       reviewStatus,
-      overallNote: input.overallNote !== undefined ? input.overallNote.trim() : row.overall_note,
-      reviewedAt: reviewStatus === 'reviewed' ? new Date().toISOString() : null,
+      overallNote,
+      reviewedAt: reviewStatus === 'reviewed' ? (row.reviewed_at ?? new Date().toISOString()) : null,
       version: row.version + 1,
     })
   })

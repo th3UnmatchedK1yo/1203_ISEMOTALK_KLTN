@@ -14,8 +14,8 @@ Enable **real ASR** without PyTorch or a new model download. The general-purpose
 
     git status
     git fetch origin
-    git switch feat/offline-faster-whisper-asr-20261102
-    git pull --ff-only origin feat/offline-faster-whisper-asr-20261102
+    git switch feat/thesis-demo-hardening-20261122
+    git pull --ff-only origin feat/thesis-demo-hardening-20261122
 
 3. Install only the smaller ASR runtime and configure a cached model (no torch or pretrained model downloads):
 
@@ -54,6 +54,22 @@ Keep the Node API and React web terminals running separately:
 - A ~2-second clip or noisy call can produce empty or poor text. Use a longer clear test sample first. A filename ending in sad is not evidence of model prediction.
 - Do not enable CUDA by default on the 4 GiB RTX 3050. The CPU INT8 option avoids Windows CUDA/cuDNN compatibility issues and protects VRAM.
 
+## Explicit initialization and resource limits (2026-11-22)
+
+With the inference server running and `faster_whisper` selected, initialize that same process explicitly:
+
+```powershell
+Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8001/v1/warmup
+```
+
+This route loads the existing local cached ASR model and returns health. It does not download models, run SER or benchmark transcription. `components.asr.loaded=false` means the files are configured but the model has not been initialized; `loaded=true` means the server holds that model. The first actual transcription can still have additional startup cost. A failed model load remains visible as degraded readiness until a successful retry or restart. Health polling itself does not initialize models.
+
+`ISEMO_ASR_CPU_THREADS=4` gives an explicit CPU budget. ASR still uses INT8 on CPU, one worker and the existing beam size. This improves predictability; no laptop speedup has been measured by this change.
+
+`ISEMO_MAX_DECODED_MB=256` caps the retained float32 PCM cache, and `ISEMO_MAX_DURATION_SEC=10800` caps declared duration. The decoded byte limit usually applies earlier: approximately 23.3 minutes for stereo plus its mono mix, or 69.9 minutes for mono at 16 kHz. Metadata is checked before decoding, and a bounded decoder rejects files whose actual output exceeds the budget. This budget does not include ML model memory or all transient decoder allocations. Split long recordings into shorter clips; use a clear 15–30 second sample for the laptop acceptance check.
+
+ASR, diarization and SER responses include evidence from the adapter that actually completed that stage. Anonymous pyannote speakers are left with unknown agent/customer roles; a reviewer must assign roles. The earlier first-speaker-is-agent assumption has been removed.
+
 ## Real SER remains a separate step
 
-The Windows Downloads archive SER_WORKTREE_RESULTS_20261007.tar.gz contains nine trained H5 model.pt checkpoints. These files still need their exact architecture, preprocessing, tokenization, label mapping and upstream encoder/backbone before use in inference. Do not extract the full archive or download datasets for web inference. Do not call the generic Whisper ASR model PhoWhisper or a mock emotion prediction real SER.
+Direct inspection on 2026-11-22 confirmed all nine historical H5 `model.pt` checkpoints in the uploaded **main** `SER_EXPERIMENT_BACKUP_20261007` archive. Their model and metadata hashes match archived records. These heads still need exact feature extraction, tokenization, upstream backbones and a verified serving package. See [the current recovery audit](audits/inference-research-20261122.md). Do not call the generic Whisper ASR model PhoWhisper or a mock emotion prediction real SER.

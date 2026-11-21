@@ -1,6 +1,6 @@
 import { stringify } from 'csv-stringify/sync'
 import type { DB } from './db'
-import { EMOTIONS, MOMENT_TYPES, type Emotion, type MomentType, detectMoments, finalEmotion } from './domain'
+import { EMOTIONS, MOMENT_TYPES, type Emotion, type MomentType, detectMoments, finalEmotion, momentEvidenceKey } from './domain'
 import * as repo from './repo'
 
 type Row = Record<string, any>
@@ -33,12 +33,13 @@ export function buildAnalytics(db: DB, f: AnalyticsFilter) {
   }
 
   const review = { unreviewed: 0, in_progress: 0, reviewed: 0 }
-  const priority = { high: 0, medium: 0, low: 0 }
+  const priority = { high: 0, medium: 0, low: 0, unknown: 0 }
   const provenance = { mock: 0, real: 0, imported: 0, unknown: 0 }
   for (const c of calls) provenance[(c.provenance as keyof typeof provenance) ?? 'unknown']++
   for (const c of ready) {
     review[c.review_status as keyof typeof review]++
-    priority[c.priority as keyof typeof priority]++
+    if (c.dominant_emotion == null) priority.unknown++
+    else priority[c.priority as keyof typeof priority]++
   }
 
   const customerEmotion = zeroEmotions()
@@ -56,15 +57,23 @@ export function buildAnalytics(db: DB, f: AnalyticsFilter) {
   let conflicts = 0
   let totalUtterances = 0
   let totalSeconds = 0
+  const coverage = { customerUtterances: 0, customerWithEmotion: 0, unknownSpeakerUtterances: 0, unpredictedUtterances: 0, callsWithCustomerEmotion: 0 }
 
   const getUtts = db.prepare('SELECT * FROM utterances WHERE call_id = ? ORDER BY idx')
-  const getMomentReviews = db.prepare('SELECT moment_id, relevance FROM moment_reviews WHERE call_id = ?')
+  const getMomentReviews = db.prepare('SELECT moment_id, relevance, evidence_key FROM moment_reviews WHERE call_id = ?')
   for (const c of ready) {
     totalSeconds += c.duration ?? 0
     const utts = (getUtts.all(c.id) as Row[]).map(repo.mapUtterance)
     totalUtterances += utts.length
+    if (utts.some((u) => u.speaker === 'customer' && finalEmotion(u))) coverage.callsWithCustomerEmotion++
     for (const u of utts) {
       const fe = finalEmotion(u)
+      if (u.speaker === 'customer') {
+        coverage.customerUtterances++
+        if (fe) coverage.customerWithEmotion++
+      }
+      if (u.speaker === 'unknown') coverage.unknownSpeakerUtterances++
+      if (!u.fused) coverage.unpredictedUtterances++
       if (u.speaker === 'customer' && fe) customerEmotion[fe]++
       if (u.acoustic && u.lexical) {
         withBoth++
@@ -83,10 +92,11 @@ export function buildAnalytics(db: DB, f: AnalyticsFilter) {
         }
       }
     }
-    const rv = new Map((getMomentReviews.all(c.id) as Row[]).map((m) => [m.moment_id as string, m.relevance as number | null]))
+    const rv = new Map((getMomentReviews.all(c.id) as Row[]).map((m) => [m.moment_id as string, m]))
     for (const m of detectMoments(utts)) {
       momentsByType[m.type]++
-      const r = rv.get(m.id)
+      const saved = rv.get(m.id)
+      const r = saved?.evidence_key == null || saved.evidence_key === momentEvidenceKey(m) ? saved?.relevance : null
       if (r === 1) relevance.relevant++
       else if (r === 0) relevance.notRelevant++
       else relevance.undecided++
@@ -136,6 +146,7 @@ export function buildAnalytics(db: DB, f: AnalyticsFilter) {
     },
     priority,
     customerEmotion,
+    coverage,
     modelQuality: {
       ...quality,
       agreementRate: quality.reviewed ? quality.confirmed / quality.reviewed : null,
@@ -201,6 +212,7 @@ export function exportAnalyticsCsv(db: DB, f: AnalyticsFilter): string {
   for (const [k, v] of Object.entries(a.review)) add('xem_xet', k, k === 'completionRate' ? pct(v as number) : (v as number))
   for (const [k, v] of Object.entries(a.priority)) add('uu_tien', k, v)
   for (const [k, v] of Object.entries(a.customerEmotion)) add('cam_xuc_khach_hang_sau_xem_xet', k, v)
+  for (const [k, v] of Object.entries(a.coverage)) add('do_phu_du_lieu', k, v)
   add('chat_luong_mo_hinh', 'cau_da_xem_xet', a.modelQuality.reviewed)
   add('chat_luong_mo_hinh', 'xac_nhan', a.modelQuality.confirmed)
   add('chat_luong_mo_hinh', 'sua', a.modelQuality.corrected)

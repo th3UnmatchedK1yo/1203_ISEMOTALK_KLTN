@@ -1,11 +1,12 @@
 """FastAPI inference service for ISEmoTalk. Local-only: bind to 127.0.0.1."""
 from __future__ import annotations
 
-from typing import Optional
+from typing import Literal, Optional
 
 from fastapi import FastAPI, HTTPException, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from . import audio
 from .adapters import build_asr, build_diarizer, build_ser
@@ -23,9 +24,16 @@ class TranscribeBody(PathBody):
 
 
 class SegmentIn(BaseModel):
+    model_config = ConfigDict(allow_inf_nan=False)
     start: float = Field(ge=0)
     end: float = Field(gt=0)
     text: str = ""
+
+    @model_validator(mode="after")
+    def ordered_interval(self):
+        if self.end <= self.start:
+            raise ValueError("end phải lớn hơn start.")
+        return self
 
 
 class DiarizeBody(PathBody):
@@ -34,7 +42,7 @@ class DiarizeBody(PathBody):
 
 class UtteranceIn(SegmentIn):
     id: str
-    speaker: str = "unknown"
+    speaker: Literal["agent", "customer", "unknown"] = "unknown"
 
 
 class EmotionBody(PathBody):
@@ -47,6 +55,13 @@ def create_app(settings: Optional[Settings] = None, service: Optional[InferenceS
     svc = service or InferenceService(settings, build_asr(settings), build_diarizer(settings), build_ser(settings))
     app = FastAPI(title="ISEmoTalk inference", version="0.1.0")
     app.state.service = svc
+
+    @app.exception_handler(RequestValidationError)
+    async def _invalid_request(_: Request, e: RequestValidationError):
+        # Do not echo non-finite input values into JSONResponse: JSON cannot
+        # represent them, which would turn a validation error into HTTP 500.
+        messages = [f"{'.'.join(str(p) for p in item['loc'])}: {item['msg']}" for item in e.errors()[:10]]
+        return JSONResponse(status_code=422, content={"detail": {"code": "bad_input", "message": "; ".join(messages)}})
 
     @app.exception_handler(ModelNotReady)
     async def _not_ready(_: Request, e: ModelNotReady):
@@ -63,6 +78,10 @@ def create_app(settings: Optional[Settings] = None, service: Optional[InferenceS
     @app.get("/v1/health")
     def health():
         return svc.health()
+
+    @app.post("/v1/warmup")
+    def warmup():
+        return svc.warmup()
 
     @app.post("/v1/audio/probe")
     def probe(body: PathBody):

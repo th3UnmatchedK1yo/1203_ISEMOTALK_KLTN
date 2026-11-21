@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react'
 import { Link, useLocation } from 'react-router-dom'
-import { Headphones, BarChart3, Menu, X, ListChecks, UploadCloud } from 'lucide-react'
+import { Headphones, BarChart3, Menu, X, ListChecks, UploadCloud, BookOpen } from 'lucide-react'
 
 interface AppShellProps { children: ReactNode }
 
@@ -8,6 +8,7 @@ const navItems = [
   { path: '/calls', label: 'Cuộc gọi', icon: ListChecks },
   { path: '/analytics', label: 'Phân tích', icon: BarChart3 },
   { path: '/calls/new', label: 'Tải lên', icon: UploadCloud },
+  { path: '/research', label: 'Nghiên cứu', icon: BookOpen },
 ]
 
 export function AppShell({ children }: AppShellProps) {
@@ -47,22 +48,22 @@ export function AppShell({ children }: AppShellProps) {
             <span className="block text-xs font-medium tracking-wide text-slate-600">CALL QUALITY WORKSPACE</span>
           </span>
         </Link>
-        <nav className="ml-5 hidden items-center gap-1 border-l border-slate-200 pl-5 md:flex" aria-label="Điều hướng chính">
+        <nav className="ml-3 hidden items-center gap-1 border-l border-slate-200 pl-3 lg:flex" aria-label="Điều hướng chính">
           {navItems.map(item => navLink(item.path, item.label, item.icon, false))}
         </nav>
         <div className="flex-1"/>
-        <span className="hidden rounded-full border border-[#c6dfe2] bg-[#f0f8f8] px-3 py-1 text-xs font-semibold text-[#195f6a] lg:inline-flex">Trình duyệt QA · Local</span>
+        <span className="hidden rounded-md border border-[#c6dfe2] bg-[#f0f8f8] px-3 py-1 text-sm font-semibold text-[#195f6a] xl:inline-flex">QA sau cuộc gọi</span>
         <button
           type="button"
           aria-label={mobileMenuOpen ? 'Đóng menu' : 'Mở menu'}
           aria-expanded={mobileMenuOpen}
           onClick={() => setMobileMenuOpen(v=>!v)}
-          className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-300 text-slate-800 hover:bg-slate-100 md:hidden"
+          className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-300 text-slate-800 hover:bg-slate-100 lg:hidden"
         >
           {mobileMenuOpen ? <X size={21}/> : <Menu size={21}/>}
         </button>
       </div>
-      {mobileMenuOpen && <nav aria-label="Điều hướng di động" className="flex flex-col gap-1 border-t bg-white px-5 py-3 md:hidden">
+      {mobileMenuOpen && <nav aria-label="Điều hướng di động" className="flex flex-col gap-1 border-t bg-white px-5 py-3 lg:hidden">
         {navItems.map(item => navLink(item.path, item.label, item.icon, true))}
       </nav>}
     </header>

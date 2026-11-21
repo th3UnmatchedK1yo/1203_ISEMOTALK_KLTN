@@ -1,0 +1,75 @@
+{
+  "date": "2026-11-22",
+  "timezone": "Asia/Bangkok",
+  "base": "9f7ced37d7ddbf253bc7946c111662bc8732e785",
+  "environment": {
+    "node": "24.22.3",
+    "python": "3.12.14",
+    "platform": "Linux-6.18.57-x86_64-with-glibc2.41",
+    "database": "actual better-sqlite3 native binding; temporary test databases"
+  },
+  "verification": [
+    {
+      "command": "npm test",
+      "result": "PASS",
+      "tests": 123,
+      "files": 12
+    },
+    {
+      "command": "npm run typecheck:server",
+      "result": "PASS"
+    },
+    {
+      "command": "npm run build",
+      "result": "PASS",
+      "jsBytesApprox": 256490,
+      "jsGzipBytesApprox": 78810,
+      "cssBytesApprox": 37580
+    },
+    {
+      "cwd": "inference",
+      "command": "python -m unittest discover -s tests -p 'test_*.py' -v",
+      "result": "PASS",
+      "tests": 34
+    },
+    {
+      "command": "git diff --check",
+      "result": "PASS"
+    }
+  ],
+  "httpIntegration": {
+    "result": "PASS",
+    "checks": [
+      "Real services start against a fresh empty temporary database",
+      "Actual multipart upload runs ffprobe/ffmpeg and all pipeline stages with honest mock evidence",
+      "Audio HTTP Range returns the exact 44-byte WAV header",
+      "Actual none diarizer preserves unknown roles and records its source",
+      "Imported results, review edits, original inputs, reload and version conflict persist correctly",
+      "Workflow rejects invalid/stale writes and resolves independently of SER review",
+      "CSV and full JSON audit export retain reviews, safe cells and all 53 workflow events",
+      "Coverage and priority remain honest; hostile web-origin creation is rejected",
+      "Production preview serves built HTML/JavaScript and proxies /api to Express",
+      "preflight",
+      "preflight-real-required",
+      "Actual API process restart preserves SQLite reviews, versions and full workflow history",
+      "Small-fixture API responsiveness measured with explicit conditions",
+      "Server stderr has no traceback, unhandled error or pipeline crash"
+    ],
+    "mode": "ASR=mock; SER=mock; diarization=none; synthetic fixtures only",
+    "subprocessesTerminated": true
+  },
+  "readLatency": {
+    "n": 30,
+    "p50Ms": 1.344,
+    "p95Ms": 2.179,
+    "minMs": 1.052,
+    "maxMs": 2.519,
+    "condition": "Sequential HTTP GET /api/calls?pageSize=15, keep-alive client, loopback, warmed API, 3 synthetic fixture calls, shared Linux runtime. Not ASR/SER throughput or user-laptop performance."
+  },
+  "limits": [
+    "No rendered browser acceptance: environment could not launch/reach the local browser preview.",
+    "No real ASR/SER benchmark: model dependencies and backbones were not installed here.",
+    "No Windows laptop timing or GPU compatibility verification.",
+    "API loopback measurements use 3 synthetic calls, warmed sequential reads, and mock inference; not a production or ML throughput benchmark."
+  ]
+}
