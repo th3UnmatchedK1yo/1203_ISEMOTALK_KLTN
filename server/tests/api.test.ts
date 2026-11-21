@@ -67,6 +67,15 @@ describe('audio upload pipeline', () => {
     expect(body.utterances[1].fused.emotion).toBe('angry')
   })
 
+  it('passes the selected right-channel agent mapping to SER inference', async () => {
+    const res = await t.api.post('/api/calls/upload')
+      .field('agentChannel', '1')
+      .attach('audio', wav, 'call.wav')
+    expect(res.status).toBe(202)
+    await t.pipeline.onIdle()
+    expect(t.client.lastEmotionAgentChannel).toBe(1)
+  })
+
   it('rejects unsupported audio types', async () => {
     const res = await t.api.post('/api/calls/upload').attach('audio', Buffer.from('x'), 'notes.txt')
     expect(res.status).toBe(400)

@@ -192,6 +192,7 @@ export class Pipeline {
         const r = await this.client.emotion({
           path: this.audioPath(row),
           utterances: current.map((u) => ({ id: u.id, start: u.start, end: u.end, text: u.text, speaker: u.speaker })),
+          agentChannel: row.agent_channel,
         })
         const byId: Record<string, (typeof r.predictions)[number]> = {}
         r.predictions.forEach((p) => (byId[p.id] = p))

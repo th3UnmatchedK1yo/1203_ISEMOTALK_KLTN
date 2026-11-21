@@ -27,6 +27,7 @@ export class FakeInference implements InferenceClient {
     { start: 10, end: 15, text: 'Tôi xin lỗi bạn.', speaker: 'agent' as const },
   ]
   calls: string[] = []
+  lastEmotionAgentChannel: number | null = null
 
   async health(): Promise<HealthInfo> {
     const c = { adapter: 'fake', ready: true, mock: true, detail: 'fake' }
@@ -45,8 +46,9 @@ export class FakeInference implements InferenceClient {
     this.calls.push('diarize')
     return { speakers: [], method: 'none' }
   }
-  async emotion(req: { utterances: { id: string; text: string }[] }): Promise<EmotionResult> {
+  async emotion(req: { utterances: { id: string; text: string }[]; agentChannel: number }): Promise<EmotionResult> {
     this.calls.push('emotion')
+    this.lastEmotionAgentChannel = req.agentChannel
     const p = (emotion: Emotion, confidence: number): Prediction => ({ emotion, confidence })
     return {
       provenance: 'mock',
