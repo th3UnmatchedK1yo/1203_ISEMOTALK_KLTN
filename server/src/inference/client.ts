@@ -68,7 +68,7 @@ export interface InferenceClient {
   probe(req: { path: string }): Promise<ProbeResult>
   transcribe(req: { path: string; agentChannel: number }): Promise<TranscribeResult>
   diarize(req: { path: string; segments: TranscribeSegment[] }): Promise<DiarizeResult>
-  emotion(req: { path: string; utterances: EmotionRequestItem[] }): Promise<EmotionResult>
+  emotion(req: { path: string; utterances: EmotionRequestItem[]; agentChannel: number }): Promise<EmotionResult>
 }
 
 export class HttpInferenceClient implements InferenceClient {
@@ -122,7 +122,7 @@ export class HttpInferenceClient implements InferenceClient {
   diarize(req: { path: string; segments: TranscribeSegment[] }) {
     return this.call<DiarizeResult>('POST', '/v1/diarize', req, 30 * 60_000)
   }
-  emotion(req: { path: string; utterances: EmotionRequestItem[] }) {
-    return this.call<EmotionResult>('POST', '/v1/emotion', req, 30 * 60_000)
+  emotion(req: { path: string; utterances: EmotionRequestItem[]; agentChannel: number }) {
+    return this.call<EmotionResult>('POST', '/v1/emotion', { path: req.path, utterances: req.utterances, agent_channel: req.agentChannel }, 30 * 60_000)
   }
 }
