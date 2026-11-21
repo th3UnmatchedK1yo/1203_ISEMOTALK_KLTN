@@ -60,6 +60,31 @@ describe('derive', () => {
     expect(hostile.negativeRatio).toBeGreaterThan(0.8)
     expect(hostile.dominantEmotion).toBe('angry')
   })
+  it('does not treat unknown or agent speech as customer dissatisfaction', () => {
+    const utterances = [
+      u('unknown', 0, 5, 'neutral'),
+      u('unknown', 5, 15, 'angry', 0.99),
+      u('agent', 15, 25, 'angry', 0.99),
+      u('unknown', 25, 35, 'sad', 0.99),
+    ]
+    const d = derive(utterances)
+    expect(d.dominantEmotion).toBeNull()
+    expect(d.negativeRatio).toBe(0)
+    expect(d.priority).toBe('low')
+    expect(d.escalationCount).toBe(0)
+    expect(d.recoveryCount).toBe(0)
+    expect(d.momentCount).toBe(0)
+    expect(detectMoments(utterances)).toHaveLength(0)
+  })
+  it('does not include unassigned turns in the customer timeline', () => {
+    const utterances = [
+      u('customer', 0, 5, 'neutral'),
+      u('unknown', 5, 10, 'angry', 0.99),
+      u('customer', 10, 15, 'happy'),
+    ]
+    expect(detectMoments(utterances).map(m => m.type)).not.toContain('escalation')
+    expect(derive(utterances).negativeRatio).toBe(0)
+  })
   it('returns an empty summary when nothing has been predicted yet', () => {
     expect(derive([{ ...u('customer', 0, 5, 'neutral'), fused: null }]).avgConfidence).toBeNull()
   })
