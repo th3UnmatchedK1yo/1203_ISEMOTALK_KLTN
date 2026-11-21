@@ -45,6 +45,9 @@ class Settings:
     allow_unverified: bool
     hf_token: str
     sample_rate: int = 16000
+    max_duration_sec: float = 3 * 60 * 60
+    max_decoded_bytes: int = 256 * 1024 * 1024
+    asr_cpu_threads: int = 4
 
     @staticmethod
     def load() -> "Settings":
@@ -65,4 +68,7 @@ class Settings:
             ser_config=_env("SER_CONFIG"),
             allow_unverified=_env("ALLOW_UNVERIFIED", "0") in ("1", "true", "yes"),
             hf_token=_env("HF_TOKEN") or os.environ.get("HF_TOKEN", ""),
+            max_duration_sec=float(_env("MAX_DURATION_SEC", "10800")),
+            max_decoded_bytes=int(_env("MAX_DECODED_MB", "256")) * 1024 * 1024,
+            asr_cpu_threads=int(_env("ASR_CPU_THREADS", "4")),
         )

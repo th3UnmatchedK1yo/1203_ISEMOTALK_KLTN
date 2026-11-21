@@ -1,5 +1,7 @@
 # ISEmoTalk — real audio / real inference
 
+Current 2026-11-22 setup: use the existing cached faster-whisper-small CPU INT8 runtime described in [OFFLINE_ASR_SETUP.md](OFFLINE_ASR_SETUP.md). Historical H5 head weights have been recovered and hashed, but the complete SER pipeline is not deployed. The current integrity contract is [SER_PACKAGE_VERIFICATION.md](SER_PACKAGE_VERIFICATION.md); it replaces the old config-only verification procedure.
+
 This branch adds upload/import UI and asynchronous job monitoring. It does not automatically make SER predictions real.
 
 ## What is available
@@ -46,7 +48,7 @@ Restart FastAPI and confirm ASR is ready and mock=false in /v1/health. For mono 
 
 **C. Real ASR + real SER.** Restore the precise research inference code and the selected trained checkpoint from the October 2026 backup. The web repository does not contain the trained research model's serving factory. Its current CheckpointSer adapter requires a private importable module and a configuration. It expects a build_model(config) function returning a model implementing predict(waveform_16khz_float32, text, speaker), producing fused/acoustic/lexical four-class probability arrays. Preserve the exact class mapping, feature preprocessing, tokenizer/encoder, and original trained weights.
 
-Set ISEMO_SER=checkpoint, ISEMO_SER_FACTORY, ISEMO_SER_CONFIG in the private inference/.env only after implementing the factory and restoring paths. Validate against held-out examples using python -m app.verify with the research-appropriate macro-F1 threshold, then recheck checkpoint hashes; the current verifier hashes the config file but not all referenced weight bytes. Never enable ISEMO_ALLOW_UNVERIFIED for the thesis demonstration.
+Set ISEMO_SER=checkpoint, ISEMO_SER_FACTORY, ISEMO_SER_CONFIG in the private inference/.env only after implementing the authentic factory and restoring its declared assets. Version-2 verification binds the factory, source and asset hashes, configuration, held-out manifest and evaluation audio. Run `python -m app.verify --manifest <path> --min-macro-f1 <documented threshold> --check-only` first. A four-class sanity pass is not paper reproduction or call-center accuracy. Never enable ISEMO_ALLOW_UNVERIFIED for the thesis demonstration.
 
 Do not infer that an arbitrary model.pt is deployable without its model architecture. For references to H5 checkpoints, look in the handoff for SER_WORKTREE_RESULTS_20261007.tar.gz and extract only relevant files after confirming disk space.
 

@@ -4,9 +4,9 @@ Stereo recordings with genuinely separate channels are handled in the service la
 speaker), which is the only reliable option. This module covers MONO audio:
 
 * NoDiarizer  - honest default: says "I can't tell", the reviewer assigns speakers by hand.
-* PyannoteDiarizer - optional model-based diarization (needs `pyannote.audio` + a Hugging Face token).
-  The two anonymous speakers are mapped to agent/customer by "who speaks first is the agent",
-  which is a heuristic - the UI marks such results as model-assigned so reviewers can correct them.
+* PyannoteDiarizer - optional anonymous speaker diarization (needs `pyannote.audio` + a Hugging Face token).
+  Anonymous speaker identities do not establish agent/customer roles. The current
+  role-only API therefore leaves these unknown for human assignment.
 """
 from __future__ import annotations
 
@@ -44,7 +44,7 @@ class PyannoteDiarizer:
             return Status(self.name, False, False, "Chưa cài pyannote.audio (pip install pyannote.audio).")
         if not self.hf_token:
             return Status(self.name, False, False, "Thiếu ISEMO_HF_TOKEN (token Hugging Face, đã chấp nhận điều khoản mô hình).")
-        return Status(self.name, True, False, "pyannote/speaker-diarization-3.1")
+        return Status(self.name, True, False, "pyannote/speaker-diarization-3.1 · vai trò agent/customer vẫn cần gán thủ công")
 
     def _load(self):
         if self._pipe is None:
@@ -68,17 +68,6 @@ class PyannoteDiarizer:
         turns = [(t.start, t.end, spk) for t, _, spk in result.itertracks(yield_label=True)]
         if not turns:
             return None
-        first = min(turns, key=lambda t: t[0])[2]  # whoever speaks first = agent (heuristic)
-        out = []
-        for seg in segments:
-            overlap: dict[str, float] = {}
-            for s, e, spk in turns:
-                o = min(seg.end, e) - max(seg.start, s)
-                if o > 0:
-                    overlap[spk] = overlap.get(spk, 0.0) + o
-            if not overlap:
-                out.append("unknown")
-            else:
-                spk = max(overlap, key=overlap.get)
-                out.append("agent" if spk == first else "customer")
-        return out
+        # The DTO carries roles, not anonymous cluster IDs. Speaking first is
+        # insufficient evidence of an agent role; preserve manual assignments.
+        return ["unknown"] * len(segments)

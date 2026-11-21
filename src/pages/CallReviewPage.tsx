@@ -1,306 +1,378 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
-import { ArrowLeft, Check, Save, AlertTriangle, RefreshCw } from 'lucide-react'
+import { ArrowLeft, Check, Save, AlertTriangle, RefreshCw, Download } from 'lucide-react'
 import {
-  ApiError, clock, emotionColors, emotionLabels, getCall, percent,
-  provenanceLabel, resolveApiUrl, saveReview, retryProcessing, stageLabels, type CallDetail, type Emotion, type Moment, type ReviewPatch,
-  type ReviewPayload,
+  ApiError, clock, emotionLabels, getCall, percent, provenanceLabel, resolveApiUrl, saveReview,
+  retryProcessing, speakerLabels, stageLabels, type CallDetail, type Emotion, type Moment, type ReviewPatch,
 } from '@/api/isemotalk'
+import { startPolling } from '@/lib/polling'
+import {
+  buildReviewPayload, createReviewForm, hasReviewChanges, restoreReviewDraft, reviewDraftKey,
+  serializeReviewDraft, getMomentTarget, type ReviewForm,
+} from '@/lib/reviewSession'
+import { CallRecording, type SeekRequest } from '@/components/review/CallRecording'
+import { TranscriptList } from '@/components/review/TranscriptList'
+import { CallWorkflowPanel } from '@/components/review/CallWorkflowPanel'
 
 const allEmotions: Emotion[] = ['neutral', 'happy', 'sad', 'angry']
-
-function normalizedPatches(call: CallDetail): Record<string, ReviewPatch> {
-  const patches: Record<string, ReviewPatch> = {}
-  for (const u of call.utterances) {
-    patches[u.id] = {
-      decision: u.review.decision,
-      emotion: u.review.emotion,
-      note: u.review.note,
-      flagged: u.flagged,
-      text: u.text,
-      speaker: u.speaker,
-    }
-  }
-  return patches
+const momentLabels: Record<string, string> = {
+  escalation: 'Chuyển sang tiêu cực', recovery: 'Chuyển biến tích cực', sustained_negative: 'Tiêu cực kéo dài',
+  modality_disagreement: 'Âm thanh và văn bản bất đồng', high_confidence_change: 'Thay đổi cảm xúc rõ',
 }
+const button = 'inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50'
+const primaryButton = 'inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-[#0E5665] px-4 py-2 text-sm font-semibold text-white hover:bg-[#0B4554] disabled:cursor-not-allowed disabled:opacity-50'
+const input = 'mt-2 w-full rounded-lg border border-slate-300 bg-white p-3 text-base text-slate-900 disabled:bg-slate-50'
 
 export function CallReviewPage() {
   const { callId } = useParams<{ callId: string }>()
+  // A new route owns a new review session, including selections and audio state.
+  return callId ? <CallReviewSession key={callId} callId={callId}/> : <p role="alert">Không tìm thấy cuộc gọi.</p>
+}
+
+function CallReviewSession({ callId }: { callId: string }) {
   const [call, setCall] = useState<CallDetail | null>(null)
+  const [form, setForm] = useState<ReviewForm | null>(null)
   const [loading, setLoading] = useState(true)
+  const [reload, setReload] = useState(0)
   const [error, setError] = useState('')
-  const [saveMessage, setSaveMessage] = useState('')
+  const [message, setMessage] = useState('')
   const [saving, setSaving] = useState(false)
-  const [dirty, setDirty] = useState(false)
+  const [retrying, setRetrying] = useState(false)
+  const [versionConflict, setVersionConflict] = useState(false)
+  const [draftBackup, setDraftBackup] = useState<string | null>(null)
+  const [storageError, setStorageError] = useState('')
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [selectedMomentId, setSelectedMomentId] = useState<string | null>(null)
-  const [patches, setPatches] = useState<Record<string, ReviewPatch>>({})
-  const [momentChanges, setMomentChanges] = useState<ReviewPayload['moments']>({})
-  const [overallNote, setOverallNote] = useState('')
-  const [markReviewed, setMarkReviewed] = useState(false)
-  const [currentTime, setCurrentTime] = useState(0)
-  const audioRef = useRef<HTMLAudioElement | null>(null)
+  const [activeId, setActiveId] = useState<string | null>(null)
+  const [seekRequest, setSeekRequest] = useState<SeekRequest | null>(null)
+  const seekSequence = useRef(0)
+  const mounted = useRef(true)
+  const savingRef = useRef(false)
 
-  const load = useCallback(async () => {
-    if (!callId) return
+  useEffect(() => {
+    mounted.current = true
+    return () => { mounted.current = false }
+  }, [])
+
+  useEffect(() => {
     setLoading(true)
+    setCall(null)
+    setForm(null)
     setError('')
-    try {
-      const detail = await getCall(callId)
-      setCall(detail)
-      setPatches(normalizedPatches(detail))
-      setMomentChanges({})
-      setOverallNote(detail.overallNote)
-      setMarkReviewed(detail.reviewStatus === 'reviewed')
-      setSelectedId(detail.utterances[0]?.id ?? null)
-      setSelectedMomentId(null)
-      setDirty(false)
-      setSaveMessage('')
-    } catch (e) {
-      setError((e as Error).message)
-    } finally {
-      setLoading(false)
-    }
-  }, [callId])
-
-  useEffect(() => { void load() }, [load])
-
-  // After upload, the Express backend processes the recording asynchronously.
-  // Poll the persisted job status and enable review only when the call is ready.
-  useEffect(() => {
-    if (!callId || !call || (call.status !== 'queued' && call.status !== 'processing')) return
-    let active = true
-    const timer = window.setInterval(() => {
-      void getCall(callId).then(next => {
-        if (!active) return
-        setCall(next)
-        if (next.status === 'ready') {
-          setPatches(normalizedPatches(next))
-          setOverallNote(next.overallNote)
-          setSelectedId(next.utterances[0]?.id ?? null)
-          setDirty(false)
-          setSaveMessage('Xử lý xong — có thể nghe và đánh giá.')
+    setMessage('')
+    setDraftBackup(null)
+    setVersionConflict(false)
+    return startPolling({
+      load: signal => getCall(callId, signal),
+      onData: detail => {
+        setCall(detail)
+        setError('')
+        setLoading(false)
+        if (detail.status !== 'ready') return
+        let raw: string | null = null
+        try { raw = sessionStorage.getItem(reviewDraftKey(callId)) } catch {
+          setStorageError('Trình duyệt chưa cho phép giữ bản nháp. Hãy lưu đánh giá trước khi rời trang.')
         }
-      }).catch((e: Error) => { if (active) setError(e.message) })
-    }, 2500)
-    return () => { active = false; window.clearInterval(timer) }
-  }, [callId, call?.status])
+        const recovery = restoreReviewDraft(detail, raw)
+        setForm(recovery.kind === 'restored' ? recovery.form : createReviewForm(detail))
+        if (recovery.kind === 'restored') setMessage('Đã khôi phục bản nháp trong phiên này. Các thay đổi chưa được lưu vào cuộc gọi.')
+        if (recovery.kind === 'conflict' || recovery.kind === 'invalid') setDraftBackup(raw)
+        setSelectedId(previous => detail.utterances.some(u => u.id === previous) ? previous : detail.utterances[0]?.id ?? null)
+        setSelectedMomentId(null)
+      },
+      onError: failure => { setError(failure.message); setLoading(false) },
+      shouldContinue: detail => detail.status === 'queued' || detail.status === 'processing',
+      intervalMs: 2500,
+    })
+  }, [callId, reload])
 
-  const retry = async () => {
-    if (!callId) return
-    setError('')
+  const payload = useMemo(() => call && form ? buildReviewPayload(call, form) : null, [call, form])
+  const dirty = !!payload && hasReviewChanges(payload)
+
+  const persistDraft = useCallback(() => {
+    if (!call || !form || call.status !== 'ready' || draftBackup) return
     try {
-      await retryProcessing(callId)
-      await load()
-    } catch (e) {
-      setError((e as Error).message)
+      if (dirty) sessionStorage.setItem(reviewDraftKey(call.id), serializeReviewDraft(call, form))
+      else sessionStorage.removeItem(reviewDraftKey(call.id))
+      setStorageError('')
+    } catch {
+      setStorageError('Không giữ được bản nháp trong trình duyệt. Hãy lưu đánh giá hoặc tải bản nháp trước khi rời trang.')
     }
-  }
+  }, [call, form, dirty, draftBackup])
 
+  useEffect(() => { persistDraft() }, [persistDraft])
   useEffect(() => {
-    const warn = (e: BeforeUnloadEvent) => {
-      if (dirty) { e.preventDefault(); e.returnValue = '' }
+    const warn = (event: BeforeUnloadEvent) => {
+      if (dirty || draftBackup) { persistDraft(); event.preventDefault(); event.returnValue = '' }
     }
     window.addEventListener('beforeunload', warn)
     return () => window.removeEventListener('beforeunload', warn)
-  }, [dirty])
+  }, [dirty, draftBackup, persistDraft])
 
-  const edit = (id: string, change: ReviewPatch) => {
-    setPatches(prev => ({ ...prev, [id]: { ...prev[id], ...change } }))
-    setDirty(true)
-    setSaveMessage('')
+  // If browser storage is unavailable, navigation must not silently lose work.
+  useEffect(() => {
+    if (!storageError || !dirty) return
+    const guard = (event: MouseEvent) => {
+      const link = event.target instanceof Element ? event.target.closest('a[href]') : null
+      if (link && !window.confirm('Bản nháp chưa được giữ trong trình duyệt. Rời trang và bỏ các thay đổi chưa lưu?')) {
+        event.preventDefault()
+        event.stopPropagation()
+      }
+    }
+    document.addEventListener('click', guard, true)
+    return () => document.removeEventListener('click', guard, true)
+  }, [storageError, dirty])
+
+  const updateForm = (change: (previous: ReviewForm) => ReviewForm) => {
+    if (savingRef.current || draftBackup) return
+    setForm(previous => previous ? change(previous) : previous)
+    setMessage('')
   }
-
-  const seek = (time: number) => {
-    if (audioRef.current && Number.isFinite(time)) audioRef.current.currentTime = time
-    setCurrentTime(time)
-  }
-
+  const edit = (id: string, change: ReviewPatch) => updateForm(previous => ({
+    ...previous, utterances: { ...previous.utterances, [id]: { ...previous.utterances[id], ...change } },
+  }))
+  const selectUtterance = useCallback((id: string, time: number) => {
+    setSelectedId(id)
+    setSelectedMomentId(null)
+    setSeekRequest({ time, sequence: ++seekSequence.current })
+  }, [])
   const selectMoment = (moment: Moment) => {
+    const target = getMomentTarget(moment, call?.utterances ?? [])
     setSelectedMomentId(moment.id)
-    if (moment.utteranceIds[0]) setSelectedId(moment.utteranceIds[0])
-    seek(moment.start)
+    setSelectedId(target.utteranceId)
+    setSeekRequest({ time: target.time, sequence: ++seekSequence.current })
+  }
+
+  const downloadDraft = () => {
+    const raw = draftBackup ?? (call && form ? serializeReviewDraft(call, form) : null)
+    if (!raw) return
+    const url = URL.createObjectURL(new Blob([raw], { type: 'application/json' }))
+    const anchor = document.createElement('a')
+    anchor.href = url
+    anchor.download = `${callId}-review-draft.json`
+    anchor.click()
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000)
   }
 
   const save = async () => {
-    if (!call || saving) return
+    if (!call || !form || !payload || !dirty || savingRef.current || draftBackup || versionConflict || call.status !== 'ready') return
+    savingRef.current = true
     setSaving(true)
     setError('')
-    setSaveMessage('')
-    const changed: Record<string, ReviewPatch> = {}
-    for (const u of call.utterances) {
-      const p = patches[u.id]
-      const base = normalizedPatches(call)[u.id]
-      if (JSON.stringify(p) !== JSON.stringify(base)) changed[u.id] = p
-    }
+    setMessage('')
+    let savedSnapshot: string | null = null
+    try { savedSnapshot = sessionStorage.getItem(reviewDraftKey(call.id)) } catch { /* The visible storage warning already explains this. */ }
     try {
-      const next = await saveReview(call.id, {
-        baseVersion: call.version,
-        utterances: changed,
-        moments: momentChanges,
-        overallNote,
-        complete: markReviewed,
-      })
+      const next = await saveReview(call.id, payload)
+      // Clear this save's snapshot only; a newer session may have another draft.
+      try {
+        if (sessionStorage.getItem(reviewDraftKey(call.id)) === savedSnapshot) sessionStorage.removeItem(reviewDraftKey(call.id))
+      } catch { /* Server save succeeded; storage availability is reported separately. */ }
+      if (!mounted.current) return
       setCall(next)
-      setPatches(normalizedPatches(next))
-      setMomentChanges({})
-      setOverallNote(next.overallNote)
-      setDirty(false)
-      setSaveMessage('Đã lưu vào SQLite. Tải lại trang vẫn giữ thay đổi.')
-    } catch (e) {
-      const err = e as ApiError
+      setForm(createReviewForm(next))
+      setVersionConflict(false)
+      setMessage('Đã lưu đánh giá. Bạn có thể tải lại trang hoặc xuất kết quả.')
+    } catch (failure) {
+      if (!mounted.current) return
+      const err = failure as ApiError
+      setVersionConflict(err.code === 'version_conflict')
       setError(err.code === 'version_conflict'
-        ? 'Dữ liệu đã thay đổi ở tab khác. Sao chép ghi chú đang sửa nếu cần, rồi tải lại để tránh ghi đè.'
+        ? 'Cuộc gọi đã được lưu ở nơi khác. Bản nháp của bạn vẫn được giữ. Tải bản nháp trước khi mở phiên bản mới để đối chiếu.'
         : err.message)
     } finally {
-      setSaving(false)
+      savingRef.current = false
+      if (mounted.current) setSaving(false)
     }
   }
 
-  if (loading) return <p className="p-6 text-slate-700">Đang tải cuộc gọi từ SQLite…</p>
-  if (!call) return <div className="space-y-3"><Link to="/calls" className="text-teal-800">← Danh sách cuộc gọi</Link><p role="alert" className="text-red-700">{error || 'Không tìm thấy cuộc gọi.'}</p></div>
-  const selected = call.utterances.find(u => u.id === selectedId) ?? null
-  const current = call.utterances.find(u => currentTime >= u.start && currentTime < u.end)
-  const selectedMoment = call.moments.find(m => m.id === selectedMomentId)
-  const totalTime = Math.max(call.duration, ...call.utterances.map(u => u.end), 1)
-  const reviewStatus = call.reviewStatus === 'reviewed' ? 'Đã xem xét' : call.reviewStatus === 'in_progress' ? 'Đang xem xét' : 'Chưa xem xét'
+  const retry = async () => {
+    if (retrying) return
+    setRetrying(true)
+    setError('')
+    try {
+      await retryProcessing(callId)
+      if (mounted.current) setReload(value => value + 1)
+    } catch (failure) { if (mounted.current) setError((failure as Error).message) }
+    finally { if (mounted.current) setRetrying(false) }
+  }
 
-  return <div className="space-y-4">
-    <header className="flex flex-wrap items-start justify-between gap-3">
-      <div className="space-y-1">
-        <Link to="/calls" className="inline-flex items-center gap-1 text-sm text-slate-700 hover:text-teal-800"><ArrowLeft size={15}/> Danh sách cuộc gọi</Link>
-        <h1 className="text-2xl font-semibold tracking-tight text-[#12394d]">{call.id} · {call.title}</h1>
-        <p className="text-sm text-slate-700">{call.agentName || 'Chưa có nhân viên'} / {call.customerName || 'Chưa có khách hàng'} · {clock(call.duration)} · {reviewStatus}</p>
+  if (loading) return <p role="status" className="p-6 text-slate-700">Đang tải cuộc gọi…</p>
+  if (!call) return <div className="space-y-4">
+    <Link to="/calls" className="inline-flex items-center gap-2 text-teal-800"><ArrowLeft size={18}/> Danh sách cuộc gọi</Link>
+    <p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-4 text-red-900">{error || 'Không tìm thấy cuộc gọi.'}</p>
+    <button type="button" className={button} onClick={() => setReload(value => value + 1)}><RefreshCw size={17}/> Thử tải lại</button>
+  </div>
+
+  const selected = call.utterances.find(u => u.id === selectedId) ?? null
+  const selectedPatch = selected ? form?.utterances[selected.id] : undefined
+  const selectedMoment = call.moments.find(moment => moment.id === selectedMomentId)
+  const momentPatch = selectedMoment ? form?.moments[selectedMoment.id] : undefined
+  const unknownCount = call.utterances.filter(u => u.speaker === 'unknown').length
+  const reviewStatus = call.reviewStatus === 'reviewed' ? 'Đã xem xét' : call.reviewStatus === 'in_progress' ? 'Đang xem xét' : 'Chưa xem xét'
+  const inputsChanged = selected && (selected.fused || selected.lexical || selected.acoustic) && (
+    selected.predictionInputChanged || selected.textEdited || selected.speakerEdited
+    || (selectedPatch?.text !== undefined && selectedPatch.text !== selected.text)
+    || (selectedPatch?.speaker !== undefined && selectedPatch.speaker !== selected.speaker))
+  const editDisabled = saving || !!draftBackup || call.status !== 'ready'
+  const canSave = dirty && !saving && !draftBackup && !versionConflict && call.status === 'ready'
+
+  return <div className="space-y-5">
+    <header className="flex flex-wrap items-start justify-between gap-4">
+      <div className="min-w-0 space-y-2">
+        <Link to="/calls" className="inline-flex items-center gap-2 text-sm text-slate-700 hover:text-teal-800"><ArrowLeft size={17}/> Danh sách cuộc gọi</Link>
+        <p className="text-sm font-semibold tracking-wide text-slate-600">{call.id}</p>
+        <h1 className="break-words text-3xl font-semibold tracking-tight text-[#12394d]">{call.title}</h1>
+        <p className="text-base text-slate-700">{call.agentName || 'Chưa có tên nhân viên'} / {call.customerName || 'Chưa có tên khách hàng'} · {clock(call.duration)} · {reviewStatus}</p>
       </div>
-      <div className="flex items-center gap-2">
-        <span className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">{provenanceLabel(call.provenance)}</span>
-        <button disabled={!dirty || saving || call.status !== 'ready'} onClick={() => void save()} className="inline-flex items-center gap-2 rounded-md bg-[#0E5665] px-4 py-2 text-sm text-white disabled:opacity-40"><Save size={15}/>{saving ? 'Đang lưu…' : 'Lưu đánh giá'}</button>
+      <div className="flex flex-wrap items-center gap-3">
+        <span className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-800">{provenanceLabel(call.provenance)}</span>
+        <button type="button" disabled={!canSave} onClick={() => void save()} className={primaryButton}><Save size={18}/>{saving ? 'Đang lưu…' : 'Lưu đánh giá'}</button>
       </div>
     </header>
-    {call.provenance === 'mock' && <p className="rounded-md border border-blue-200 bg-teal-50 px-3 py-2 text-sm text-blue-900">
+    {call.provenance === 'mock' && <p className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-950">
       {call.source === 'results_import'
-        ? 'Bản ghi demo seed: WAV tổng hợp không chứa lời nói thật, transcript và nhãn cảm xúc đều mô phỏng.'
-        : 'Đây là file ghi âm được tải lên từ máy của bạn, nhưng ít nhất một bước ASR/SER hiện đang mô phỏng. Không xem dự đoán là kết quả mô hình nghiên cứu.'}
+        ? 'Dữ liệu minh họa: âm thanh tổng hợp, transcript và nhãn cảm xúc mô phỏng. Dùng để trình bày luồng đánh giá, không phải kết quả nghiên cứu.'
+        : 'Bản ghi âm được tải lên, nhưng có bước ASR hoặc SER đang mô phỏng. Các dự đoán này dùng để kiểm tra luồng xử lý, không phải kết quả mô hình nghiên cứu.'}
     </p>}
-    {call.status !== 'ready' && <section className="rounded-md border border-amber-200 bg-amber-50 p-4 text-sm">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <strong>{call.status === 'failed' ? 'Xử lý thất bại' : 'Đang xử lý file ghi âm'} · {call.progress}%</strong>
-        {call.status === 'failed' && <button onClick={()=>void retry()} className="rounded-md border border-amber-400 px-3 py-1.5 text-xs hover:bg-amber-100">Thử xử lý lại</button>}
+    {call.status !== 'ready' && <section className="rounded-xl border border-amber-200 bg-amber-50 p-5" aria-labelledby="processing-title">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h2 id="processing-title" className="text-lg font-semibold text-amber-950">{call.status === 'failed' ? 'Xử lý chưa thành công' : call.status === 'queued' ? 'Cuộc gọi đang chờ xử lý' : 'Đang xử lý bản ghi âm'} · {call.progress}%</h2>
+        {call.status === 'failed' && <button type="button" disabled={retrying} onClick={() => void retry()} className={button}><RefreshCw size={17}/>{retrying ? 'Đang gửi yêu cầu…' : 'Thử xử lý lại'}</button>}
       </div>
-      {call.error && <p role="alert" className="mt-2 text-red-700">{call.error}</p>}
-      <div className="mt-3 h-2 overflow-hidden rounded-full bg-amber-100"><div className="h-full bg-amber-500 transition-all" style={{width: Math.max(0, Math.min(100, call.progress))+'%'}}/></div>
-      <ol className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
-        {call.stageLog.map(step => <li key={step.stage} className="rounded-md border border-amber-100 bg-white p-2 text-xs">
-          <strong>{stageLabels[step.stage]}</strong>
-          <p className="mt-1 text-slate-700">{step.state === 'done' ? 'Hoàn thành' : step.state === 'skipped' ? 'Bỏ qua' : step.state === 'running' ? 'Đang thực hiện' : step.state === 'failed' ? 'Lỗi' : 'Đang chờ'}</p>
-          {step.detail && <p className="mt-1 text-slate-700">{step.detail}</p>}
-        </li>)}
-      </ol>
-      {call.status !== 'failed' && <p className="mt-3 text-xs text-amber-800">Trạng thái được cập nhật tự động. Không đóng cửa sổ backend trong lúc xử lý.</p>}
+      {call.error && <p role="alert" className="mt-3 text-sm text-red-900">{call.error}</p>}
+      <progress value={Math.max(0, Math.min(100, call.progress))} max={100} aria-label="Tiến độ xử lý" className="mt-4 h-2 w-full accent-teal-700"/>
+      <ol className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">{call.stageLog.map(step => <li key={step.stage} className="rounded-lg border border-amber-200 bg-white p-3 text-sm">
+        <strong className="block">{stageLabels[step.stage]}</strong>
+        <p className="mt-1 text-slate-700">{step.state === 'done' ? 'Hoàn thành' : step.state === 'skipped' ? 'Bỏ qua' : step.state === 'running' ? 'Đang thực hiện' : step.state === 'failed' ? 'Lỗi' : 'Đang chờ'}</p>
+        {step.detail && <p className="mt-2 break-words text-slate-600">{step.detail}</p>}
+      </li>)}</ol>
+      {call.status !== 'failed' && <p className="mt-3 text-sm text-amber-900">Trạng thái tự cập nhật. Bạn có thể chuyển trang rồi quay lại cuộc gọi này.</p>}
     </section>}
-    {error && <p role="alert" className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error} <button className="ml-2 underline" onClick={() => { if (window.confirm('Tải lại sẽ bỏ các thay đổi chưa lưu. Tiếp tục?')) void load() }}><RefreshCw size={13} className="inline"/> Tải lại</button></p>}
-    {saveMessage && <p role="status" className="rounded-md border border-green-200 bg-green-50 p-3 text-sm text-green-800">{saveMessage}</p>}
-    {dirty && !saveMessage && <p className="text-xs font-medium text-amber-700">Có thay đổi chưa lưu</p>}
-
-    <section className="rounded-xl border border-[#c4d4dc] bg-white p-5 shadow-sm">
-      <h2 className="mb-4 text-base font-semibold text-[#12394d]">Âm thanh & dòng thời gian</h2>
-      {call.audioUrl ? <audio key={call.id} ref={audioRef} controls preload="metadata" src={resolveApiUrl(call.audioUrl)} className="w-full"
-        onTimeUpdate={e=>setCurrentTime(e.currentTarget.currentTime)}
-        onSeeked={e=>setCurrentTime(e.currentTarget.currentTime)}
-        onError={()=>setError('Không phát được file audio. Kiểm tra server/data/uploads và endpoint audio.')}
-      /> : <p className="text-sm text-slate-700">Cuộc gọi chưa có file audio.</p>}
-      <div className="mt-3 flex justify-between text-xs font-mono text-slate-700"><span>{clock(currentTime)}</span><span>{clock(totalTime)}</span></div>
-      <div className="relative mt-1 h-9 overflow-hidden rounded bg-slate-100" role="group" aria-label="Dòng thời gian cảm xúc">
-        {call.utterances.filter(u=>u.fused).map(u=><button key={u.id} title={clock(u.start)+' · '+emotionLabels[u.fused!.emotion]} aria-label={'Đến '+clock(u.start)}
-          onClick={()=>{setSelectedId(u.id);seek(u.start)}} className="absolute top-0 h-full hover:brightness-90"
-          style={{left:(u.start/totalTime*100)+'%',width:(Math.max(0.4,(u.end-u.start)/totalTime*100))+'%',background:emotionColors[u.fused!.emotion]}}/>)}
-        <div className="pointer-events-none absolute top-0 h-full w-0.5 bg-slate-950" style={{left:(Math.min(100,currentTime/totalTime*100))+'%'}}/>
+    {error && <div role="alert" className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm leading-6 text-red-900">
+      <p>{error}</p>
+      <div className="mt-3 flex flex-wrap gap-3">
+        {(dirty || draftBackup) && <button type="button" onClick={downloadDraft} className={button}><Download size={17}/> Tải bản nháp</button>}
+        <button type="button" disabled={saving} className={button} onClick={() => { persistDraft(); setReload(value => value + 1) }}><RefreshCw size={17}/>{versionConflict ? 'Mở phiên bản đã lưu' : 'Tải lại dữ liệu'}</button>
       </div>
-      <div className="mt-2 flex flex-wrap gap-3 text-xs text-slate-700">{allEmotions.map(e=><span key={e} className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded" style={{background:emotionColors[e]}}/>{emotionLabels[e]}</span>)}</div>
-    </section>
-
-    <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1.7fr)_minmax(295px,1fr)]">
-      <section className="rounded-xl border border-[#c4d4dc] bg-white shadow-sm">
-        <div className="border-b border-[#d6e2e8] px-5 py-4"><h2 className="text-base font-semibold text-[#12394d]">Bản ghi hội thoại</h2><p className="text-xs text-slate-700">Bấm vào câu để phát từ thời điểm tương ứng và chỉnh nhãn.</p></div>
-        <div className="max-h-[600px] divide-y divide-[#e0e9ed] overflow-y-auto">
-          {call.utterances.map(u=>{
-            const active = current?.id === u.id
-            const chosen = selectedId === u.id
-            const p = patches[u.id]
-            return <button key={u.id} onClick={()=>{setSelectedId(u.id);setSelectedMomentId(null);seek(u.start)}} className={'block w-full p-4 text-left hover:bg-teal-50/70 '+(chosen?'bg-blue-50 ':'')+(active?'border-l-4 border-[#087985]':'border-l-4 border-transparent')}>
-              <div className="mb-1 flex flex-wrap items-center gap-2 text-xs">
-                <span className="font-mono text-slate-700">{clock(u.start)}–{clock(u.end)}</span>
-                <span className="font-semibold">{u.speaker==='agent'?'Nhân viên':u.speaker==='customer'?'Khách hàng':'Chưa rõ người nói'}</span>
-                {u.fused && <span className="rounded bg-slate-100 px-2 py-0.5" style={{color:emotionColors[u.fused.emotion]}}>{emotionLabels[u.fused.emotion]} · {percent(u.fused.confidence)}</span>}
-                {p?.decision==='corrected' && p.emotion && <span className="text-amber-700">Đã sửa → {emotionLabels[p.emotion]}</span>}
-                {p?.decision==='confirmed' && <span className="text-green-700">Đã xác nhận</span>}
+    </div>}
+    {draftBackup && <div role="alert" className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm leading-6 text-amber-950">
+      <p className="font-semibold">Có bản nháp chưa thể khôi phục vào phiên bản hiện tại.</p>
+      <p className="mt-1">Cuộc gọi có thể đã được cập nhật ở tab khác. Bản nháp vẫn được giữ riêng; tải về để đối chiếu trước khi tiếp tục.</p>
+      <div className="mt-3 flex flex-wrap gap-3">
+        <button type="button" onClick={downloadDraft} className={button}><Download size={17}/> Tải bản nháp đang giữ</button>
+        <button type="button" className={button} onClick={() => {
+          try { sessionStorage.removeItem(reviewDraftKey(callId)); setDraftBackup(null); setMessage('Đang sử dụng phiên bản đã lưu của cuộc gọi.') }
+          catch { setStorageError('Không xóa được bản nháp. Hãy tải bản nháp về trước khi đóng tab.') }
+        }}>Bỏ bản nháp cũ, dùng bản đã lưu</button>
+      </div>
+    </div>}
+    {storageError && <p role="alert" className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">{storageError}</p>}
+    {message && <p role="status" className="rounded-lg border border-teal-200 bg-teal-50 p-3 text-sm text-teal-950">{message}</p>}
+    {dirty && <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-amber-900">
+      <span>Có thay đổi chưa lưu{!storageError && ' · Bản nháp được giữ trong phiên trình duyệt này'}</span>
+      <button type="button" onClick={downloadDraft} className="font-semibold underline underline-offset-4">Tải bản nháp</button>
+    </div>}
+    {unknownCount > 0 && <p className="rounded-lg border border-slate-300 bg-white p-4 text-sm leading-6 text-slate-800">
+      <strong>{unknownCount} câu chưa xác định người nói.</strong> Những câu này không được tính vào cảm xúc khách hàng. Hãy nghe lại và gán vai trò nếu có căn cứ.
+      {call.dominantEmotion === null && ' Chưa đủ dữ liệu để nhận định cảm xúc hoặc mức ưu tiên theo khách hàng.'}
+    </p>}
+    <CallRecording callId={call.id} audioUrl={call.audioUrl} duration={call.duration} utterances={call.utterances}
+      seekRequest={seekRequest} onActiveChange={setActiveId} onSelect={selectUtterance}/>
+    <div className="grid grid-cols-1 items-start gap-5 xl:grid-cols-[minmax(0,1.45fr)_minmax(360px,1fr)]">
+      <TranscriptList utterances={call.utterances} patches={form?.utterances ?? {}} selectedId={selectedId} activeId={activeId} onSelect={selectUtterance}/>
+      <div className="min-w-0 space-y-5">
+        <section className="rounded-xl border border-[#c4d4dc] bg-white p-5 shadow-sm">
+          <h2 className="text-lg font-semibold text-[#12394d]">Đánh giá từng câu</h2>
+          {!selected ? <p className="mt-3 text-slate-700">Chọn một câu từ transcript.</p> : <>
+            <p className="mt-2 text-sm text-slate-600">Câu {selected.idx + 1} · {clock(selected.start)} · {speakerLabels[selectedPatch?.speaker ?? selected.speaker]}</p>
+            <div className="mt-4 space-y-3 rounded-lg bg-slate-50 p-4 text-sm">
+              {([['Âm thanh', selected.acoustic], ['Văn bản', selected.lexical], ['Kết hợp', selected.fused]] as const).map(([label, prediction]) =>
+                <div key={label} className="flex flex-wrap items-baseline justify-between gap-2"><span className="text-slate-700">{label}</span><strong className="text-slate-900">{prediction ? emotionLabels[prediction.emotion] + ' · ' + percent(prediction.confidence) : 'Chưa có đầu ra'}</strong></div>)}
+              <p className="border-t border-slate-200 pt-3 leading-6 text-slate-600">Phần trăm là điểm của mô hình cho câu này, không phải độ chính xác đã được kiểm chứng. Nhánh chưa có đầu ra được để trống.</p>
+            </div>
+            {inputsChanged && <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm leading-6 text-amber-950">
+              Transcript hoặc người nói đã được chỉnh sửa. Dự đoán vẫn dựa trên đầu vào ban đầu; mô hình chưa được chạy lại.
+              {(selected.originalText !== undefined || selected.originalSpeaker !== undefined) && <details className="mt-2">
+                <summary className="cursor-pointer font-semibold">Xem đầu vào ban đầu</summary>
+                <p className="mt-2">{selected.originalSpeaker ? speakerLabels[selected.originalSpeaker] : 'Chưa có thông tin người nói'}</p>
+                {selected.originalText !== undefined && <p className="mt-1 whitespace-pre-wrap">{selected.originalText}</p>}
+              </details>}
+            </div>}
+            <fieldset disabled={editDisabled} className="mt-4 min-w-0 disabled:opacity-70">
+              <legend className="sr-only">Quyết định của người đánh giá</legend>
+              <div className="flex flex-wrap gap-2">
+                <button type="button" disabled={!selected.fused} aria-pressed={selectedPatch?.decision === 'confirmed'}
+                  onClick={() => edit(selected.id, { decision: 'confirmed', emotion: null })} className={button + (selectedPatch?.decision === 'confirmed' ? ' border-teal-700 bg-teal-50 text-teal-900' : '')}><Check size={17}/> Xác nhận dự đoán</button>
+                <button type="button" onClick={() => edit(selected.id, { decision: null, emotion: null })} className={button}>Bỏ đánh giá</button>
               </div>
-              <p className="text-base leading-7 text-[#17364b]">{p?.text ?? u.text}</p>
-            </button>
-          })}
-          {call.utterances.length===0 && <p className="p-6 text-sm text-slate-700">Chưa có transcript.</p>}
-        </div>
-      </section>
-
-      <div className="space-y-4">
-        <section className="rounded-lg border bg-white p-4">
-          <h2 className="font-semibold">Đánh giá từng câu</h2>
-          {!selected ? <p className="mt-3 text-sm text-slate-700">Chọn một câu từ transcript.</p> : <>
-            <p className="mt-2 text-xs text-slate-700">Câu #{selected.idx+1} · {clock(selected.start)} · {selected.speaker}</p>
-            <p className="mt-2 text-base">{patches[selected.id]?.text ?? selected.text}</p>
-            <div className="mt-4 space-y-2 rounded-md bg-slate-50 p-3 text-sm">
-              {([['Âm thanh',selected.acoustic],['Văn bản',selected.lexical],['Kết hợp',selected.fused]] as const).map(([label,p])=>
-                <div key={label} className="flex justify-between gap-2"><span className="text-slate-700">{label}</span><strong>{p?emotionLabels[p.emotion]+' · '+percent(p.confidence):'Chưa có'}</strong></div>)}
-            </div>
-            <div className="mt-4 flex gap-2">
-              <button disabled={!selected.fused} onClick={()=>edit(selected.id,{decision:'confirmed',emotion:null})} className="inline-flex flex-1 items-center justify-center gap-1 rounded-md border px-3 py-2 text-sm disabled:opacity-40"><Check size={15}/> Xác nhận</button>
-              <button onClick={()=>edit(selected.id,{decision:null,emotion:null})} className="rounded-md border px-3 py-2 text-xs">Bỏ đánh giá</button>
-            </div>
-            <label className="mt-3 block text-sm font-medium">Sửa nhãn cảm xúc</label>
-            <select className="mt-1 w-full rounded-md border p-2 text-sm" value={patches[selected.id]?.decision==='corrected' ? patches[selected.id].emotion??'' : ''}
-              onChange={e=>edit(selected.id,{decision:'corrected', emotion:e.target.value as Emotion})}>
-              <option value="">Chọn nhãn khác dự đoán…</option>
-              {allEmotions.filter(e=>e!==selected.fused?.emotion).map(e=><option key={e} value={e}>{emotionLabels[e]}</option>)}
-            </select>
-            <label className="mt-3 block text-sm font-medium" htmlFor="speaker-select">Người nói (có thể sửa nếu tách giọng sai)</label>
-            <select id="speaker-select" className="mt-1 w-full rounded-md border p-2 text-sm"
-              value={patches[selected.id]?.speaker ?? selected.speaker}
-              onChange={e=>edit(selected.id,{speaker:e.target.value as 'agent'|'customer'|'unknown'})}>
-              <option value="unknown">Chưa xác định</option><option value="agent">Nhân viên</option><option value="customer">Khách hàng</option>
-            </select>
-            <label className="mt-3 block text-sm font-medium" htmlFor="transcript-edit">Sửa transcript nếu ASR nhận sai</label>
-            <textarea id="transcript-edit" rows={3} maxLength={4000}
-              value={patches[selected.id]?.text ?? selected.text}
-              onChange={e=>edit(selected.id,{text:e.target.value})}
-              className="mt-1 w-full rounded-md border p-2 text-sm"/>
-            <label className="mt-3 block text-sm font-medium" htmlFor="utterance-note">Ghi chú câu nói</label>
-            <textarea id="utterance-note" rows={3} maxLength={2000} value={patches[selected.id]?.note??''} onChange={e=>edit(selected.id,{note:e.target.value})} className="mt-1 w-full rounded-md border p-2 text-sm" placeholder="Nhận xét của người đánh giá…"/>
+              <label className="mt-4 block text-sm font-semibold" htmlFor="emotion-select">Sửa nhãn cảm xúc</label>
+              <select id="emotion-select" className={input} value={selectedPatch?.decision === 'corrected' ? selectedPatch.emotion ?? '' : ''}
+                onChange={e => { if (e.target.value) edit(selected.id, { decision: 'corrected', emotion: e.target.value as Emotion }) }}>
+                <option value="" disabled>Chọn nhãn khác dự đoán…</option>
+                {allEmotions.filter(emotion => emotion !== selected.fused?.emotion).map(emotion => <option key={emotion} value={emotion}>{emotionLabels[emotion]}</option>)}
+              </select>
+              <label className="mt-4 block text-sm font-semibold" htmlFor="speaker-select">Người nói</label>
+              <select id="speaker-select" className={input} value={selectedPatch?.speaker ?? selected.speaker} onChange={e => edit(selected.id, { speaker: e.target.value as 'agent' | 'customer' | 'unknown' })}>
+                <option value="unknown">Chưa xác định</option><option value="agent">Nhân viên</option><option value="customer">Khách hàng</option>
+              </select>
+              <label className="mt-4 block text-sm font-semibold" htmlFor="transcript-edit">Transcript sau khi nghe lại</label>
+              <textarea id="transcript-edit" rows={3} maxLength={4000} value={selectedPatch?.text ?? selected.text} onChange={e => edit(selected.id, { text: e.target.value })} className={input}/>
+              <label className="mt-4 block text-sm font-semibold" htmlFor="utterance-note">Ghi chú câu nói</label>
+              <textarea id="utterance-note" rows={2} maxLength={2000} value={selectedPatch?.note ?? ''} onChange={e => edit(selected.id, { note: e.target.value })} className={input} placeholder="Điều cần giải thích hoặc kiểm tra thêm…"/>
+            </fieldset>
           </>}
         </section>
-        <section className="rounded-lg border bg-white p-4">
-          <h2 className="font-semibold">Khoảnh khắc quan trọng ({call.moments.length})</h2>
-          <div className="mt-2 max-h-48 space-y-2 overflow-y-auto">
-            {call.moments.map(m=><button key={m.id} onClick={()=>selectMoment(m)} className={'block w-full rounded-md border p-2 text-left text-sm hover:bg-teal-50/70 '+(selectedMomentId===m.id?'border-blue-500 bg-blue-50':'')}>
-              <strong>{clock(m.start)}</strong> · {m.description}
+        <section className="rounded-xl border border-[#c4d4dc] bg-white p-5 shadow-sm">
+          <h2 className="text-lg font-semibold text-[#12394d]">Điểm cần xem xét <span className="font-normal text-slate-600">· {call.moments.length}</span></h2>
+          <p className="mt-2 text-sm leading-6 text-slate-600">Các quy tắc từ nhãn cảm xúc gợi ý đoạn nên nghe lại. Người đánh giá quyết định mức liên quan.</p>
+          <div className="custom-scrollbar mt-4 max-h-72 space-y-2 overflow-y-auto">
+            {call.moments.map(moment => <button type="button" key={moment.id} onClick={() => selectMoment(moment)} aria-pressed={selectedMomentId === moment.id}
+              className={'block w-full rounded-lg border p-3 text-left text-sm hover:bg-teal-50 ' + (selectedMomentId === moment.id ? 'border-teal-600 bg-teal-50' : 'border-slate-200')}>
+              <span className="font-semibold text-slate-900">{clock(moment.start)} · {momentLabels[moment.type] ?? 'Đoạn cần kiểm tra'}</span>
+              <span className="mt-1 block leading-6 text-slate-700">{moment.description}</span>
+              {moment.reviewOutdated && <span className="mt-2 block font-medium text-amber-900">Nhận định cũ cần xem lại vì vai trò người nói đã thay đổi.</span>}
             </button>)}
-            {call.moments.length===0 && <p className="text-sm text-slate-700">Chưa có khoảnh khắc được phát hiện.</p>}
+            {!call.moments.length && <p className="text-sm text-slate-700">Chưa có đoạn nào thỏa các quy tắc gợi ý.</p>}
           </div>
-          {selectedMoment && <div className="mt-3 flex gap-2 text-xs">
-            <button onClick={()=>{setMomentChanges(p=>({...p,[selectedMoment.id]:{relevance:true,note:p[selectedMoment.id]?.note??selectedMoment.note}}));setDirty(true)}} className="rounded border px-2 py-1.5">Có liên quan</button>
-            <button onClick={()=>{setMomentChanges(p=>({...p,[selectedMoment.id]:{relevance:false,note:p[selectedMoment.id]?.note??selectedMoment.note}}));setDirty(true)}} className="rounded border px-2 py-1.5">Không liên quan</button>
-            <span className="self-center text-slate-700">{momentChanges[selectedMoment.id]?.relevance===true?'Đã chọn: liên quan':momentChanges[selectedMoment.id]?.relevance===false?'Đã chọn: không':selectedMoment.relevance===null?'Chưa đánh giá':selectedMoment.relevance?'Liên quan':'Không liên quan'}</span>
-          </div>}
+          {selectedMoment && <fieldset disabled={editDisabled} className="mt-4 min-w-0 border-t border-slate-200 pt-4">
+            <legend className="sr-only">Đánh giá điểm cần xem xét</legend>
+            <div className="flex flex-wrap gap-2">
+              {([{ value: true, label: 'Có liên quan' }, { value: false, label: 'Không liên quan' }, { value: null, label: 'Bỏ đánh giá' }] as const).map(choice => {
+                const current = momentPatch ? momentPatch.relevance : selectedMoment.relevance
+                return <button type="button" key={choice.label} aria-pressed={current === choice.value} className={button + (current === choice.value ? ' border-teal-700 bg-teal-50 text-teal-900' : '')}
+                  onClick={() => updateForm(previous => ({ ...previous, moments: { ...previous.moments, [selectedMoment.id]: { relevance: choice.value, note: previous.moments[selectedMoment.id]?.note ?? selectedMoment.note } } }))}>{choice.label}</button>
+              })}
+            </div>
+            <label className="mt-4 block text-sm font-semibold" htmlFor="moment-note">Ghi chú điểm cần xem xét</label>
+            <textarea id="moment-note" rows={2} maxLength={2000} className={input} value={momentPatch?.note ?? selectedMoment.note}
+              onChange={e => { const note = e.target.value; updateForm(previous => ({ ...previous, moments: { ...previous.moments, [selectedMoment.id]: { relevance: previous.moments[selectedMoment.id] ? previous.moments[selectedMoment.id].relevance : selectedMoment.relevance, note } } })) }}/>
+          </fieldset>}
         </section>
-        <section className="rounded-lg border bg-white p-4">
-          <h2 className="font-semibold">Hoàn tất đánh giá</h2>
-          <label className="mt-3 block text-sm" htmlFor="overall-note">Ghi chú tổng thể</label>
-          <textarea id="overall-note" value={overallNote} onChange={e=>{setOverallNote(e.target.value);setDirty(true)}} maxLength={5000} rows={3} className="mt-1 w-full rounded border p-2 text-sm"/>
-          <label className="mt-3 flex items-center gap-2 text-sm"><input type="checkbox" checked={markReviewed} onChange={e=>{setMarkReviewed(e.target.checked);setDirty(true)}}/> Đánh dấu đã hoàn tất xem xét</label>
-          <button onClick={()=>void save()} disabled={!dirty||saving||call.status!=='ready'} className="mt-4 flex w-full items-center justify-center gap-2 rounded-md bg-[#0E5665] px-3 py-2 text-sm text-white disabled:opacity-40"><Save size={15}/>{saving?'Đang lưu…':'Lưu vào SQLite'}</button>
-          <a className="mt-3 block text-sm text-teal-800 hover:underline" href={'/api/calls/'+encodeURIComponent(call.id)+'/export.csv'}>Xuất kết quả CSV</a>
+        <section className="rounded-xl border border-[#c4d4dc] bg-white p-5 shadow-sm">
+          <h2 className="text-lg font-semibold text-[#12394d]">Hoàn tất đánh giá</h2>
+          <fieldset disabled={editDisabled} className="min-w-0">
+            <legend className="sr-only">Ghi chú và trạng thái đánh giá</legend>
+            <label className="mt-4 block text-sm font-semibold" htmlFor="overall-note">Ghi chú tổng thể</label>
+            <textarea id="overall-note" value={form?.overallNote ?? ''} onChange={e => { const note = e.target.value; updateForm(previous => ({ ...previous, overallNote: note })) }} maxLength={5000} rows={3} className={input}/>
+            <label className="mt-4 flex items-start gap-3 text-sm leading-6"><input type="checkbox" className="mt-1 h-4 w-4 shrink-0" checked={form?.complete ?? false} onChange={e => { const complete = e.target.checked; updateForm(previous => ({ ...previous, complete })) }}/> Đã hoàn tất việc xem xét cuộc gọi</label>
+          </fieldset>
+          <button type="button" onClick={() => void save()} disabled={!canSave} className={primaryButton + ' mt-5 w-full'}><Save size={18}/>{saving ? 'Đang lưu…' : 'Lưu đánh giá'}</button>
+          {call.status === 'ready' && <a className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-teal-800 underline-offset-4 hover:underline" href={resolveApiUrl('/api/calls/' + encodeURIComponent(call.id) + '/export.csv')}><Download size={17}/> Xuất kết quả CSV đã lưu</a>}
+          {call.status === 'ready' && <a className="mt-3 block text-sm font-semibold text-teal-800 underline-offset-4 hover:underline" href={resolveApiUrl('/api/calls/' + encodeURIComponent(call.id) + '/export.json')}>Tải bằng chứng và đầu vào gốc (JSON)</a>}
+          {dirty && <p className="mt-2 text-sm text-slate-600">Tệp xuất chỉ gồm dữ liệu đã lưu; bản nháp chưa được đưa vào.</p>}
         </section>
       </div>
     </div>
-    <p className="flex items-center gap-2 text-xs text-slate-700"><AlertTriangle size={14}/> Nhãn gốc của mô hình vẫn được giữ riêng; chỉnh sửa của QA không ghi đè prediction.</p>
+    <CallWorkflowPanel callId={call.id}/>
+    {call.stageLog.length > 0 && call.status === 'ready' && <details className="rounded-xl border border-slate-300 bg-white p-5 text-sm">
+      <summary className="cursor-pointer font-semibold text-slate-800">Nguồn xử lý và thời gian từng bước</summary>
+      <ul className="mt-4 space-y-3">{call.stageLog.map(step => <li key={step.stage} className="border-t border-slate-200 pt-3 first:border-0 first:pt-0">
+        <strong>{stageLabels[step.stage]}</strong>{step.durationMs !== undefined && ` · ${(step.durationMs / 1000).toFixed(1)} giây`}
+        {step.evidence && <span> · {step.evidence.adapter}{step.evidence.model ? ' / ' + step.evidence.model : ''} · {step.evidence.mock ? 'Mô phỏng' : step.evidence.verified ? 'Đã xác minh gói mô hình' : 'Chưa xác minh gói mô hình'}</span>}
+        {step.detail && <p className="mt-1 break-words text-slate-600">{step.detail}</p>}
+      </li>)}</ul>
+    </details>}
+    <p className="flex items-start gap-2 text-sm leading-6 text-slate-600"><AlertTriangle size={17} className="mt-1 shrink-0"/> Nhãn dự đoán gốc và quyết định của người đánh giá được giữ riêng. Hoàn tất đánh giá không đồng nghĩa vấn đề của khách hàng đã được giải quyết.</p>
   </div>
 }

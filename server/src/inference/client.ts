@@ -1,4 +1,5 @@
-import type { Prediction, Speaker } from '../domain'
+import { z } from 'zod'
+import { EMOTIONS, type InferenceEvidence, type Prediction, type Speaker } from '../domain'
 
 export interface ComponentHealth {
   adapter: string
@@ -21,6 +22,7 @@ export interface ProbeResult {
   channels: number
   sampleRate: number
   peaks: number[]
+  evidence?: InferenceEvidence
 }
 
 export interface TranscribeSegment {
@@ -34,12 +36,14 @@ export interface TranscribeResult {
   segments: TranscribeSegment[]
   speakerSource: 'channel' | 'mock' | 'none'
   provenance: 'mock' | 'real'
+  evidence?: InferenceEvidence
 }
 
 export interface DiarizeResult {
   speakers: Speaker[] // aligned with the request segments
   method: 'model' | 'mock' | 'none'
   detail?: string
+  evidence?: InferenceEvidence
 }
 
 export interface EmotionRequestItem {
@@ -53,6 +57,7 @@ export interface EmotionRequestItem {
 export interface EmotionResult {
   provenance: 'mock' | 'real'
   predictions: Array<{ id: string; acoustic: Prediction | null; lexical: Prediction | null; fused: Prediction }>
+  evidence?: InferenceEvidence
 }
 
 export type InferenceErrorCode = 'unavailable' | 'not_ready' | 'bad_input' | 'failed'
@@ -63,25 +68,48 @@ export class InferenceError extends Error {
   }
 }
 
+export interface InferenceOptions { signal?: AbortSignal }
+
 export interface InferenceClient {
   health(): Promise<HealthInfo>
-  probe(req: { path: string }): Promise<ProbeResult>
-  transcribe(req: { path: string; agentChannel: number }): Promise<TranscribeResult>
-  diarize(req: { path: string; segments: TranscribeSegment[] }): Promise<DiarizeResult>
-  emotion(req: { path: string; utterances: EmotionRequestItem[]; agentChannel: number }): Promise<EmotionResult>
+  probe(req: { path: string }, options?: InferenceOptions): Promise<ProbeResult>
+  transcribe(req: { path: string; agentChannel: number }, options?: InferenceOptions): Promise<TranscribeResult>
+  diarize(req: { path: string; segments: TranscribeSegment[] }, options?: InferenceOptions): Promise<DiarizeResult>
+  emotion(req: { path: string; utterances: EmotionRequestItem[]; agentChannel: number }, options?: InferenceOptions): Promise<EmotionResult>
+}
+
+const Evidence = z.object({
+  adapter: z.string().min(1).max(200), model: z.string().max(2048).optional(),
+  device: z.string().max(200).optional(), mock: z.boolean(), verified: z.boolean().optional(),
+})
+const SpeakerValue = z.enum(['agent', 'customer', 'unknown'])
+const PredictionValue = z.object({ emotion: z.enum(EMOTIONS), confidence: z.number().min(0).max(1) })
+const Segment = z.object({ start: z.number().nonnegative(), end: z.number().positive(), text: z.string().trim().min(1).max(4000), speaker: SpeakerValue.optional() })
+  .refine((s) => s.end > s.start, { message: 'end must be greater than start' })
+const Probe = z.object({ duration: z.number().positive(), channels: z.number().int().min(1).max(32), sampleRate: z.number().int().positive(), peaks: z.array(z.number().min(0).max(1)).max(10_000), evidence: Evidence.optional() })
+const Transcription = z.object({ segments: z.array(Segment).max(5000), speakerSource: z.enum(['channel', 'mock', 'none']), provenance: z.enum(['mock', 'real']), evidence: Evidence.optional() })
+const Diarization = z.object({ speakers: z.array(SpeakerValue).max(5000), method: z.enum(['model', 'mock', 'none']), detail: z.string().optional(), evidence: Evidence.optional() })
+const Emotions = z.object({ provenance: z.enum(['mock', 'real']), predictions: z.array(z.object({ id: z.string().min(1), acoustic: PredictionValue.nullable(), lexical: PredictionValue.nullable(), fused: PredictionValue })).max(5000), evidence: Evidence.optional() })
+const Component = z.object({ adapter: z.string(), ready: z.boolean(), mock: z.boolean(), verified: z.boolean().optional(), detail: z.string() }).passthrough()
+const Health = z.object({ status: z.enum(['ok', 'degraded']), mode: z.enum(['mock', 'real', 'mixed']), device: z.string(), ffmpeg: z.boolean(), components: z.object({ asr: Component, diarization: Component, ser: Component }) }).passthrough()
+
+function validated<T>(schema: z.ZodType<T>, data: unknown, route: string): T {
+  const result = schema.safeParse(data)
+  if (!result.success) throw new InferenceError('failed', `Dịch vụ suy luận trả dữ liệu không hợp lệ (${route}: ${result.error.issues[0]?.path.join('.') || 'response'}).`)
+  return result.data
 }
 
 export class HttpInferenceClient implements InferenceClient {
   constructor(private baseUrl: string) {}
 
-  private async call<T>(method: 'GET' | 'POST', route: string, body: unknown, timeoutMs: number): Promise<T> {
+  private async call<T>(method: 'GET' | 'POST', route: string, body: unknown, timeoutMs: number, schema: z.ZodType<T>, options?: InferenceOptions): Promise<T> {
     let res: Response
     try {
       res = await fetch(`${this.baseUrl}${route}`, {
         method,
         headers: { 'Content-Type': 'application/json' },
         body: body === undefined ? undefined : JSON.stringify(body),
-        signal: AbortSignal.timeout(timeoutMs),
+        signal: options?.signal ? AbortSignal.any([options.signal, AbortSignal.timeout(timeoutMs)]) : AbortSignal.timeout(timeoutMs),
       })
     } catch (e) {
       const timeout = (e as Error).name === 'TimeoutError'
@@ -107,22 +135,37 @@ export class HttpInferenceClient implements InferenceClient {
       }
       throw new InferenceError(code, message)
     }
-    return (await res.json()) as T
+    try {
+      return validated(schema, await res.json(), route)
+    } catch (e) {
+      if (e instanceof InferenceError) throw e
+      if ((e as Error).name === 'TimeoutError' || (e as Error).name === 'AbortError')
+        throw new InferenceError('unavailable', 'Dịch vụ suy luận phản hồi quá chậm hoặc yêu cầu đã bị hủy.')
+      throw new InferenceError('failed', `Dịch vụ suy luận trả JSON không hợp lệ (${route}).`)
+    }
   }
 
   health() {
-    return this.call<HealthInfo>('GET', '/v1/health', undefined, 4_000)
+    return this.call<HealthInfo>('GET', '/v1/health', undefined, 4_000, Health)
   }
-  probe(req: { path: string }) {
-    return this.call<ProbeResult>('POST', '/v1/audio/probe', req, 120_000)
+  probe(req: { path: string }, options?: InferenceOptions) {
+    return this.call<ProbeResult>('POST', '/v1/audio/probe', req, 120_000, Probe, options)
   }
-  transcribe(req: { path: string; agentChannel: number }) {
-    return this.call<TranscribeResult>('POST', '/v1/transcribe', { path: req.path, agent_channel: req.agentChannel }, 60 * 60_000)
+  transcribe(req: { path: string; agentChannel: number }, options?: InferenceOptions) {
+    return this.call<TranscribeResult>('POST', '/v1/transcribe', { path: req.path, agent_channel: req.agentChannel }, 60 * 60_000, Transcription, options)
   }
-  diarize(req: { path: string; segments: TranscribeSegment[] }) {
-    return this.call<DiarizeResult>('POST', '/v1/diarize', req, 30 * 60_000)
+  async diarize(req: { path: string; segments: TranscribeSegment[] }, options?: InferenceOptions) {
+    const result = await this.call<DiarizeResult>('POST', '/v1/diarize', req, 30 * 60_000, Diarization, options)
+    if (result.method !== 'none' && result.speakers.length !== req.segments.length)
+      throw new InferenceError('failed', 'Mô hình trả số nhãn người nói không khớp transcript.')
+    return result
   }
-  emotion(req: { path: string; utterances: EmotionRequestItem[]; agentChannel: number }) {
-    return this.call<EmotionResult>('POST', '/v1/emotion', { path: req.path, utterances: req.utterances, agent_channel: req.agentChannel }, 30 * 60_000)
+  async emotion(req: { path: string; utterances: EmotionRequestItem[]; agentChannel: number }, options?: InferenceOptions) {
+    const result = await this.call<EmotionResult>('POST', '/v1/emotion', { path: req.path, utterances: req.utterances, agent_channel: req.agentChannel }, 30 * 60_000, Emotions, options)
+    const expected = new Set(req.utterances.map((u) => u.id))
+    const actual = new Set(result.predictions.map((p) => p.id))
+    if (result.predictions.length !== expected.size || actual.size !== expected.size || [...actual].some((id) => !expected.has(id)))
+      throw new InferenceError('failed', 'Mô hình trả kết quả thiếu, trùng hoặc sai mã câu nói.')
+    return result
   }
 }

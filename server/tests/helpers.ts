@@ -12,6 +12,7 @@ import {
   type EmotionResult,
   type HealthInfo,
   type InferenceClient,
+  type InferenceOptions,
   type ProbeResult,
   type TranscribeResult,
 } from '../src/inference/client'
@@ -37,7 +38,7 @@ export class FakeInference implements InferenceClient {
     this.calls.push('probe')
     return { duration: this.duration, channels: 2, sampleRate: 16000, peaks: Array(50).fill(0.5) }
   }
-  async transcribe(): Promise<TranscribeResult> {
+  async transcribe(_req?: { path: string; agentChannel: number }, _options?: InferenceOptions): Promise<TranscribeResult> {
     this.calls.push('transcribe')
     if (this.failTranscribe-- > 0) throw new InferenceError('unavailable', 'Dịch vụ suy luận không khả dụng.')
     return { segments: this.segments, speakerSource: 'channel', provenance: 'mock' }

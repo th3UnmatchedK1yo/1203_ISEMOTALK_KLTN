@@ -64,29 +64,41 @@ class FasterWhisperAsr:
     name = "faster_whisper"
     mock = False
 
-    def __init__(self, model_id: str = "Systran/faster-whisper-small", device: str = "cpu") -> None:
+    def __init__(self, model_id: str = "Systran/faster-whisper-small", device: str = "cpu", cpu_threads: int = 4) -> None:
         self.model_id = model_id
         self.device = 'cpu' if device == 'auto' else device
+        self.cpu_threads = cpu_threads
         self._model = None
+        self._load_error = None
+        self.model_identity = None
         self._lock = threading.Lock()
 
     def status(self) -> Status:
+        if self._load_error:
+            return Status(self.name, False, False, self._load_error, loaded=False)
+        if self.device not in ("cpu", "cuda") or not 1 <= self.cpu_threads <= 64:
+            return Status(self.name, False, False, "Thiết bị ASR phải là cpu/cuda; ASR_CPU_THREADS phải trong 1..64.", loaded=False)
         if importlib.util.find_spec("faster_whisper") is None:
             return Status(
                 self.name, False, False,
                 "Chưa cài faster-whisper trong inference/.venv. "
-                "Dùng pip install --no-cache-dir faster-whisper sau khi kiểm tra dung lượng."
+                "Dùng pip install --no-cache-dir faster-whisper sau khi kiểm tra dung lượng.", loaded=False,
             )
         try:
             location = _resolve_cached_model(self.model_id)
         except ModelNotReady as exc:
-            return Status(self.name, False, False, str(exc))
+            return Status(self.name, False, False, str(exc), loaded=False)
         return Status(
             self.name, True, False,
             f"CTranslate2 · {location.name} · {self.device} "
             f"({'đã nạp' if self._model is not None else 'offline, sẽ nạp khi dùng lần đầu'}). "
-            "Đây là faster-whisper, KHÔNG phải PhoWhisper trong nghiên cứu."
+            "Đây là faster-whisper, KHÔNG phải PhoWhisper trong nghiên cứu.", loaded=self._model is not None,
         )
+
+    def warmup(self) -> None:
+        """Initialize this running service's cached model; never download weights."""
+        with self._lock:
+            self._load()
 
     def _load(self):
         if self._model is not None:
@@ -96,8 +108,8 @@ class FasterWhisperAsr:
         folder = _resolve_cached_model(self.model_id)
         from faster_whisper import WhisperModel
 
-        if self.device not in ("cpu", "cuda"):
-            raise ModelNotReady("ISEMO_ASR_DEVICE cho faster-whisper chỉ nhận 'cpu' hoặc 'cuda'.")
+        if self.device not in ("cpu", "cuda") or not 1 <= self.cpu_threads <= 64:
+            raise ModelNotReady("Thiết bị ASR phải là cpu/cuda; ASR_CPU_THREADS phải trong 1..64.")
         compute_type = "int8" if self.device == "cpu" else "int8_float16"
         try:
             self._model = WhisperModel(
@@ -106,12 +118,16 @@ class FasterWhisperAsr:
                 compute_type=compute_type,
                 local_files_only=True,
                 num_workers=1,
+                cpu_threads=self.cpu_threads,
             )
+            self.model_identity = f"{self.model_id} @ {folder.name}"
+            self._load_error = None
         except Exception as exc:
-            raise ModelNotReady(
+            self._load_error = (
                 f"Không nạp được faster-whisper từ cache bằng {self.device}/{compute_type}: {exc}. "
                 "Nếu GPU thiếu CUDA/cuDNN DLL, dùng ISEMO_ASR_DEVICE=cpu."
-            ) from exc
+            )
+            raise ModelNotReady(self._load_error) from exc
         return self._model
 
     def transcribe(self, wave: np.ndarray, sample_rate: int, duration: float) -> list[Segment]:

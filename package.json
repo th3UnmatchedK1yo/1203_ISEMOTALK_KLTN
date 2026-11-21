@@ -7,12 +7,14 @@
     "dev": "concurrently -n web,api,inference -c blue,green,magenta \"npm:dev:web\" \"npm:dev:api\" \"npm:dev:inference\"",
     "dev:web": "vite",
     "dev:api": "tsx watch server/src/index.ts",
-    "dev:inference": "cd inference && .venv\\Scripts\\python -m uvicorn app.main:app --host 127.0.0.1 --port 8001",
+    "dev:inference": "node scripts/run-python.mjs -m uvicorn app.main:app --host 127.0.0.1 --port 8001",
+    "start:api": "node --import tsx server/src/index.ts",
+    "demo:check": "node scripts/check-demo.mjs",
     "seed:demo": "tsx server/src/seed-cli.ts",
     "build": "tsc -b && vite build",
     "typecheck:server": "tsc -p server/tsconfig.json",
     "test": "vitest run",
-    "test:inference": "cd inference && .venv\\Scripts\\python -m pytest -q",
+    "test:inference": "node scripts/run-python.mjs -m unittest discover -s tests -p test_*.py -v",
     "lint": "eslint .",
     "preview": "vite preview"
   },
@@ -59,5 +61,10 @@
     "typescript": "~5.5.4",
     "vite": "^5.4.2",
     "vitest": "^2.1.9"
+  },
+  "allowScripts": {
+    "better-sqlite3@11.10.0": true,
+    "esbuild@0.21.5": true,
+    "esbuild@0.28.2": true
   }
 }

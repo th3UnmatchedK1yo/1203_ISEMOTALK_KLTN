@@ -21,11 +21,14 @@ class Status:
     mock: bool
     detail: str
     verified: Optional[bool] = None
+    loaded: Optional[bool] = None
 
     def to_dict(self) -> dict:
         d = {"adapter": self.adapter, "ready": self.ready, "mock": self.mock, "detail": self.detail}
         if self.verified is not None:
             d["verified"] = self.verified
+        if self.loaded is not None:
+            d["loaded"] = self.loaded
         return d
 
 
@@ -88,11 +91,11 @@ class SerAdapter(Protocol):
 
 def normalize_probs(p: Sequence[float], what: str = "probabilities") -> list[float]:
     arr = [float(x) for x in p]
-    if len(arr) != len(EMOTIONS) or any(not math.isfinite(x) or x < 0 for x in arr):
-        raise ValueError(f"{what} must be {len(EMOTIONS)} finite non-negative numbers, got {arr!r}")
-    total = sum(arr)
-    if total <= 0:
-        raise ValueError(f"{what} sum to zero")
+    if len(arr) != len(EMOTIONS) or any(not math.isfinite(x) or x < 0 or x > 1 for x in arr):
+        raise ValueError(f"{what} must be {len(EMOTIONS)} finite probabilities in [0, 1], got {arr!r}")
+    total = math.fsum(arr)
+    if not math.isclose(total, 1.0, rel_tol=1e-5, abs_tol=1e-5):
+        raise ValueError(f"{what} must sum to one, got {total}")
     return [x / total for x in arr]
 
 

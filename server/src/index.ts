@@ -28,10 +28,21 @@ const server = app.listen(config.port, '127.0.0.1', () => {
   console.log(`[api] http://127.0.0.1:${config.port}  db=${config.dbFile}  inference=${config.inferenceUrl}`)
 })
 
+let shuttingDown = false
 const shutdown = () => {
-  server.close(() => {
+  if (shuttingDown) return
+  shuttingDown = true
+  const drain = pipeline.stop()
+  const closed = new Promise<void>((resolve) => server.close(() => resolve()))
+  const forceClose = setTimeout(() => server.closeAllConnections(), 10_000)
+  forceClose.unref()
+  void Promise.all([drain, closed]).then(() => {
+    clearTimeout(forceClose)
     db.close()
     process.exit(0)
+  }).catch((e) => {
+    console.error('[api] Shutdown failed', e)
+    process.exit(1)
   })
 }
 process.on('SIGINT', shutdown)

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import threading
+import math
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
@@ -10,7 +11,7 @@ import numpy as np
 
 from . import audio
 from .adapters.base import (
-    AsrAdapter, DiarizerAdapter, Segment, SerAdapter, SerItem, to_prediction,
+    AsrAdapter, DiarizerAdapter, ModelNotReady, Segment, SerAdapter, SerItem, to_prediction,
 )
 from .config import Settings
 
@@ -46,20 +47,54 @@ class InferenceService:
         return p
 
     def _load(self, p: Path) -> Loaded:
-        key = (str(p), p.stat().st_mtime_ns)
         with self._lock:
+            stat = p.stat()
+            key = (str(p), stat.st_mtime_ns, stat.st_size)
             if self._cache_key == key and self._cache is not None:
                 return self._cache
-        info = audio.probe(p)
-        sr = self.s.sample_rate
-        if info.channels == 2:
-            stereo = audio.decode(p, sr, 2)
-            loaded = Loaded(info, stereo.mean(axis=1).astype(np.float32), stereo, audio.channel_split_is_reliable(stereo))
-        else:
-            loaded = Loaded(info, audio.decode(p, sr, 1), None, False)
-        with self._lock:
+            info = audio.probe(p)
+            if (not math.isfinite(info.duration) or info.duration <= 0 or info.channels <= 0 or info.sample_rate <= 0):
+                raise audio.AudioError("Thông tin âm thanh không hợp lệ.")
+            if not math.isfinite(self.s.max_duration_sec) or self.s.max_duration_sec <= 0 or self.s.max_decoded_bytes <= 0:
+                raise audio.AudioError("Cấu hình giới hạn âm thanh không hợp lệ.")
+            if info.duration > self.s.max_duration_sec:
+                raise audio.AudioError(f"Âm thanh vượt giới hạn {self.s.max_duration_sec:g} giây; hãy chia thành đoạn ngắn hơn.")
+            sr = self.s.sample_rate
+            bytes_per_frame = 12 if info.channels == 2 else 4  # stereo plus mono cache
+            if math.ceil(info.duration * sr) * bytes_per_frame > self.s.max_decoded_bytes:
+                raise audio.AudioError("Âm thanh sau giải mã vượt giới hạn bộ nhớ. Hãy chia thành các đoạn ngắn hơn.")
+            self._cache, self._cache_key = None, None
+            if info.channels == 2:
+                stereo = audio.decode(p, sr, 2, max_bytes=self.s.max_decoded_bytes * 2 // 3)
+                loaded = Loaded(info, stereo.mean(axis=1), stereo, audio.channel_split_is_reliable(stereo))
+            else:
+                loaded = Loaded(info, audio.decode(p, sr, 1, max_bytes=self.s.max_decoded_bytes), None, False)
             self._cache_key, self._cache = key, loaded
-        return loaded
+            return loaded
+
+    @staticmethod
+    def _validate_intervals(items: list[dict], loaded: Loaded, sr: int) -> None:
+        duration = min(loaded.info.duration, len(loaded.mono) / sr)
+        for item in items:
+            start, end = float(item["start"]), float(item["end"])
+            if (not math.isfinite(start) or not math.isfinite(end) or start < 0
+                    or end <= start or start >= duration or end > duration + 0.05):
+                raise audio.AudioError("Mốc thời gian câu nói phải hữu hạn, tăng dần và nằm trong tệp âm thanh.")
+
+    @staticmethod
+    def _evidence(adapter) -> dict:
+        evidence = {"adapter": adapter.name, "mock": adapter.mock}
+        model = getattr(adapter, "model_identity", None) or getattr(adapter, "model_id", None) or getattr(adapter, "factory", None)
+        if model:
+            evidence["model"] = str(model)
+        device = getattr(adapter, "device", None)
+        if device:
+            evidence["device"] = str(device)
+        if adapter.name == "checkpoint":
+            evidence["verified"] = bool(getattr(adapter, "verified", False))
+        elif adapter.mock:
+            evidence["verified"] = False
+        return evidence
 
     def _speaker_wave(self, loaded: Loaded, speaker: str, agent_channel: int) -> np.ndarray:
         if loaded.split_reliable and loaded.stereo is not None and speaker in ("agent", "customer"):
@@ -100,28 +135,32 @@ class InferenceService:
             ],
             "speakerSource": speaker_source,
             "provenance": "mock" if self.asr.mock else "real",
+            "evidence": self._evidence(self.asr),
         }
 
     def diarize(self, raw: str, segs: list[dict]) -> dict:
         loaded = self._load(self.resolve(raw))
+        self._validate_intervals(segs, loaded, self.s.sample_rate)
         segments = [Segment(float(s["start"]), float(s["end"]), s.get("text", "")) for s in segs]
         speakers = self.diarizer.diarize(loaded.mono, self.s.sample_rate, segments)
         if speakers is None:
-            return {"speakers": [], "method": "none", "detail": self.diarizer.status().detail}
-        return {"speakers": speakers, "method": "mock" if self.diarizer.mock else "model"}
+            return {"speakers": [], "method": "none", "detail": self.diarizer.status().detail, "evidence": self._evidence(self.diarizer)}
+        return {"speakers": speakers, "method": "mock" if self.diarizer.mock else "model", "evidence": self._evidence(self.diarizer)}
 
     def emotion(self, raw: str, utterances: list[dict], agent_channel: int) -> dict:
         loaded = self._load(self.resolve(raw))
         sr = self.s.sample_rate
+        self._validate_intervals(utterances, loaded, sr)
 
         def slicer(start: float, end: float, speaker: str) -> np.ndarray:
             wave = self._speaker_wave(loaded, speaker, agent_channel)
             i0, i1 = int(max(0.0, start) * sr), int(min(end, loaded.info.duration) * sr)
-            min_len = int(0.3 * sr)  # very short clips are padded with surrounding audio
-            if i1 - i0 < min_len:
-                pad = (min_len - (i1 - i0)) // 2 + 1
-                i0, i1 = max(0, i0 - pad), min(len(wave), i1 + pad)
-            return wave[i0:max(i1, i0 + 1)]
+            # A trained factory owns any required padding. Adding surrounding
+            # speech here would change the utterance and differ from verification.
+            clip = wave[i0:i1]
+            if clip.size == 0:
+                raise audio.AudioError("Đoạn câu nói không có mẫu âm thanh.")
+            return clip
 
         items = [SerItem(u["id"], float(u["start"]), float(u["end"]), u.get("text", ""), u.get("speaker", "unknown")) for u in utterances]
         outs = self.ser.predict(items, slicer)
@@ -129,6 +168,7 @@ class InferenceService:
             raise RuntimeError(f"Mô hình trả {len(outs)} kết quả cho {len(items)} câu.")
         return {
             "provenance": "mock" if self.ser.mock else "real",
+            "evidence": self._evidence(self.ser),
             "predictions": [
                 {
                     "id": it.id,
@@ -141,6 +181,12 @@ class InferenceService:
         }
 
     # -- health -----------------------------------------------------------------
+    def warmup(self) -> dict:
+        if self.asr.name != "faster_whisper":
+            raise ModelNotReady("Làm nóng chỉ hỗ trợ faster-whisper từ cache cục bộ; không tự tải model.")
+        self.asr.warmup()
+        return self.health()
+
     def device(self) -> str:
         import importlib.util
 
