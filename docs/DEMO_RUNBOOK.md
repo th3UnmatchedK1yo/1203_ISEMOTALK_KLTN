@@ -19,6 +19,27 @@ Nếu `git status` có thay đổi của bạn, giữ lại trước khi chuyể
 
 Nếu đang có hồ sơ quan trọng, sao lưu **cả thư mục `server/data`** khi API đã dừng; đặt bản sao ở nơi còn đủ dung lượng ngoài thư mục dự án. JSON/CSV export hữu ích để đọc bằng chứng nhưng không chứa recording và không phải bản backup có thể phục hồi toàn bộ.
 
+### Kiểm tra database sau cập nhật
+
+`npm run db:check` chỉ đọc file hiện có. Trước lần đầu mở API mới, database cũ có thể được báo schema version 0; nếu các lỗi còn lại chỉ là schema chưa nâng, backup xong rồi chạy API sẽ áp dụng migration. Dữ liệu không hợp lệ hoặc thiếu khóa/cột khiến migration dừng và rollback, không tự xóa/sửa hồ sơ. Nếu API dừng với hướng dẫn `db:check`, gửi báo cáo để xử lý đúng dòng lỗi.
+
+Sau khi API mới khởi động thành công, chạy trong terminal thứ hai:
+
+```powershell
+npm run db:check
+npm run --silent db:check -- --json | Set-Content -Encoding UTF8 db-check-result.json
+```
+
+Chỉ cần gửi `db-check-result.json` khi chẩn đoán; báo cáo không xuất transcript/tên khách hàng. Có thể dùng `--db` và `--uploads` nếu dữ liệu được chuyển chỗ. Đừng tạo database mới hoặc chạy seed để che lỗi ở database cũ. Xem [thiết kế/backup/restore CSDL](DATABASE_DESIGN.md).
+
+### Một báo cáo hiện trạng máy cho bước SER thật
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\diagnose-ser-local.ps1
+```
+
+Script mới báo RAM, ổ đĩa, GPU, đúng Python launcher chọn, version các package và cache Whisper/emotion2vec/PhoBERT. Nó không tải/nạp model hoặc giải nén archive. Chỉ đặt `-BackupDir` khi đường dẫn đó thực sự tồn tại; các checkpoint cũ đã được khôi phục từ file đã cung cấp, không phải upload lại chỉ vì archive khác không có trên máy. Có tên file cache chưa chứng minh đủ/sai đúng revision hoặc package chạy được.
+
 ### Nếu ASR hiện tại đã chạy được
 
 Giữ `inference/.venv`, `inference/.env` và cache model hiện có. Không tạo lại venv, tải Torch hay đổi sang model lớn chỉ để cập nhật giao diện.

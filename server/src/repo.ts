@@ -185,7 +185,7 @@ export function listCalls(db: DB, q: ListQuery) {
   const where: string[] = []
   const args: unknown[] = []
   if (q.search?.trim()) {
-    const like = `%${q.search.trim().replace(/[%_]/g, (m) => `\\${m}`)}%`
+    const like = `%${q.search.trim().replace(/[\\%_]/g, (m) => `\\${m}`)}%`
     where.push(
       "(c.id LIKE ? ESCAPE '\\' OR c.title LIKE ? ESCAPE '\\' OR c.agent_name LIKE ? ESCAPE '\\' OR c.customer_name LIKE ? ESCAPE '\\')",
     )

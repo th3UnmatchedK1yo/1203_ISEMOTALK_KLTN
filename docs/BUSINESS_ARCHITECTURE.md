@@ -50,7 +50,9 @@ Các tên trả ra API thường dùng camelCase; SQLite chủ yếu dùng snake
 | Tiến độ suy luận | `stageLog`, `attempts` | JSON `calls.stage_log` và `calls.attempts`; chưa có bảng job hay `inference_run_id` riêng |
 | Danh tính model đã dùng | `stageLog[].evidence` | Ghi adapter, model nếu có, device nếu có, mock, verified nếu có; chưa ghi digest đầy đủ của package cho mỗi lần chạy |
 
-Nguồn: [schema SQLite](../server/src/db.ts), [ánh xạ DTO và allocator](../server/src/repo.ts), [workflow JSON và lịch sử](../server/src/workflow.ts), [stage evidence](../server/src/domain.ts).
+Nguồn: [schema SQLite](../server/src/db-schema.ts), [ánh xạ DTO và allocator](../server/src/repo.ts), [workflow JSON và lịch sử](../server/src/workflow.ts), [stage evidence](../server/src/domain.ts).
+
+Đợt rà CSDL ngày 23/11 bổ sung migration có version, guard miền dữ liệu cho cả DB cũ/mới, unique thứ tự utterance và hàng đợi dọn audio sau xóa. Lịch sử workflow mới giữ snapshot đầy đủ; event cũ được ghi rõ là thiếu một phần. Xem [thiết kế database](DATABASE_DESIGN.md) cho ERD 8 bảng, từ điển dữ liệu, transaction, các phần chưa chuẩn hóa và cách backup/restore. `npm run db:check` kiểm tra độc lập ở chế độ chỉ đọc.
 
 ### Ba loại trạng thái độc lập
 

@@ -1,12 +1,14 @@
 # Authentic SER package verification
 
-Updated 2026-11-22. This is a deployment identity and four-class sanity gate. It does not reproduce the paper's experiments, establish held-out independence by itself, or measure accuracy on call-center recordings.
+Updated 2026-11-23. This is a deployment identity and four-class sanity gate. It does not reproduce the paper's experiments, establish held-out independence by itself, or measure accuracy on call-center recordings.
 
 ## What is now available
 
 The uploaded October experiment archive contains all nine historical H5 F4 fusion heads: M0/C0/M1 × seeds 13/42/2026. Their model and metadata hashes were checked against the archived `RESULT.json` records. Head availability does not restore the pretrained emotion2vec/PhoBERT feature pipeline. See [the source and recovery audit](audits/inference-research-20261122.md) for exact identities and the historical/new-feature-lineage distinction.
 
 The default demo still uses mock SER. Do not change `ISEMO_SER=checkpoint` merely because a `model.pt` has been found.
+
+On 2026-11-23 the nine local head hashes were checked again, the exact historical research source was reachable through the connected private repository, and the connected Drive backup exposed IEMOCAP/VISEC/VNEMOS/VI_FINAL_TRAINING directories. Do not ask the user to re-upload those assets or implement the serving factory. Recovering the authentic dependency set and writing that wrapper are implementation work. Backbone/tokenizer bytes on the deployment laptop, exact reference-feature availability and measured runtime readiness remain unverified. Existing archive examples are not automatically an independent held-out evaluation set. See [current status and responsibilities](PROJECT_STATUS_20261123.md).
 
 ## Private package contract
 

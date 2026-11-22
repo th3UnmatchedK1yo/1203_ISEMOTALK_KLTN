@@ -40,6 +40,9 @@ interface WorkflowEvent {
   nextAction: string
   owner: string
   followUpAt: string | null
+  schemaVersion?: 2
+  snapshot?: WorkflowFields
+  snapshotStatus?: 'complete' | 'legacy_partial'
 }
 export interface CallWorkflow extends WorkflowFields {
   callId: string
@@ -53,27 +56,6 @@ const emptyFields = (): WorkflowFields => ({
   nextAction: '', owner: '', followUpAt: null, outcomeNote: '', reviewerName: '',
 })
 
-function initialize(db: DB) {
-  // Additive migration. Existing calls and their inference/review versions are untouched.
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS call_workflows (
-      call_id TEXT PRIMARY KEY REFERENCES calls(id) ON DELETE CASCADE,
-      version INTEGER NOT NULL CHECK(version > 0),
-      fields_json TEXT NOT NULL,
-      updated_at TEXT NOT NULL
-    );
-    CREATE TABLE IF NOT EXISTS workflow_events (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      call_id TEXT NOT NULL REFERENCES calls(id) ON DELETE CASCADE,
-      version INTEGER NOT NULL,
-      at TEXT NOT NULL,
-      event_json TEXT NOT NULL,
-      UNIQUE(call_id, version)
-    );
-    CREATE INDEX IF NOT EXISTS idx_workflow_events_call ON workflow_events(call_id, version DESC);
-  `)
-}
-
 export function getWorkflow(db: DB, callId: string, options: { fullHistory?: boolean } = {}): CallWorkflow {
   if (!getCallRow(db, callId)) throw new HttpError(404, 'Không tìm thấy cuộc gọi.')
   const row = db.prepare('SELECT version, fields_json, updated_at FROM call_workflows WHERE call_id=?').get(callId) as
@@ -82,7 +64,12 @@ export function getWorkflow(db: DB, callId: string, options: { fullHistory?: boo
   return {
     ...emptyFields(), ...(row ? JSON.parse(row.fields_json) as WorkflowFields : {}),
     callId, version: row?.version ?? 0, updatedAt: row?.updated_at ?? null,
-    history: history.map(e => JSON.parse(e.event_json) as WorkflowEvent),
+    history: history.map(e => {
+      const event = JSON.parse(e.event_json) as WorkflowEvent
+      // Older events stored selected outcome fields only. Preserve their bytes
+      // and expose that limitation instead of borrowing values from today's form.
+      return { ...event, snapshotStatus: event.schemaVersion === 2 && event.snapshot != null ? 'complete' as const : 'legacy_partial' as const }
+    }),
   }
 }
 
@@ -110,6 +97,7 @@ export function saveWorkflow(db: DB, callId: string, body: unknown): CallWorkflo
     const event: WorkflowEvent = {
       version, at, reviewerName: fields.reviewerName, changedFields, resolution: fields.resolution,
       outcomeNote: fields.outcomeNote, nextAction: fields.nextAction, owner: fields.owner, followUpAt: fields.followUpAt,
+      schemaVersion: 2, snapshot: fields, snapshotStatus: 'complete',
     }
     db.prepare('INSERT INTO workflow_events(call_id, version, at, event_json) VALUES (?,?,?,?)')
       .run(callId, version, at, JSON.stringify(event))
@@ -118,7 +106,6 @@ export function saveWorkflow(db: DB, callId: string, body: unknown): CallWorkflo
 }
 
 export function attachWorkflowRoutes(app: Express, db: DB) {
-  initialize(db)
   app.get('/api/calls/:id/workflow', (req, res) => res.json(getWorkflow(db, req.params.id)))
   app.put('/api/calls/:id/workflow', (req, res) => res.json(saveWorkflow(db, req.params.id, req.body)))
 }

@@ -4,6 +4,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import multer from 'multer'
 import { ZodError, z } from 'zod'
+import { assertCallAudioOwnership, cleanupPendingAudio, UnsafeAudioPathError } from './audio-storage'
 import type { Config } from './config'
 import type { DB } from './db'
 import type { StageEntry } from './domain'
@@ -53,6 +54,7 @@ export function createApp({ db, config, client, pipeline }: AppDeps) {
   const app = express()
   const tmpDir = path.join(config.uploadsDir, '.tmp')
   fs.mkdirSync(tmpDir, { recursive: true })
+  cleanupPendingAudio(db, config.uploadsDir)
 
   const allowedOrigin = (origin: string): boolean => {
     if (config.allowedOrigins.includes(origin)) return true
@@ -264,10 +266,23 @@ export function createApp({ db, config, client, pipeline }: AppDeps) {
   })
 
   app.delete('/api/calls/:id', (req, res) => {
-    pipeline.cancel(req.params.id)
-    const removed = repo.deleteCall(db, req.params.id)
-    if (!removed) throw new HttpError(404, 'Không tìm thấy cuộc gọi.')
-    if (removed.audioFile) fs.rmSync(path.join(config.uploadsDir, path.dirname(removed.audioFile)), { recursive: true, force: true })
+    const id = req.params.id
+    const current = repo.getCallRow(db, id)
+    if (!current) throw new HttpError(404, 'Không tìm thấy cuộc gọi.')
+    if (current.audio_file) {
+      try { assertCallAudioOwnership(config.uploadsDir, id, current.audio_file) }
+      catch (error) {
+        if (!(error instanceof UnsafeAudioPathError)) throw error
+        throw new HttpError(409, 'Đường dẫn bản ghi không thuộc cuộc gọi này. Cần kiểm tra dữ liệu trước khi xóa.', { code: 'unsafe_audio_path' })
+      }
+    }
+    db.transaction(() => {
+      const removed = repo.deleteCall(db, id)
+      if (!removed) throw new HttpError(404, 'Không tìm thấy cuộc gọi.')
+      if (removed.audioFile) db.prepare('INSERT INTO audio_cleanup_jobs(call_id, created_at) VALUES (?,?)').run(id, new Date().toISOString())
+    })()
+    pipeline.cancel(id)
+    cleanupPendingAudio(db, config.uploadsDir, id)
     res.status(204).end()
   })
 

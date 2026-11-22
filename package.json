@@ -11,6 +11,7 @@
     "start:api": "node --import tsx server/src/index.ts",
     "demo": "node scripts/start-demo.mjs",
     "demo:check": "node scripts/check-demo.mjs",
+    "db:check": "node --import tsx server/src/db-check.ts",
     "seed:demo": "tsx server/src/seed-cli.ts",
     "build": "tsc -b && vite build",
     "typecheck:server": "tsc -p server/tsconfig.json",
