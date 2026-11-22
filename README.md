@@ -22,30 +22,21 @@ npm ci
 npm run build
 ```
 
-Mở ba terminal ở thư mục dự án:
+Mở PowerShell ở thư mục dự án và chạy một lệnh:
 
 ```powershell
-# Terminal 1: dùng inference/.venv, không dùng Python global ngầm định
-npm run dev:inference
+npm run demo
 ```
 
-```powershell
-# Terminal 2: không chạy file watcher trong buổi báo cáo
-npm run start:api
-```
+Giữ terminal này mở trong lúc dùng web. Lệnh kiểm tra build/Python/cổng, rồi khởi động và theo dõi web, API, inference cùng nhau; một dịch vụ thoát sẽ dừng cả nhóm và ghi log. Không cần activate venv. Nếu đang gặp hiện tượng terminal trong VS Code tự quay về dấu nhắc, thử lệnh này trong Windows Terminal/PowerShell riêng để thu log rõ ràng.
 
-```powershell
-# Terminal 3: phục vụ frontend đã build
-npm run preview
-```
-
-Mở <http://127.0.0.1:5173>. Chạy kiểm tra từ terminal thứ tư:
+Sau các thông báo startup, mở <http://127.0.0.1:5173>. Chạy kiểm tra từ terminal thứ hai:
 
 ```powershell
 npm run demo:check -- --warmup-asr
 ```
 
-Lệnh này có thể báo mô phỏng một cách hợp lệ. Muốn kiểm tra điều kiện **SER thật đã kiểm chứng**, dùng thêm `--require-real-ser`; lệnh phải thất bại nếu SER vẫn mock. Warmup chỉ nạp ASR từ cache; cần chạy một file ngắn để đo bước suy luận.
+Lệnh kiểm tra nội dung HTML/JavaScript khớp build, cấu hình API của bundle, proxy `/api`, API trực tiếp và inference; build thành công chưa đủ để kết luận web đang chạy. Lệnh này có thể báo mô phỏng một cách hợp lệ. Muốn kiểm tra điều kiện **SER thật đã kiểm chứng**, dùng thêm `--require-real-ser`; lệnh phải thất bại nếu SER vẫn mock. Warmup chỉ nạp ASR từ cache; cần chạy một file ngắn để đo bước suy luận.
 
 ## Phát triển và kiểm thử
 
@@ -65,6 +56,8 @@ Stack: React/Vite → Express/SQLite → FastAPI. Một worker pipeline trong b�
 
 - [Kiểm toán, mục tiêu đồ án và lộ trình](docs/THESIS_AUDIT_20261122.md).
 - [Kịch bản chạy và báo cáo](docs/DEMO_RUNBOOK.md).
+- [Nghiệp vụ, vị trí model, kiến trúc và lựa chọn triển khai](docs/BUSINESS_ARCHITECTURE.md).
+- [Chẩn đoán web local và bằng chứng sửa ngày 23/11](docs/audits/startup-20261123.md).
 - [Khôi phục và kiểm chứng package SER](docs/SER_PACKAGE_VERIFICATION.md).
 - [ASR offline, môi trường và giới hạn tài nguyên](docs/OFFLINE_ASR_SETUP.md).
 - [Backend](docs/audits/backend-20261122.md), [frontend](docs/audits/frontend-20261122.md), [inference/nghiên cứu](docs/audits/inference-research-20261122.md).

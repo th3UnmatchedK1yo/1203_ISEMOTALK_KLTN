@@ -1,6 +1,6 @@
 # ISEmoTalk — chạy, kiểm tra và báo cáo đồ án
 
-Áp dụng cho `feat/thesis-demo-hardening-20261122`, ngày 22/11/2026. Mục tiêu là một buổi trình bày có thể giải thích từng bước, giữ được thao tác QA khi gặp lỗi và công bố đúng model nào đang chạy.
+Áp dụng cho `feat/thesis-demo-hardening-20261122`, cập nhật ngày 23/11/2026. Mục tiêu là một buổi trình bày có thể giải thích từng bước, giữ được thao tác QA khi gặp lỗi và công bố đúng model nào đang chạy. Xem [nghiệp vụ và kiến trúc](BUSINESS_ARCHITECTURE.md) để biết model nằm ở đâu, từng phần làm gì và điều kiện chuyển lên server.
 
 ## 1. Cập nhật an toàn trên Windows
 
@@ -47,32 +47,28 @@ Tách cache và venv giúp nhiều môi trường dùng chung weights, không nh
 
 ## 3. Khởi động bản trình bày
 
-Mỗi terminal đứng ở thư mục dự án. Giữ mở cả ba terminal trong lúc dùng web.
+**Terminal 1 — giữ cả ba dịch vụ chạy cùng nhau:**
 
-**Terminal 1 — inference:**
-
-```powershell
-npm run dev:inference
-```
-
-**Terminal 2 — API:**
+Nếu đang chẩn đoán lỗi terminal VS Code quay về dấu nhắc, mở **Windows Terminal hoặc PowerShell riêng** từ Start. Việc này giúp tách hành vi tích hợp của editor; chưa có bằng chứng editor là nguyên nhân làm tiến trình dừng.
 
 ```powershell
-$env:ISEMO_AUTO_SEED = "0"
-npm run start:api
+Set-Location C:\Users\Legion\Documents\1203_KLTN
+npm run demo
 ```
 
-Tắt auto-seed để một DB trống không tự sinh dữ liệu mẫu. Dữ liệu đã có vẫn được giữ. `start:api` không chạy watcher.
+Không cần chạy `Activate.ps1`: launcher gọi trực tiếp Python trong `inference/.venv` hoặc `ISEMO_PYTHON` tuyệt đối đã cấu hình. Giữ cửa sổ này mở. Khi đang phục vụ, lệnh tiếp tục chạy và không trả lại dấu nhắc `PS ...>`; Ctrl+C dừng nhóm dịch vụ.
 
-**Terminal 3 — frontend đã build:**
+Launcher thực hiện các việc sau:
 
-```powershell
-npm run preview
-```
+- Kiểm tra Node 22+, build `dist/index.html` và `dist/demo-build.json`, Python và các cổng 5173/3001/8001 trước khi khởi động. Bản build phải dùng API cùng origin; nếu đã build với `VITE_API_BASE_URL` khác, cần bỏ override trong môi trường build rồi build lại. Cổng bị chiếm sẽ báo lỗi, không tự giết tiến trình khác hoặc chuyển sang cổng khác.
+- Chạy `dev:inference`, `start:api` và `preview`, có nhãn log/PID. Một dịch vụ thoát, kể cả code 0 ngoài thao tác dừng chủ động, làm cả nhóm dừng và launcher báo lỗi.
+- Dùng một thư mục audio chung cho API/Python. `ISEMO_DATA_DIR` có thể đổi nơi lưu; `ISEMO_UPLOADS_DIR` xuất trong terminal phải khớp. Giá trị này được truyền vào tiến trình con, không sửa file `.env`.
+- Mặc định `ISEMO_AUTO_SEED=0` khi biến này chưa được đặt. Dữ liệu đã có được giữ; lựa chọn ASR/SER, cache và venv hiện có được giữ. Bước kiểm tra khởi động không tải model. API có thể tiếp tục job đang chờ theo adapter đã cấu hình: faster-whisper dùng cache cục bộ, còn adapter PhoWhisper/pyannote tùy chọn có thể cần mạng để nạp tài sản chưa có.
+- Trên POSIX, đặt fallback 15 giây trước khi buộc dừng tiến trình còn treo. Backend quản lý cây tiến trình của `concurrently` trên Windows dùng `taskkill /T /F`, nên không bảo đảm API có đủ thời gian drain trên Windows. Hoàn tất/lưu thao tác đang làm trước khi chủ động dừng nhóm.
 
-Mở <http://127.0.0.1:5173>. Vite preview proxy `/api` sang port 3001; API dùng inference port 8001. Đây là cách phục vụ local cho buổi báo cáo, chưa phải hướng dẫn triển khai public. Cần build lại sau mỗi lần sửa frontend.
+Sau các thông báo startup, mở <http://127.0.0.1:5173>. Vite preview proxy `/api` sang port 3001; API dùng inference port 8001. Đây là bản phục vụ local cho báo cáo. Cần build lại sau mỗi lần sửa frontend. `npm run build` chỉ tạo file; nó không khởi động web.
 
-**Terminal 4 — kiểm tra trước buổi demo:**
+**Terminal 2 — kiểm tra trước buổi demo:**
 
 ```powershell
 npm run demo:check -- --warmup-asr
@@ -80,6 +76,7 @@ npm run demo:check -- --warmup-asr
 
 Kết quả cần đọc theo từng component:
 
+- Build và frontend tại 5173; HTML và JavaScript trùng bytes với build cục bộ; API đi qua proxy web và API trực tiếp đều kết nối được inference. Một dịch vụ hỏng không che kết quả chẩn đoán các dịch vụ khác. Kiểm tra bytes không thay bước thử thao tác trên trình duyệt.
 - `ASR: thành phần thật · faster_whisper`, `ready=true`, sau warmup có `loaded=true` nếu cache/package hợp lệ.
 - `SER: MOCK / mô phỏng` nếu chưa khôi phục full pipeline. Đây là trạng thái chưa hoàn thành model, không phải lỗi giao diện.
 - `diarization: none` nghĩa không có model gán vai agent/customer. Với mono phải gán thủ công hoặc cung cấp transcript có role. Không tự suy người nói đầu là agent.
@@ -92,6 +89,24 @@ npm run demo:check -- --require-real-ser
 ```
 
 Lệnh phải exit 2 nếu SER mock/unready/unverified. Không tắt điều kiện kiểm chứng để có nhãn “real”.
+
+### Nếu vẫn thấy `ERR_CONNECTION_REFUSED`
+
+Thông báo này xảy ra trước khi React hay model xử lý yêu cầu. Ảnh ngày 22/11 cho thấy cả ba lệnh đã quay lại dấu nhắc PowerShell; chưa đủ dữ liệu xác định vì sao chúng kết thúc. Build thành công, dòng “running” cũ hoặc activate venv không chứng minh listener còn sống.
+
+Nếu `npm run demo` tự kết thúc, chụp log có tên dịch vụ/exit code ở cuối và chạy ngay:
+
+```powershell
+Write-Host "Demo exit code: $LASTEXITCODE"
+Get-NetTCPConnection -State Listen -ErrorAction SilentlyContinue |
+  Where-Object { $_.LocalPort -in 5173, 3001, 8001 } |
+  Select-Object LocalAddress, LocalPort, OwningProcess
+npm run demo:check
+```
+
+Gửi log này để phân biệt lỗi khởi động Python/API/web với tác động của terminal. Không dùng `npm audit fix --force`, tạo lại venv hoặc tải model lớn để sửa lỗi không có listener. Nếu có listener lạ, xác định đúng tiến trình/terminal trước khi tự dừng nó.
+
+Khi cần chẩn đoán từng dịch vụ, vẫn có thể dùng ba terminal riêng với `npm run dev:inference`, `npm run start:api`, `npm run preview`. Phải giữ cả ba tiến trình chạy; `npm run demo` là đường mặc định cho buổi trình bày.
 
 ## 4. Bộ mẫu trình bày
 

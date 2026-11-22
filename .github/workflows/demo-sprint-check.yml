@@ -23,6 +23,21 @@ permissions:
   contents: read
 
 jobs:
+  windows-startup-checks:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Check Windows startup and diagnostics without model downloads
+        run: npm test -- server/tests/demo-startup.test.ts server/tests/local-readiness.test.ts server/tests/python-runtime.test.ts
   build-and-test:
     runs-on: ubuntu-latest
     timeout-minutes: 10
