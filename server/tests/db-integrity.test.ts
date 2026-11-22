@@ -22,11 +22,12 @@ function seed(db: DB, id = 'CALL-0042') {
   insertCall(db, { id, title: 'Fixture', agentName: '', customerName: '', callDate: '2026-11-23T00:00:00.000Z', source: 'results_import', agentChannel: 0, stageLog: [] })
   replaceUtterances(db, id, [{ speaker: 'customer', text: 'Tôi cần hỗ trợ.', start: 0, end: 2 }])
 }
-function legacy(target: string, missingEvidence = false) {
+function legacy(target: string, missingEvidence = false, lineEnding = '\n') {
   const db = track(new Database(target))
   db.pragma('foreign_keys = OFF') // Model a historical writer that omitted per-connection FK enforcement.
-  const sql = fs.readFileSync(new URL('./fixtures/pre-integrity-schema.sql', import.meta.url), 'utf8')
-  db.exec(missingEvidence ? sql.replace('  evidence_key TEXT,\n', '') : sql)
+  const sql = fs.readFileSync(new URL('./fixtures/pre-integrity-schema.sql', import.meta.url), 'utf8').replace(/\r?\n/g, lineEnding)
+  db.exec(missingEvidence ? sql.replace(/  evidence_key TEXT,\r?\n/, '') : sql)
+  if (missingEvidence) expect((db.pragma('table_info(moment_reviews)') as Array<{ name: string }>).some(c => c.name === 'evidence_key')).toBe(false)
   return db
 }
 
@@ -104,9 +105,9 @@ describe('database domain enforcement', () => {
 })
 
 describe('additive schema migration', () => {
-  it('preserves valid legacy content, adds missing evidence, installs guards, and runs once', () => {
+  it.each(['\n', '\r\n'])('preserves valid legacy content, adds missing evidence, installs guards, and runs once (EOL %j)', (lineEnding) => {
     const target = file()
-    let db = legacy(target, true)
+    let db = legacy(target, true, lineEnding)
     seed(db)
     db.exec("INSERT INTO moment_reviews(call_id,moment_id,relevance,note) VALUES ('CALL-0042','m',1,'Keep note')")
     db.exec("INSERT INTO call_workflows VALUES ('CALL-0042',1,'{\"reason\":\"Keep reason\"}','2026-11-23')")

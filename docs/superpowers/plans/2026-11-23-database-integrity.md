@@ -71,6 +71,6 @@
 
 - [x] Independently review the complete diff, especially migration rollback and filesystem containment; resolve substantive findings.
 - [x] Run full Node suite, server typecheck, frontend build and local HTTP smoke; configure the expanded Windows CI gates.
-- [ ] Commit the verified tree, update the existing draft branch/PR with a lease, and report exact evidence without declaring real SER ready.
+- [x] Commit the verified tree, update the existing draft branch/PR with a lease, and report exact evidence without declaring real SER ready.
 
-Publication and exact-head CI results are tracked in draft PR #6; this plan records the implementation and local verification state before publication.
+Publication and exact-head CI results are tracked in draft PR #6; the implementation and local verification are complete. The first Windows run exposed a CRLF fixture construction issue; LF/CRLF regression variants now pass without changing production behavior, and the published correction is gated again.
