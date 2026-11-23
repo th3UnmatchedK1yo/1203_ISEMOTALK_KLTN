@@ -99,6 +99,7 @@ export interface InferenceHealth {
     diarization: ComponentHealth
     ser: ComponentHealth
   }
+  qa?: { ready: boolean; loaded?: boolean; adapter?: string; detail?: string; domain?: string }
 }
 export interface SystemStatus {
   api: 'ok'
