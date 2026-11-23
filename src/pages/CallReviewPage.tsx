@@ -296,22 +296,15 @@ function CallReviewSession({ callId }: { callId: string }) {
         </li>)}
       </ol>
     </nav>
-    {call.provenance === 'imported' && call.hasAudio && !call.title.startsWith('HỘI THOẠI ĐIỆN THOẠI THẬT · DataHive') &&
-      <details className="rounded-lg border border-slate-200 bg-white p-4 text-sm leading-6 text-slate-700">
-        <summary className="cursor-pointer font-semibold text-[#12394d]">Tùy chọn nghiên cứu: đối chiếu transcript nguồn với ASR thật</summary>
-        <p className="mt-1">Tạo một hồ sơ mới từ chính file WAV này. ASR sẽ nghe và tạo transcript mới; transcript nguồn và bản ghi gốc vẫn giữ nguyên để đối chiếu. QA XLM-R được chạy riêng sau khi ASR hoàn tất. Nếu F4 chưa được xác minh, bước SER sẽ ghi rõ là bỏ qua.</p>
-        <button type="button" className={primaryButton + ' mt-3'}
-          disabled={!realAsrAvailable || reanalyzing || saving || dirty}
-          onClick={() => void analyzeSourceAudio()}>
-          <RefreshCw size={16}/>{reanalyzing ? 'Đang tạo tác vụ ASR…' : 'Phân tích WAV bằng ASR thật'}
-        </button>
-        {!realAsrAvailable && <p className="mt-2 text-amber-900">ASR hiện chưa sẵn sàng. Hệ thống vẫn tự chạy QA trên transcript nguồn khi model XLM-R được kết nối.</p>}
-        {dirty && <p className="mt-2 text-amber-900">Hãy lưu hoặc bỏ bản nháp review trước khi tạo hồ sơ phân tích mới.</p>}
-      </details>}
     {call.provenance === 'imported' &&
       (call.title.startsWith('TTS TỔNG HỢP') || call.title.startsWith('GIỌNG THẬT') || call.title.startsWith('HỘI THOẠI ĐIỆN THOẠI THẬT')) &&
-      <div className="rounded-lg border border-sky-200 bg-sky-50 p-4 text-sm leading-6 text-sky-950" role="note">
-        <strong>Đang nghe file WAV lấy từ bộ dữ liệu công bố, không phải âm thanh do web tạo.</strong>
+      <details className="group rounded-xl border border-slate-200 bg-white text-sm leading-6 text-slate-700" role="note">
+        <summary className="flex min-h-12 cursor-pointer list-none flex-wrap items-center justify-between gap-2 px-4 py-3 marker:hidden">
+          <span className="inline-flex items-center gap-2 font-semibold text-slate-800"><FileAudio size={17} className="text-teal-700" aria-hidden="true"/>Nguồn: {call.title.startsWith('TTS TỔNG HỢP') ? 'OneVoice · hội thoại TTS' : call.title.startsWith('HỘI THOẠI ĐIỆN THOẠI THẬT') ? 'DataHive · hội thoại tự nhiên' : 'Bản ghi tiếng nói nguồn'}</span>
+          <span className="text-xs font-medium text-teal-800">Giấy phép & giới hạn <ChevronRight size={15} className="inline transition-transform group-open:rotate-90" aria-hidden="true"/></span>
+        </summary>
+        <div className="border-t border-slate-100 px-4 pb-4 pt-2">
+          <strong className="sr-only">Đây là âm thanh WAV từ bộ dữ liệu công bố, không phải âm thanh do web tạo.</strong>
         <p className="mt-1">{call.title.startsWith('TTS TỔNG HỢP')
           ? 'OneVoice là kịch bản tổng đài đọc bằng giọng TTS tổng hợp; không phải cuộc gọi CSKH ngoài đời.'
           : call.title.startsWith('HỘI THOẠI ĐIỆN THOẠI THẬT')
@@ -331,7 +324,8 @@ function CallReviewSession({ callId }: { callId: string }) {
                 : 'https://huggingface.co/datasets/doof-ferb/fpt_fosd'}
             target="_blank" rel="noopener noreferrer" className="mt-2 inline-block font-semibold underline underline-offset-2">Xem dữ liệu và giấy phép của nhà phát hành</a>
         </details>
-      </div>}
+        </div>
+      </details>}
     {call.provenance === 'mock' && <p className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-950">
       {call.source === 'results_import'
         ? 'Dữ liệu minh họa: âm thanh tổng hợp, transcript và nhãn cảm xúc mô phỏng. Dùng để trình bày luồng đánh giá, không phải kết quả nghiên cứu.'
@@ -475,6 +469,19 @@ function CallReviewSession({ callId }: { callId: string }) {
     </div>
     <CallCaseLink callId={call.id} callDate={call.callDate}/>
     <CallWorkflowPanel callId={call.id}/>
+    {call.provenance === 'imported' && call.hasAudio && !call.title.startsWith('HỘI THOẠI ĐIỆN THOẠI THẬT · DataHive') &&
+      <details className="rounded-lg border border-slate-200 bg-white p-4 text-sm leading-6 text-slate-700">
+        <summary className="cursor-pointer font-semibold text-[#12394d]">Tùy chọn nghiên cứu: đối chiếu transcript nguồn với ASR thật</summary>
+        <p className="mt-1">Tạo một hồ sơ mới từ chính file WAV này. ASR sẽ nghe và tạo transcript mới; transcript nguồn và bản ghi gốc vẫn giữ nguyên để đối chiếu. QA XLM-R được chạy riêng sau khi ASR hoàn tất. Nếu F4 chưa được xác minh, bước SER sẽ ghi rõ là bỏ qua.</p>
+        <button type="button" className={primaryButton + ' mt-3'}
+          disabled={!realAsrAvailable || reanalyzing || saving || dirty}
+          onClick={() => void analyzeSourceAudio()}>
+          <RefreshCw size={16}/>{reanalyzing ? 'Đang tạo tác vụ ASR…' : 'Phân tích WAV bằng ASR thật'}
+        </button>
+        {!realAsrAvailable && <p className="mt-2 text-amber-900">ASR hiện chưa sẵn sàng. Hệ thống vẫn tự chạy QA trên transcript nguồn khi model XLM-R được kết nối.</p>}
+        {dirty && <p className="mt-2 text-amber-900">Hãy lưu hoặc bỏ bản nháp review trước khi tạo hồ sơ phân tích mới.</p>}
+      </details>}
+
     {call.stageLog.length > 0 && call.status === 'ready' && <details className="rounded-xl border border-slate-300 bg-white p-5 text-sm">
       <summary className="cursor-pointer font-semibold text-slate-800">Nguồn xử lý và thời gian từng bước</summary>
       <ul className="mt-4 space-y-3">{call.stageLog.map(step => <li key={step.stage} className="border-t border-slate-200 pt-3 first:border-0 first:pt-0">
