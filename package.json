@@ -22,7 +22,7 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "remote:preflight": "node scripts/check-remote-server.mjs",
-    "remote:server": "node scripts/check-remote-server.mjs && concurrently -k -n inference,api -c magenta,green \"npm:dev:inference\" \"npm:start:api\"",
+    "remote:server": "node scripts/start-remote-server.mjs",
     "remote:check": "node scripts/check-remote-models.mjs",
     "remote:web": "node scripts/start-remote-web.mjs"
   },
