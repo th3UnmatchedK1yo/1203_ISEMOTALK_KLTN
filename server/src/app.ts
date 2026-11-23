@@ -140,7 +140,7 @@ export function createApp({ db, config, client, pipeline }: AppDeps) {
       previewOnly: true,
       demoData: process.env.ISEMO_MIDTERM_DEMO === '1',
       speechDemo: process.env.ISEMO_SPEECH_DEMO === '1',
-      inference: { reachable: false, error: 'Chế độ API-only preview: dịch vụ AI tạm dừng khi GPU đang huấn luyện.' },
+      inference: { reachable: false, error: 'Chế độ API-only preview: dịch vụ AI chưa khởi động; chỉ phục vụ dữ liệu và giao diện, không chạy ASR/SER/QA.' },
     })
     try {
       res.json({ api: 'ok', inference: { reachable: true, ...(await client.health()) } })
