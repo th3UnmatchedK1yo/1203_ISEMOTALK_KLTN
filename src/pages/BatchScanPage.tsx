@@ -243,7 +243,7 @@ export function BatchScanPage() {
       <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
         {[
           ['Server đã nhận', summary.received],
-          ['XLM-R đã chấm', summary.analyzed],
+          ['XLM-R đã sàng lọc', summary.analyzed],
           ['AI gợi ý xem kỹ', summary.flagged],
           ['Lỗi', summary.failed],
         ].map(([label, value]) => <div key={label} className="rounded-lg bg-slate-50 p-3">
