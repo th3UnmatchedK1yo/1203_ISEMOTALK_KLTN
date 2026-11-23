@@ -17,18 +17,18 @@ afterEach(async () => {
   for (const home of homes.splice(0)) rmSync(home, { recursive: true, force: true })
 })
 
-function makeTestWav() {
+function makeTestWav(channels = 1) {
   // Unit-test fixture ONLY. This is a generated signal, never a source of user demo speech.
   const rate = 16000
   const n = rate * 2
-  const data = Buffer.alloc(n * 2)
-  for (let i = 0; i < n; i++)
-    data.writeInt16LE(Math.round(Math.sin(i / 100) * 1000), i * 2)
+  const data = Buffer.alloc(n * channels * 2)
+  for (let i = 0; i < n; i++) for (let c = 0; c < channels; c++)
+    data.writeInt16LE(Math.round(Math.sin(i / 100 + c * 0.3) * 1000), (i * channels + c) * 2)
   const b = Buffer.alloc(44 + data.length)
   b.write('RIFF', 0); b.writeUInt32LE(b.length - 8, 4); b.write('WAVEfmt ', 8)
-  b.writeUInt32LE(16, 16); b.writeUInt16LE(1, 20); b.writeUInt16LE(1, 22)
-  b.writeUInt32LE(rate, 24); b.writeUInt32LE(rate * 2, 28)
-  b.writeUInt16LE(2, 32); b.writeUInt16LE(16, 34)
+  b.writeUInt32LE(16, 16); b.writeUInt16LE(1, 20); b.writeUInt16LE(channels, 22)
+  b.writeUInt32LE(rate, 24); b.writeUInt32LE(rate * channels * 2, 28)
+  b.writeUInt16LE(channels * 2, 32); b.writeUInt16LE(16, 34)
   b.write('data', 36); b.writeUInt32LE(data.length, 40)
   data.copy(b, 44)
   return b
@@ -59,9 +59,10 @@ describe.skipIf(process.platform !== 'linux')('isolated speech source import', (
     mkdirSync(bin)
     const productionMarker = path.join(operational, 'leave-this-alone.txt')
     writeFileSync(productionMarker, 'not touched')
-    // Stub only the external ffprobe duration command; the seeded WAV is a fixture.
+    // Stub ffprobe JSON for the two TEST fixtures; the real deployment
+    // uses system ffprobe to validate duration, 16kHz and channel count.
     const ffprobe = path.join(bin, 'ffprobe')
-    writeFileSync(ffprobe, '#!/bin/sh\nprintf "2\\n"\n')
+    writeFileSync(ffprobe, '#!/bin/sh\\ncase "$*" in\\n  *phone_01.wav*) echo \'{"streams":[{"channels":2,"sample_rate":"16000"}],"format":{"duration":"2.0"}}\' ;;\\n  *) echo \'{"streams":[{"channels":1,"sample_rate":"16000"}],"format":{"duration":"2.0"}}\' ;;\\nesac\\n')
     chmodSync(ffprobe, 0o755)
     const input = makeTestWav()
     const original = path.join(audioDir, '00000.wav')
@@ -76,10 +77,10 @@ describe.skipIf(process.platform !== 'linux')('isolated speech source import', (
     const datahiveDir = path.join(home, 'services/isemotalk-private/datasets/datahive-vi-call-excerpts')
     const phoneAudio = path.join(datahiveDir, 'audio/phone_01.wav')
     mkdirSync(path.dirname(phoneAudio), { recursive: true })
-    // Same test WAV for byte-level fixture verification ONLY, not a claimed
-    // real conversation. Production loader uses pinned human source WAVs.
-    writeFileSync(phoneAudio, input)
-    const checksum = createHash('sha256').update(input).digest('hex')
+    // Stereo fixture for byte-level verification only (NOT real dialogue).
+    const phoneInput = makeTestWav(2)
+    writeFileSync(phoneAudio, phoneInput)
+    const checksum = createHash('sha256').update(phoneInput).digest('hex')
     writeFileSync(path.join(datahiveDir, 'source_manifest.json'), JSON.stringify({
       dataset_id: 'datahiveai/multilingual-conversations-sample',
       dataset_revision: 'd'.repeat(40),
@@ -151,7 +152,7 @@ describe.skipIf(process.platform !== 'linux')('isolated speech source import', (
     expect(phone.stageLog.find(step => step.stage === 'emotion')?.state).toBe('skipped')
     const phoneResponse = await fetch('http://127.0.0.1:' + port + '/api/calls/' + humanPhone!.id + '/audio')
     expect(phoneResponse.status).toBe(200)
-    expect(Buffer.from(await phoneResponse.arrayBuffer())).toEqual(input)
+    expect(Buffer.from(await phoneResponse.arrayBuffer())).toEqual(phoneInput)
     expect(readFileSync(productionMarker, 'utf8')).toBe('not touched')
     expect(existsSync(path.join(operational, 'isemotalk.db'))).toBe(false)
     expect(existsSync(path.join(home, 'services/isemotalk-speech-demo/isemotalk.db'))).toBe(true)
