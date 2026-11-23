@@ -1,7 +1,7 @@
 // Verify that the colocated API + Python inference are running real model adapters.
 // A ready adapter is NOT a substitute for a real labeled audio smoke test.
 const endpoints = [
-  ['API', 'http://127.0.0.1:3001/api/system/status'],
+  ['API', `http://127.0.0.1:${process.env.PORT || '3101'}/api/system/status`],
   ['inference', 'http://127.0.0.1:8001/v1/health'],
 ]
 let failed = false
