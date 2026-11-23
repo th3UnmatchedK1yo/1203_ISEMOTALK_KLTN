@@ -36,7 +36,7 @@ fi
 
 if [[ ! -s "$HEAD/model.pt" || ! -s "$HEAD/metadata.json" ]]; then
   match=""
-  for root in "$HOME/SER_VI_TRANSFER/.worktrees" "$HOME/SER_VI_TRANSFER/artifacts" "$HOME/research"; do
+  for root in "$HOME/SER_VI_TRANSFER/.worktrees" "$HOME/SER_VI_TRANSFER/artifacts" "$HOME/services/isemotalk-ser-serving/artifacts"; do
     [[ -d "$root" ]] || continue
     match="$(find "$root" -maxdepth 14 -type f -path '*/CONDITIONS/M1/seed_13/model.pt' -print -quit 2>/dev/null || true)"
     [[ -n "$match" ]] && break
