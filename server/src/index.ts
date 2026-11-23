@@ -36,7 +36,7 @@ if (process.env.ISEMO_API_PREVIEW_ONLY !== '1') {
   autoQa?.start()
 } else console.warn('[api] PREVIEW ONLY: queued calls will NOT resume until real inference is running.')
 
-const app = createApp({ db, config, client, pipeline })
+const app = createApp({ db, config, client, pipeline, autoQa })
 const server = app.listen(config.port, '127.0.0.1', () => {
   console.log(`[api] http://127.0.0.1:${config.port}  db=${config.dbFile}  inference=${config.inferenceUrl}`)
 })
