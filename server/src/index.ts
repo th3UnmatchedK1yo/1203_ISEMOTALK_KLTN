@@ -21,7 +21,8 @@ if (process.env.NODE_ENV !== 'production' && process.env.ISEMO_AUTO_SEED !== '0'
 }
 const client = new HttpInferenceClient(config.inferenceUrl)
 const pipeline = new Pipeline(db, config, client, (m, e) => console.error(`[pipeline] ${m}`, e ?? ''))
-pipeline.resume()
+if (process.env.ISEMO_API_PREVIEW_ONLY !== '1') pipeline.resume()
+else console.warn('[api] PREVIEW ONLY: queued calls will NOT resume until real inference is running.')
 
 const app = createApp({ db, config, client, pipeline })
 const server = app.listen(config.port, '127.0.0.1', () => {
