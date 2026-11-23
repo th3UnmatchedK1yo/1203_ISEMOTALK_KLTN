@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { mkdtemp, mkdir, readFile, rm, writeFile, copyFile } from 'node:fs/promises'
+import { realpathSync } from 'node:fs'
 import { spawn } from 'node:child_process'
 import path from 'node:path'
 import os from 'node:os'
@@ -211,7 +212,12 @@ describe.skipIf(process.platform !== 'win32')('native Windows PowerShell 5.1 rec
     }
     await writeFile(path.join(fixture, 'node_modules/vite/bin/vite.js'), 'setInterval(() => {}, 1000)')
     const record = path.join(fixture, 'npm-commands.txt')
-    const workers = [0, 1].map(() => spawn(process.execPath, [path.join(fixture, 'node_modules/vite/bin/vite.js')], { stdio: 'ignore' }))
+    const workerErrors = ['', '']
+    const workers = [0, 1].map(index => {
+      const worker = spawn(process.execPath, [path.join(fixture, 'node_modules/vite/bin/vite.js')], { stdio: ['ignore', 'ignore', 'pipe'] })
+      worker.stderr.on('data', chunk => { workerErrors[index] = (workerErrors[index] + String(chunk)).slice(-2000) })
+      return worker
+    })
     await Promise.all(workers.map(worker => new Promise<void>((resolve, reject) => { worker.once('spawn', resolve); worker.once('error', reject) })))
     const observedAtInstall = path.join(fixture, 'workers-at-install.json')
     const checkWorkers = path.join(fixture, 'fake-bin/check-workers.cjs')
@@ -238,7 +244,25 @@ describe.skipIf(process.platform !== 'win32')('native Windows PowerShell 5.1 rec
     })
     try {
       const blocked = await execute(['-CheckOnly'])
-      expect(blocked.code, blocked.output).toBe(2)
+      let blockedDetails = blocked.output
+      if (blocked.code !== 2) {
+        const nativeInventory = await readWindowsInventory()
+        const canonicalFixture = realpathSync.native(fixture)
+        const fixtureProcesses = workers.map((worker, index) => {
+          const row = nativeInventory.processes.find(item => item.pid === worker.pid)
+          // Only disclose command lines from these generated fixture workers.
+          // If a PID has exited or been reused, do not log another process's metadata.
+          const safeRow = worker.exitCode === null && row?.commandLine.includes(path.basename(fixture)) ? row : null
+          return {
+            pid: worker.pid, exitCode: worker.exitCode, signalCode: worker.signalCode,
+            stderr: workerErrors[index], presentInInventory: Boolean(row), process: safeRow,
+            rawRootOwnership: safeRow ? classifyProjectProcess(safeRow, fixture) : null,
+            canonicalRootOwnership: safeRow ? classifyProjectProcess(safeRow, canonicalFixture) : null,
+          }
+        })
+        blockedDetails += `\nFixture diagnostics: ${JSON.stringify({ rawFixture: fixture, canonicalFixture, workers: fixtureProcesses }, null, 2)}`
+      }
+      expect(blocked.code, blockedDetails).toBe(2)
       for (const worker of workers) expect(blocked.output).toContain(String(worker.pid))
       await expect(readFile(record, 'utf8')).rejects.toMatchObject({ code: 'ENOENT' })
       const inventory = await readWindowsInventory()

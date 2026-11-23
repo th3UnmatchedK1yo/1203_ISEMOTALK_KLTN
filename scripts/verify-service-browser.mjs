@@ -102,6 +102,9 @@ try{
  const exported=await(await fetch(api+'/api/cases/'+caseId+'/export.json')).json()
  assert.equal(exported.history.length,detail.case.version)
  evidence.checks.push('Backoffice completion + explicit case resolution; full-history JSON export')
+ // Capture the ordinary read view after completing the workflow, with navigation at the top.
+ for (const summary of await page.locator('details[open] > summary').all()) await summary.click()
+ await page.evaluate(()=>window.scrollTo(0,0))
  const screenshot=path.join(outputDir,'case-desktop.png')
  await page.screenshot({path:screenshot,fullPage:true});evidence.screenshots.push(screenshot)
  await page.setViewportSize({width:390,height:844})
