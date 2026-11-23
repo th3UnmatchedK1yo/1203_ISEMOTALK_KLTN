@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { AlertTriangle, CheckCircle2, FileAudio, LoaderCircle, RefreshCw, UploadCloud } from 'lucide-react'
-import { getCall, getSystemStatus, uploadRecording, type ProcessingStatus, type SystemStatus } from '@/api/isemotalk'
+import { apiJson, getCall, getSystemStatus, uploadRecording, type ProcessingStatus, type SystemStatus } from '@/api/isemotalk'
 import { batchProgress, validateBatchFiles } from '@/lib/batch-scan'
 
 type Job = {
@@ -14,6 +14,8 @@ type Job = {
   qaLabel?: 'routine' | 'needs_attention' | null
   qaScore?: number
   qaOutdated?: boolean
+  qaWorker?: 'idle' | 'queued' | 'running' | 'retrying'
+  qaError?: string
   error?: string
 }
 
@@ -74,17 +76,32 @@ export function BatchScanPage() {
       const snapshot = jobs.filter(job => !!job.id && (job.status !== 'failed' &&
         (job.status !== 'ready' || !job.qaLabel))).map(job => job.id!)
       try {
-        const responses = await Promise.allSettled(snapshot.map(id => getCall(id, controller.signal)))
+        const responses = await Promise.allSettled(snapshot.map(async id => {
+          const call = await getCall(id, controller.signal)
+          // Distinguish waiting in the worker from inference failure. The QA
+          // classifier runs independently after ASR so a ready call is not a
+          // claim that XLM-R has scored it.
+          let worker: { state: Job['qaWorker']; detail?: string } | undefined
+          if (call.status === 'ready' && (!call.qaTriage || call.qaTriage.outdated)) {
+            const qa = await apiJson<{worker?: {state: Job['qaWorker']; detail?: string}}>(
+              '/api/calls/' + encodeURIComponent(id) + '/qa-triage', {signal:controller.signal},
+            ).catch(() => null)
+            worker = qa?.worker
+          }
+          return {call, worker}
+        }))
         if (cancelled) return
         const updates = new Map<string, Partial<Job>>()
         responses.forEach((item, idx) => {
           if (item.status !== 'fulfilled') return
-          const call = item.value
+          const {call, worker} = item.value
           const triage = call.qaTriage && !call.qaTriage.outdated ? call.qaTriage : null
           updates.set(snapshot[idx], {
             status: call.status, stage: call.stage, progress: call.progress,
             qaLabel: triage?.label ?? null, qaScore: triage?.score,
             qaOutdated: call.qaTriage?.outdated ?? false,
+            qaWorker: worker?.state,
+            qaError: worker?.detail,
             error: call.error ?? undefined,
           })
         })
@@ -151,6 +168,9 @@ export function BatchScanPage() {
     if (job.status === 'queued') return 'Server đã nhận · đang chờ AI'
     if (job.status === 'processing') return stageNames[job.stage ?? ''] ?? 'AI đang xử lý'
     if (job.qaOutdated) return 'QA cần chạy lại'
+    if (job.qaWorker === 'running') return 'XLM-R đang suy luận trên GPU'
+    if (job.qaWorker === 'queued') return 'Trong hàng đợi XLM-R'
+    if (job.qaWorker === 'retrying') return 'XLM-R gặp lỗi · đang chờ thử lại'
     if (job.qaLabel === 'needs_attention') return 'AI gợi ý QA xem kỹ'
     if (job.qaLabel === 'routine') return 'Không có cảnh báo mạnh'
     return 'Audio đã xử lý · đang chờ XLM-R'
@@ -242,6 +262,7 @@ export function BatchScanPage() {
             <p className="break-all text-sm font-semibold text-slate-900">{job.name}</p>
             <p className="mt-1 text-xs text-slate-700">{job.id ? job.id + ' · ' : ''}{statusText(job)}{job.progress != null && job.status === 'processing' ? ' · ' + job.progress + '%' : ''}</p>
             {job.error && <p className="mt-1 text-xs text-red-800">{job.error}</p>}
+            {job.qaError && !job.qaLabel && <p className="mt-1 text-xs text-amber-900">XLM-R: {job.qaError}</p>}
             {job.qaLabel && !job.qaOutdated && <p className="mt-1 text-xs font-semibold text-teal-900">Điểm cảnh báo XLM-R: {((job.qaScore ?? 0)*100).toFixed(1)}%</p>}
           </div>
           {job.id && <Link to={'/calls/' + encodeURIComponent(job.id)} className="rounded-lg border border-teal-300 px-3 py-2 text-sm font-semibold text-teal-900 hover:bg-teal-50">Xem hồ sơ</Link>}
