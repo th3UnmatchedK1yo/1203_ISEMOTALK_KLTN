@@ -15,7 +15,7 @@ try {
   if (h.api !== 'ok' || h.previewOnly || !h.inference?.reachable)
     throw Error('API-only preview still active; start actual QA Python+Express runtime on FTISU.')
   const c = h.inference.components
-  if (!h.inference.qa?.ready || h.inference.qa.domain !== 'synthetic_onevoice')
+  if (!h.inference.qa?.ready || !h.inference.qa.loaded || h.inference.qa.domain !== 'synthetic_onevoice')
     throw Error('XLM-R trained QA model missing or incompatible.')
   if (c?.ser?.adapter !== 'not_configured' || c.ser.ready || c.ser.mock)
     throw Error('SER is not explicitly disabled in genuine partial QA mode.')
