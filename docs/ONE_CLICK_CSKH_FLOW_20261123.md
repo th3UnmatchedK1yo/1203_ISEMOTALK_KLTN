@@ -6,7 +6,7 @@ Sau **một lần cập nhật source** trong VS Code (Source Control → Pull),
 
 Trình mở sẽ tự: (1) build React hiện tại, (2) tạo SSH tunnel qua alias `ftisu-ser`, (3) sử dụng hoặc khởi động Express API và FastAPI Python trên FTISU (các cổng loopback riêng 3102/8102 để không đè bản preview cũ), (4) kiểm tra XLM-R thật và checkpoint, (5) mở web ở `http://127.0.0.1:5174`. Log kiểm tra cục bộ lưu ở `.isemotalk-launcher/`; thư mục này bị Git ignore.
 
-**Điều kiện chuẩn bị một lần:** máy Windows có Node.js 22, OpenSSH + alias `ftisu-ser` đã đăng nhập bằng SSH key, repo web đã cập nhật; FTISU có Node, serving `inference/.venv` CUDA, SQLite speech-demo, checkpoint XLM-R đã train và được cấp quyền, Git remote truy cập được. Trình mở **không cài trộm model, không bật GPU mock, không ghi đè DB, không dừng dịch vụ người khác**. Nếu thiếu dependency/SSH/weights, nó báo lỗi rõ và không khẳng định inference thành công. Đây là lối mở một cú nhấp cho môi trường FTISU đã chuẩn bị, **không phải** website production công khai hay một dịch vụ tự chạy 24/7.
+**Điều kiện chuẩn bị một lần:** máy Windows có Node.js 22, OpenSSH + alias `ftisu-ser` có tài khoản FTISU hợp lệ, repo web đã cập nhật; FTISU có Node, serving `inference/.venv` CUDA, SQLite speech-demo, checkpoint XLM-R đã train và được cấp quyền, Git remote truy cập được. **Không bắt buộc phải có SSH key nếu máy chủ cho phép đăng nhập bằng mật khẩu**: launcher mở một phiên SSH duy nhất có terminal tương tác, dùng SSH key nếu có hoặc hỏi mật khẩu FTISU một lần trong cửa sổ Windows; ký tự mật khẩu không hiện khi nhập, không lưu vào code/log, không gửi vào chat. Trình mở **không cài trộm model, không bật GPU mock, không ghi đè DB, không dừng dịch vụ người khác**. Nếu thiếu dependency/SSH/weights, nó báo lỗi rõ và không khẳng định inference thành công. Đây là lối mở một cú nhấp cho môi trường FTISU đã chuẩn bị, **không phải** website production công khai hay một dịch vụ tự chạy 24/7.
 
 ## Cấu hình inference thực sự đang sử dụng
 
@@ -44,6 +44,12 @@ Trang **Tải lên → Khả năng xử lý hiện tại** hiển thị cờ t�
 - Model đã được train + code đã PASS CI không chứng minh GPU inference thực sự đã chạy; chỉ xác nhận sau smoke/health trên FTISU và mẫu WAV được phép sử dụng.
 - OneVoice non-commercial CC BY-NC-SA 4.0 theo manifest nguồn; không quảng cáo đây là bộ QA chuẩn doanh nghiệp.
 
+## Khi gặp lỗi SSH
+
+Nếu Windows in `Permission denied (publickey,password)`, bản cũ của launcher có lỗi `BatchMode=yes` khiến không thể nhập password. Bản mới dùng một kết nối SSH tương tác cho cả tunnel và remote runtime. Trong `ISEmoTalk.cmd`, khi thấy `emotalk@ftisu.ddns.net's password:`, nhập **mật khẩu tài khoản FTISU** rồi Enter; không có dấu sao khi nhập là bình thường. Nếu vẫn bị từ chối sau khi nhập đúng mật khẩu, cần kiểm tra cấu hình `~/.ssh/config` và quyền đăng nhập của chính tài khoản qua `ssh ftisu-ser`. **Không gửi mật khẩu, private key hoặc access token vào chat.**
+
+Nếu server chỉ chấp nhận SSH key (không cho password), cần dùng key đã đăng ký với FTISU/ssh-agent; launcher không thể vượt qua xác thực. Không cần quyền `sudo` để chạy hệ thống.
+
 ## Khi gặp lỗi
 
-Trình mở giữ kết quả cũ trong DB, không tự chuyển sang mock. Xem dòng báo lỗi trên cửa sổ vừa mở và file `.isemotalk-launcher/gpu.log` hoặc `web.log` nếu có. Nếu checkpoint PhoWhisper chưa có trong cache, phần QA text vẫn được phục vụ (không giả ASR). Nếu checkpoint QA hoặc CUDA không khả dụng, launcher từ chối chế độ inference thật; cần giải quyết dependency bằng người quản trị server trước khi chấm.
+Trình mở giữ kết quả cũ trong DB, không tự chuyển sang mock. Xem dòng báo lỗi trên cửa sổ vừa mở và file cửa sổ SSH/GPU (vì nay chạy tương tác) hoặc `.isemotalk-launcher/web.log` nếu có. Nếu checkpoint PhoWhisper chưa có trong cache, phần QA text vẫn được phục vụ (không giả ASR). Nếu checkpoint QA hoặc CUDA không khả dụng, launcher từ chối chế độ inference thật; cần giải quyết dependency bằng người quản trị server trước khi chấm.
