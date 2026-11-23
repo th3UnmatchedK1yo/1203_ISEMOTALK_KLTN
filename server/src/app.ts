@@ -20,6 +20,7 @@ import { attachWorkflowRoutes, getWorkflow } from './workflow'
 import { attachServiceRoutes } from './service-routes'
 import { recordCaseRecordingDeletion } from './service-operations'
 import { attachQaTriageRoutes } from './qa-routes'
+import { attachInsightRoutes } from './insights'
 import type { AutoQa } from './auto-qa'
 
 const AUDIO_EXT: Record<string, string> = { '.wav': 'audio/wav', '.mp3': 'audio/mpeg', '.m4a': 'audio/mp4' }
@@ -90,7 +91,7 @@ export function createApp({ db, config, client, pipeline, autoQa }: AppDeps) {
       // without Python. Audio imports still require the unavailable probe.
       const modelAction = req.method === 'POST' &&
         (/^\/api\/calls\/upload$/.test(req.path) ||
-          /^\/api\/calls\/[^/]+\/(retry|qa-triage|reprocess)$/.test(req.path))
+          /^\/api\/calls\/[^/]+\/(retry|qa-triage|reprocess|insights)$/.test(req.path))
       if (modelAction) return res.status(503).json({
         error: 'Chế độ xem trước giao diện: GPU đang training, chưa cho gửi tác vụ model. Dữ liệu đánh giá cũ được giữ nguyên.',
         code: 'inference_paused_for_training',
@@ -447,6 +448,7 @@ export function createApp({ db, config, client, pipeline, autoQa }: AppDeps) {
   attachServiceRoutes(app, db)
   attachWorkflowRoutes(app, db)
   attachQaTriageRoutes(app, db, config, autoQa)
+  attachInsightRoutes(app, db)
   app.use('/api', (_req, _res, next) => next(new HttpError(404, 'Đường dẫn API không tồn tại.')))
 
   // ---- Errors --------------------------------------------------------------
