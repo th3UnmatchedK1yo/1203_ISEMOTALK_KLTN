@@ -50,8 +50,8 @@ export class AutoQa {
     const utterances = this.db.prepare('SELECT text,speaker FROM utterances WHERE call_id=? ORDER BY idx').all(id) as Array<{text:string;speaker:string}>
     const { text, hash } = buildQaInput(utterances)
     if (!text || text.length > 100000) return false
-    const previous = this.db.prepare('SELECT input_sha256 FROM qa_triage_results WHERE call_id=?').get(id) as {input_sha256:string}|undefined
-    return previous?.input_sha256 !== hash
+    const previous = this.db.prepare('SELECT input_sha256, model_name, truncated FROM qa_triage_results WHERE call_id=?').get(id) as {input_sha256:string;model_name:string;truncated:number}|undefined
+    return previous?.input_sha256 !== hash || (!!previous?.truncated && !previous.model_name.includes('/window-max-v2'))
   }
 
   private async qaAvailable(signal: AbortSignal) {
