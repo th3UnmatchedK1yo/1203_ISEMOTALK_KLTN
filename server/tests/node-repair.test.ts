@@ -62,6 +62,49 @@ describe('Windows project process ownership', () => {
     expect(classifyProjectProcess({ ...vite, commandLine: `node --import=tsx --enable-source-maps "${root}\\server\\src\\index.ts"` }, root)).toContain('server/src/index.ts')
   })
 
+  it('recognizes the captured Windows short-root command against its canonical project directory', () => {
+    const shortRoot = String.raw`C:\Users\RUNNER~1\AppData\Local\Temp\isemo repair I07wHm`
+    const canonicalRoot = String.raw`C:\Users\runneradmin\AppData\Local\Temp\isemo repair I07wHm`
+    const captured = {
+      ...vite, pid: 6444,
+      executablePath: String.raw`C:\hostedtoolcache\windows\node\22.23.5\x64\node.exe`,
+      commandLine: `C:\\hostedtoolcache\\windows\\node\\22.23.5\\x64\\node.exe "${shortRoot}\\node_modules\\vite\\bin\\vite.js"`,
+    }
+    const resolveRoot = (directory: string) => directory === shortRoot || directory === canonicalRoot ? canonicalRoot : null
+    expect(classifyProjectProcess(captured, canonicalRoot, resolveRoot)).toContain('vite')
+    expect(classifyProjectProcess(captured, shortRoot, resolveRoot)).toContain('vite')
+    expect(classifyProjectProcess({ ...esbuild, executablePath: `${shortRoot}\\node_modules\\tsx\\node_modules\\@esbuild\\win32-x64\\esbuild.exe` }, canonicalRoot, resolveRoot)).toContain('esbuild')
+  })
+
+  it('does not merge case-sensitive sibling roots and accepts case aliases only after directory proof', () => {
+    const upperRoot = String.raw`C:\Repos\App`
+    const lowerRoot = String.raw`C:\Repos\app`
+    const lowerEntry = { ...vite, commandLine: `node "${lowerRoot}\\node_modules\\vite\\bin\\vite.js"` }
+    const separateDirectories = (directory: string) => directory === upperRoot || directory === lowerRoot ? directory : null
+    expect(classifyProjectProcess(lowerEntry, upperRoot, separateDirectories)).toBeNull()
+    expect(classifyProjectProcess(lowerEntry, upperRoot, () => null)).toBeNull()
+    const sameDirectory = (directory: string) => directory === upperRoot || directory === lowerRoot ? upperRoot : null
+    expect(classifyProjectProcess(lowerEntry, upperRoot, sameDirectory)).toContain('vite')
+  })
+
+  it('does not equate separate project roots just because their dependency file is shared', () => {
+    const otherRoot = String.raw`C:\OtherCheckout`
+    const sharedEntry = String.raw`C:\SharedPackages\vite\bin\vite.js`
+    const resolveRoot = (directory: string) => {
+      if (directory.endsWith(String.raw`\node_modules\vite\bin\vite.js`)) return sharedEntry
+      return directory === root || directory === otherRoot ? directory : null
+    }
+    expect(classifyProjectProcess({ ...vite, commandLine: `node "${otherRoot}\\node_modules\\vite\\bin\\vite.js"` }, root, resolveRoot)).toBeNull()
+  })
+
+  it('rejects current-drive-rooted paths and unsuccessful directory resolutions', () => {
+    const driveRelative = { ...vite, commandLine: String.raw`node "\Users\Legion\Documents\1203_KLTN\node_modules\vite\bin\vite.js"` }
+    expect(classifyProjectProcess(driveRelative, root, () => root)).toBeNull()
+    const other = { ...vite, commandLine: String.raw`node C:\Unknown\node_modules\vite\bin\vite.js` }
+    expect(classifyProjectProcess(other, root, () => null)).toBeNull()
+    expect(classifyProjectProcess(other, root, () => '')).toBeNull()
+  })
+
   it.each([
     'node_modules/@esbuild/win32-x64/esbuild.exe',
     'node_modules/@esbuild/win32-arm64/esbuild.exe',
@@ -271,6 +314,10 @@ describe.skipIf(process.platform !== 'win32')('native Windows PowerShell 5.1 rec
         if (!current) throw new Error('Native fixture process disappeared before the identity check')
         return current
       })
+      for (const current of observed) {
+        expect(classifyProjectProcess(current, fixture)).toContain('vite')
+        expect(classifyProjectProcess(current, realpathSync.native(fixture))).toContain('vite')
+      }
       await expect(stopWindowsProjectProcesses([observed[0]!, { ...observed[1]!, createdAt: '2000-01-01T00:00:00.0000000Z' }], fixture))
         .rejects.toThrow(/identity changed/)
       for (const worker of workers) {

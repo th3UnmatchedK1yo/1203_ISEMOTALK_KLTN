@@ -17,7 +17,7 @@ export interface RepairOperations {
   log: (message: string) => void
 }
 export class NodeRepairError extends Error { constructor(message: string, exitCode?: number); exitCode: number }
-export function classifyProjectProcess(processInfo: WindowsProcess, projectRoot: string): string | null
+export function classifyProjectProcess(processInfo: WindowsProcess, projectRoot: string, resolveDirectory?: (directory: string) => string | null): string | null
 export function inspectRepairState(inventory: WindowsInventory, projectRoot: string): {
   owned: WindowsProcess[]; listeners: WindowsListener[]; unknownListeners: WindowsListener[]
 }

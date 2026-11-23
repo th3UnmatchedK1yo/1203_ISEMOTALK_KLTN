@@ -1,5 +1,6 @@
 import path from 'node:path'
 import { spawn } from 'node:child_process'
+import { realpathSync, statSync } from 'node:fs'
 
 const demoPorts = new Set([5173, 3001, 8001])
 const nodeEntrypoints = [
@@ -30,8 +31,38 @@ export class NodeRepairError extends Error {
 }
 
 function windowsPath(value) {
-  return typeof value === 'string' && path.win32.isAbsolute(value)
-    ? path.win32.normalize(value).toLowerCase() : null
+  if (typeof value !== 'string') return null
+  const normalized = path.win32.normalize(value)
+  // A rooted path such as \repo\file has no drive identity. Resolving it on
+  // this tool's current drive would not establish the worker's project.
+  const fullyQualified = /^[a-z]:\\/i.test(normalized) ||
+    /^\\\\\?\\[a-z]:\\/i.test(normalized) ||
+    /^\\\\\?\\UNC\\[^\\]+\\[^\\]+(?:\\|$)/i.test(normalized) ||
+    /^\\\\(?![.?]\\)[^\\]+\\[^\\]+(?:\\|$)/.test(normalized)
+  return fullyQualified ? normalized : null
+}
+
+function resolveWindowsDirectory(directory) {
+  if (process.platform !== 'win32') return null
+  try {
+    const resolved = realpathSync.native(directory)
+    return statSync(resolved).isDirectory() ? resolved : null
+  } catch { return null }
+}
+
+function isProjectEntry(candidate, projectRoot, relative, resolveDirectory) {
+  if (!candidate) return false
+  const suffix = `\\${path.win32.normalize(relative)}`
+  if (!candidate.toLowerCase().endsWith(suffix.toLowerCase())) return false
+  let candidateRoot = candidate
+  for (const _part of relative.split(/[\\/]/)) candidateRoot = path.win32.dirname(candidateRoot)
+  if (candidateRoot === projectRoot) return true
+  // Compare the checkout directories, not the entry files: another checkout
+  // may share a symlinked/pnpm dependency without belonging to this project.
+  // Keep the original spelling when asking Windows to resolve an 8.3 alias.
+  const candidateIdentity = windowsPath(resolveDirectory(candidateRoot))
+  const projectIdentity = windowsPath(resolveDirectory(projectRoot))
+  return candidateIdentity !== null && projectIdentity !== null && candidateIdentity === projectIdentity
 }
 
 function commandTokens(value) {
@@ -81,23 +112,23 @@ function nodeEntrypoint(tokens) {
   return null
 }
 
-export function classifyProjectProcess(processInfo, projectRoot) {
+export function classifyProjectProcess(processInfo, projectRoot, resolveDirectory = resolveWindowsDirectory) {
   if (!Number.isInteger(processInfo.pid) || processInfo.pid <= 0) return null
   const project = windowsPath(projectRoot)
   if (!project) throw new NodeRepairError('Project root must be an absolute Windows path.')
   const executable = windowsPath(processInfo.executablePath)
   const name = (processInfo.name ?? '').toLowerCase()
   const tokens = commandTokens(processInfo.commandLine)
-  if (name === 'esbuild.exe' && esbuildEntrypoints.some(relative => executable === path.win32.join(project, relative))) {
+  if (name === 'esbuild.exe' && esbuildEntrypoints.some(relative => isProjectEntry(executable, project, relative, resolveDirectory))) {
     return 'project esbuild executable'
   }
-  if (name === 'node.exe' && executable && path.win32.basename(executable) === 'node.exe') {
+  if (name === 'node.exe' && executable && path.win32.basename(executable).toLowerCase() === 'node.exe') {
     const entry = windowsPath(nodeEntrypoint(tokens))
-    const known = nodeEntrypoints.find(relative => entry === path.win32.join(project, relative))
+    const known = nodeEntrypoints.find(relative => isProjectEntry(entry, project, relative, resolveDirectory))
     if (known) return `project ${known}`
   }
   if ((name === 'python.exe' || name === 'pythonw.exe') && executable && tokens &&
-      executable === path.win32.join(project, `inference/.venv/scripts/${name}`) &&
+      isProjectEntry(executable, project, `inference/.venv/scripts/${name}`, resolveDirectory) &&
       tokens[1] === '-m' && tokens[2] === 'uvicorn' && tokens[3] === 'app.main:app') {
     return 'project inference venv running app.main:app'
   }

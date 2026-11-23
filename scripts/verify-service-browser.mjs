@@ -103,7 +103,8 @@ try{
  assert.equal(exported.history.length,detail.case.version)
  evidence.checks.push('Backoffice completion + explicit case resolution; full-history JSON export')
  // Capture the ordinary read view after completing the workflow, with navigation at the top.
- for (const summary of await page.locator('details[open] > summary').all()) await summary.click()
+ const openSummaries=page.locator('details[open] > summary')
+ while(await openSummaries.count()) await openSummaries.first().click()
  await page.evaluate(()=>window.scrollTo(0,0))
  const screenshot=path.join(outputDir,'case-desktop.png')
  await page.screenshot({path:screenshot,fullPage:true});evidence.screenshots.push(screenshot)
