@@ -16,6 +16,7 @@ import { CallWorkflowPanel } from '@/components/review/CallWorkflowPanel'
 import { CallCaseLink } from '@/components/review/CallCaseLink'
 import { CallQaTriage } from '@/components/review/CallQaTriage'
 import { CallInsightsPanel } from '@/components/review/CallInsightsPanel'
+import { QaRubricEditor } from '@/components/review/QaRubricEditor'
 import { EmotionTrajectory } from '@/components/review/EmotionTrajectory'
 import { CallInferenceTrail } from '@/components/review/CallInferenceTrail'
 import { sourceDialogueTurns } from '@/lib/source-dialogue'
@@ -510,6 +511,26 @@ function CallReviewSession({ callId }: { callId: string }) {
             <h2 className="text-lg font-bold text-[#12394d]">Kết luận của người QA</h2>
           </div>
           <p className="mt-2 text-sm leading-6 text-slate-600">Sau khi nghe và đối chiếu gợi ý AI, ghi nhận phát hiện của bạn. Chỉ chọn hoàn tất khi đã xem xét đủ bằng chứng.</p>
+          {call.status === 'ready' && <QaRubricEditor utterances={call.utterances} disabled={editDisabled}
+            onEvidence={selectUtterance} onApply={report => {
+              updateForm(previous => {
+                const start = '[PHIẾU QA CÓ BẰNG CHỨNG — NGƯỜI ĐÁNH GIÁ]'
+                const end = '[/PHIẾU QA]'
+                const prior = previous.overallNote
+                const startAt = prior.indexOf(start)
+                const endAt = prior.indexOf(end, startAt)
+                const base = startAt >= 0 && endAt >= 0
+                  ? (prior.slice(0,startAt) + prior.slice(endAt+end.length)).trim()
+                  : prior.trim()
+                const combined = [base, report].filter(Boolean).join('\n\n')
+                if (combined.length > 5000) {
+                  setMessage('Nhận xét đã vượt giới hạn 5.000 ký tự. Hãy rút ngắn ghi chú trước khi thêm phiếu QA.')
+                  return previous
+                }
+                setMessage('Đã đưa phiếu vào nhận xét. Bấm Lưu đánh giá QA để ghi vào lịch sử.')
+                return {...previous, overallNote:combined}
+              })
+            }}/>}
           <fieldset disabled={editDisabled} className="min-w-0">
             <legend className="sr-only">Ghi chú và trạng thái đánh giá</legend>
             <label className="mt-4 block text-sm font-semibold text-slate-800" htmlFor="overall-note">Nhận xét của QA</label>
