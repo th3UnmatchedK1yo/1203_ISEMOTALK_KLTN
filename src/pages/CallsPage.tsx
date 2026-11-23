@@ -15,6 +15,7 @@ export function CallsPage() {
   const [review, setReview] = useState('')
   const [provenance, setProvenance] = useState('')
   const [status, setStatus] = useState('')
+  const [datasetScope, setDatasetScope] = useState<'business'|'speech_only'|'all'>('business')
   const [page, setPage] = useState(1)
   const [refresh, setRefresh] = useState(0)
   const [data, setData] = useState<CallList | null>(null)
@@ -31,7 +32,7 @@ export function CallsPage() {
     setLoading(true)
     setError('')
     return startPolling({
-      load: signal => getCalls({ search, priority, review, provenance, status, page, pageSize: 10 }, signal),
+      load: signal => getCalls({ search, priority, review, provenance, status, datasetScope, page, pageSize: 10 }, signal),
       onData: next => { setData(next); setError(''); setLoading(false) },
       onError: failure => { setError(failure.message); setLoading(false) },
       shouldContinue: next => next.counts.processing > 0 || (qaReady && next.items.some(call =>
@@ -39,7 +40,7 @@ export function CallsPage() {
         (!call.qaTriage || call.qaTriage.outdated))),
       intervalMs: 4000,
     })
-  }, [search, priority, review, provenance, status, page, refresh, qaReady])
+  }, [search, priority, review, provenance, status, datasetScope, page, refresh, qaReady])
 
   useEffect(() => {
     const controller = new AbortController()
@@ -69,7 +70,12 @@ export function CallsPage() {
       <label className="relative block"><span className="sr-only">Tìm mã, tiêu đề hoặc khách hàng</span><Search aria-hidden="true" className="absolute left-3 top-3.5 text-slate-600" size={18}/>
         <input type="search" className="h-12 w-full rounded-lg border border-[#b5c9d2] bg-white pl-11 pr-4 text-base" placeholder="Tìm mã, tiêu đề, khách hàng…" value={searchInput} onChange={e => setSearchInput(e.target.value)}/>
       </label>
-      <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+        <label className="block text-sm font-semibold text-slate-700">Loại bản ghi<select className={select} value={datasetScope} onChange={e => { setDatasetScope(e.target.value as 'business'|'speech_only'|'all'); setPage(1) }}>
+          <option value="business">Cuộc gọi CSKH / OneVoice</option>
+          <option value="speech_only">Mẫu thử ASR / DataHive</option>
+          <option value="all">Tất cả bản ghi</option>
+        </select></label>
         <label className="block text-sm font-semibold text-slate-700">Nguồn kết quả<select className={select} value={provenance} onChange={e => { setProvenance(e.target.value); setPage(1) }}>
           <option value="">Tất cả nguồn</option><option value="real">Kết quả inference</option><option value="imported">Nhập từ tệp</option><option value="mock">Demo / mô phỏng</option>
         </select></label>
