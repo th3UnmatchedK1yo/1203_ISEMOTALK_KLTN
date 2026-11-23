@@ -7,6 +7,8 @@ import { fileURLToPath } from 'node:url'
 import { assertLocalDemoApiTarget } from './demo-build.mjs'
 
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)))
+const previewOnly = process.argv.slice(2).includes('--preview')
+if(process.argv.slice(2).some(x => x !== '--preview'))throw Error('Unsupported flag; use --preview only for parallel frontend checks.')
 const port = Number(process.env.ISEMO_REMOTE_API_PORT || '13001')
 if(!Number.isInteger(port)||port<1024||port>65535)throw Error('ISEMO_REMOTE_API_PORT must be a local unprivileged port.')
 const base = 'http://127.0.0.1:'+port
@@ -22,14 +24,20 @@ try{
  console.error('Details:',e.message)
  process.exit(1)
 }
-if(health?.api!=='ok'||!health?.inference?.reachable)throw Error('Remote Node API is not connected to its colocated Python inference.')
-const comps=health.inference.components
-for(const kind of ['asr','ser']) {
- if(!comps?.[kind]?.ready || comps[kind].mock)throw Error('Refusing remote demo: '+kind+' model is not real and ready.')
+if(health?.api!=='ok')throw Error('Remote Node API did not return its health contract.')
+if(!previewOnly) {
+ if(!health?.inference?.reachable)throw Error('Remote Node API is not connected to its colocated Python inference.')
+ const comps=health.inference.components
+ for(const kind of ['asr','ser']) {
+  if(!comps?.[kind]?.ready || comps[kind].mock)throw Error('Refusing remote demo: '+kind+' model is not real and ready.')
+ }
+ if(comps.ser.verified!==true)throw Error('SER not verified in this running inference process. Run package verification and actual real-audio smoke test on the GPU host before starting the web.')
+ if(!health.inference.qa?.ready)throw Error('Trained QA classifier not ready. Run bash scripts/train-callcenter-qa.sh on FTISU, then restart GPU services.')
+ console.log('[remote-web] SSH tunnel OK; API + genuine model adapters reachable. Python and database are on the GPU server.')
+} else {
+ console.warn('[FRONTEND PREVIEW ONLY] GPU training may be running; no ASR/SER/QA accuracy or end-to-end readiness is asserted.')
+ console.warn('[FRONTEND PREVIEW ONLY] Calls, cases and SQLite UI can be exercised. Uploaded audio will NOT be processed until genuine inference is online.')
 }
-if(comps.ser.verified!==true)throw Error('SER not verified in this running inference process. Run package verification and actual real-audio smoke test on the GPU host before starting the web.')
-if(!health.inference.qa?.ready)throw Error('Trained QA classifier not ready. Run bash scripts/train-callcenter-qa.sh on FTISU, then restart GPU services.')
-console.log('[remote-web] SSH tunnel OK; API + genuine model adapters reachable. Python and database are on the GPU server.')
 console.log('[remote-web] Open http://127.0.0.1:5173 (keep tunnel running).')
 const vite = resolve(root,'node_modules/vite/bin/vite.js')
 if(!existsSync(vite))throw Error('Vite missing. Run npm ci after stopping old Node processes.')
