@@ -82,6 +82,16 @@ export function CallsPage() {
       </div>
     </div>}
     {qaReady && <p role="status" className="text-xs leading-5 text-teal-800">XLM-R đang tự sàng lọc transcript đủ điều kiện. Người QA vẫn quyết định sau khi nghe.</p>}
+    <section className="rounded-xl border border-slate-200 bg-white px-4 py-4 text-sm leading-6" aria-label="Vì sao phải sàng lọc cuộc gọi trước khi nghe">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="max-w-4xl">
+          <p className="font-bold text-[#12394d]">AI quét cả hàng đợi trước; QA chỉ mở những hồ sơ cần nghe.</p>
+          <p className="mt-1 text-slate-700">Khi transcript đã có, XLM-R tự chấm từng cuộc nếu chế độ tự động được bật. Cuộc có cảnh báo được đẩy lên trước, nhưng người QA vẫn phải nghe và xác minh. Đây là <strong>sàng lọc theo văn bản</strong>, không phải AI tóm tắt hay phán lỗi nhân viên.</p>
+          {!qaReady && <p className="mt-2 text-amber-800">Phiên này chưa xác nhận XLM-R tự chấm đang hoạt động. Mở <strong>Tải lên → Khả năng xử lý hiện tại</strong> để xem tình trạng của ASR, QA và SER.</p>}
+        </div>
+        <Link to="/analytics" className="inline-flex min-h-10 shrink-0 items-center rounded-lg border border-teal-700 px-3 py-2 text-sm font-semibold text-teal-900 hover:bg-teal-50">Xem AI đã quét bao nhiêu</Link>
+      </div>
+    </section>
     <section className="rounded-xl border border-[#c4d4dc] bg-white p-4" aria-label="Tìm và lọc cuộc gọi">
       <label className="relative block"><span className="sr-only">Tìm mã, tiêu đề hoặc khách hàng</span><Search aria-hidden="true" className="absolute left-3 top-3.5 text-slate-600" size={18}/>
         <input type="search" className="h-12 w-full rounded-lg border border-[#b5c9d2] bg-white pl-11 pr-4 text-base" placeholder="Tìm mã, tiêu đề, khách hàng…" value={searchInput} onChange={e => setSearchInput(e.target.value)}/>
