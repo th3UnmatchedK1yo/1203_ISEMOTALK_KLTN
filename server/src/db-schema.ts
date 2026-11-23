@@ -3,15 +3,16 @@ import type { DB } from './db'
 import { type DataTable, DATA_TABLES, findDataViolations, tableContract } from './db-contract'
 
 import { SERVICE_TABLES, installServiceSchema, serviceSchemaProblems } from './service-schema'
+import { QA_TABLE, installQaSchema, qaSchemaProblems } from './qa-schema'
 
-export const SCHEMA_VERSION = 2
+export const SCHEMA_VERSION = 3
 export const MIGRATION_NAME = 'database_integrity_20261123'
-const MIGRATIONS = [MIGRATION_NAME, 'service_operations_20261123'] as const
+const MIGRATIONS = [MIGRATION_NAME, 'service_operations_20261123', 'qa_triage_20261123'] as const
 export function knownHistory(versions: Array<{ version: number; name: string }>): boolean {
   return versions.length <= MIGRATIONS.length && versions.every((row, i) => row.version === i + 1 && row.name === MIGRATIONS[i])
 }
 const V1_TABLES = [...DATA_TABLES, 'schema_migrations'] as const
-export const EXPECTED_TABLES = [...V1_TABLES, ...SERVICE_TABLES]
+export const EXPECTED_TABLES = [...V1_TABLES, ...SERVICE_TABLES, QA_TABLE]
 const guardSql = (table: DataTable, operation: 'INSERT' | 'UPDATE') => `CREATE TRIGGER guard_${table}_${operation.toLowerCase()}
   BEFORE ${operation} ON ${table} WHEN NOT (${tableContract(table, 'NEW.')})
   BEGIN SELECT RAISE(ABORT, 'ISEmoTalk database constraint: ${table}'); END`
@@ -184,7 +185,7 @@ export function schemaProblems(db: DB, version: number): string[] {
         problems.push('Unexpected required column: ' + table + '.' + c.name)
     }
   }
-  for (const table of ['utterances', 'moment_reviews', 'call_workflows', 'workflow_events']) {
+  for (const table of ['utterances', 'moment_reviews', 'call_workflows', 'workflow_events', ...(version >= 3 ? [QA_TABLE] : [])]) {
     if (!tables.has(table)) continue
     const foreignKeys = db.pragma(`foreign_key_list(${table})`) as Array<{ table: string; from: string; to: string; on_delete: string }>
     if (!foreignKeys.some(f => f.table === 'calls' && f.from === 'call_id' && f.to === 'id' && f.on_delete === 'CASCADE')) {
@@ -216,6 +217,7 @@ export function schemaProblems(db: DB, version: number): string[] {
       problems.push('Missing ID counter: calls')
   }
   if (version >= 2 && tables.has('id_counters')) problems.push(...serviceSchemaProblems(db))
+  if (version >= 3) problems.push(...qaSchemaProblems(db))
   return problems
 }
 
@@ -231,17 +233,26 @@ export function migrateDatabase(db: DB): void {
       installLegacySchema(db)
       stamp(1)
     }
-    const existingVersion = versions.at(-1)?.version ?? 1
-    const problems = schemaProblems(db, existingVersion)
-    if (problems.length) fail(`Incomplete database schema: ${problems.join('; ')}`)
-    if (existingVersion === SCHEMA_VERSION) return
+    let installed = versions.at(-1)?.version ?? 1
+    const problems = schemaProblems(db, installed)
+    if (problems.length) fail('Incomplete database schema: ' + problems.join('; '))
+    if (installed === SCHEMA_VERSION) return
     const violations = findDataViolations(db)
     const foreignKeys = db.pragma('foreign_key_check') as unknown[]
-    if (violations.length || foreignKeys.length) fail('Version 1 data violates its integrity contract')
-    installServiceSchema(db)
-    const installedProblems = schemaProblems(db, SCHEMA_VERSION)
-    if (installedProblems.length) fail(`Service migration postcondition failed: ${installedProblems.join('; ')}`)
-    stamp(2)
+    if (violations.length || foreignKeys.length) fail('Prior data violates its integrity contract')
+    if (installed < 2) {
+      installServiceSchema(db)
+      const afterService = schemaProblems(db, 2)
+      if (afterService.length) fail('Service migration postcondition failed: ' + afterService.join('; '))
+      stamp(2)
+      installed = 2
+    }
+    if (installed < 3) {
+      installQaSchema(db)
+      const afterQa = schemaProblems(db, 3)
+      if (afterQa.length) fail('QA migration postcondition failed: ' + afterQa.join('; '))
+      stamp(3)
+    }
   }).immediate()
 }
 
