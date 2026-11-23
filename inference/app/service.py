@@ -87,6 +87,12 @@ class InferenceService:
         model = getattr(adapter, "model_identity", None) or getattr(adapter, "model_id", None) or getattr(adapter, "factory", None)
         if model:
             evidence["model"] = str(model)
+        timing = getattr(adapter, "timing_mode", None)
+        if timing in ("word_aligned", "audio_window"):
+            evidence["timingMode"] = timing
+        warning = getattr(adapter, "alignment_warning", "")
+        if warning:
+            evidence["timingWarning"] = str(warning)[:240]
         device = getattr(adapter, "device", None)
         if device:
             evidence["device"] = str(device)
