@@ -32,6 +32,20 @@ PowerShell terminal A (replace ftisu-ser with the SSH alias/hostname you actuall
 
     ssh -N -L 127.0.0.1:13001:127.0.0.1:3101 ftisu-ser
 
+### Alternative: VS Code Remote SSH port forwarding (no separate ssh -L command)
+
+In the VS Code **remote** window connected to FTISU, keep the API-only terminal running at 127.0.0.1:3101. Open the bottom **PORTS** panel, choose **Forward a Port** and enter the **remote** port 3101. Right-click the forwarded port and choose **Change Local Address Port** = 13001. Visibility should remain Private/local. Test from the Windows laptop browser:
+
+    http://127.0.0.1:13001/api/system/status
+
+Expected: JSON with api="ok", inference.reachable=false while CUDA training or API-only preview is active. If VS Code assigns a different LOCAL port, use it as -LocalPort in the launcher below. DO NOT run SSH -L and VS Code forwarding simultaneously on the same local port.
+
+Once Windows has the correct branch and dependencies, run:
+
+    powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\start-vscode-preview.ps1 -LocalPort 13001
+
+This checks forwarded FTISU API, builds React frontend locally, then launches ONLY remote:web:preview. No local Express, FastAPI, SQLite or model starts. Open http://127.0.0.1:5173. Do not run this in the FTISU SSH terminal.
+
 PowerShell terminal B (laptop project checkout):
 
     cd C:\Users\Legion\Documents\1203_KLTN
