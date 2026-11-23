@@ -133,6 +133,13 @@ export function createApp({ db, config, client, pipeline }: AppDeps) {
 
   // ---- System ------------------------------------------------------------
   app.get('/api/system/status', async (_req, res) => {
+    // During training, report a fast, explicit preview status without polling
+    // an intentionally offline Python service or implying that it should start.
+    if (previewOnly) return res.json({
+      api: 'ok',
+      previewOnly: true,
+      inference: { reachable: false, error: 'Chế độ API-only preview: dịch vụ AI tạm dừng khi GPU đang huấn luyện.' },
+    })
     try {
       res.json({ api: 'ok', inference: { reachable: true, ...(await client.health()) } })
     } catch (e) {
