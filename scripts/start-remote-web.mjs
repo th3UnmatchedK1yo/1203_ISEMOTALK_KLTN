@@ -1,5 +1,5 @@
 // Frontend-only laptop runtime. Backend & models remain on the GPU server.
-// SSH: ssh -N -L 127.0.0.1:13001:127.0.0.1:3001 ftisu-ser
+// SSH: ssh -N -L 127.0.0.1:13001:127.0.0.1:3101 ftisu-ser
 import { spawn } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { resolve } from 'node:path'
@@ -28,6 +28,7 @@ for(const kind of ['asr','ser']) {
  if(!comps?.[kind]?.ready || comps[kind].mock)throw Error('Refusing remote demo: '+kind+' model is not real and ready.')
 }
 if(comps.ser.verified!==true)throw Error('SER not verified in this running inference process. Run package verification and actual real-audio smoke test on the GPU host before starting the web.')
+if(!health.inference.qa?.ready)throw Error('Trained QA classifier not ready. Run bash scripts/train-callcenter-qa.sh on FTISU, then restart GPU services.')
 console.log('[remote-web] SSH tunnel OK; API + genuine model adapters reachable. Python and database are on the GPU server.')
 console.log('[remote-web] Open http://127.0.0.1:5173 (keep tunnel running).')
 const vite = resolve(root,'node_modules/vite/bin/vite.js')
