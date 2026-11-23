@@ -81,6 +81,7 @@ export function CallQaTriage({ callId, version, autoEligible = true }: { callId:
   }
 
   const prediction = data?.result
+  const windowed = prediction?.model.includes('/window-max-v2') === true
   return <section className="rounded-xl border border-[#c4d4dc] bg-white p-5 shadow-sm" aria-labelledby="qa-model-title">
     <div className="flex flex-wrap items-start justify-between gap-3">
       <div>
@@ -99,9 +100,12 @@ export function CallQaTriage({ callId, version, autoEligible = true }: { callId:
       <p className="text-sm font-semibold text-slate-900">
         {prediction.truncated ? 'Kết quả chưa bao phủ toàn transcript · cần nghe lại' : prediction.label === 'needs_attention' ? 'Gợi ý: cần QA xem xét' : 'Gợi ý: chưa thấy tín hiệu cần ưu tiên'}
       </p>
-      <p className="text-sm text-slate-700">Điểm model cho nhãn cần chú ý: {(prediction.score * 100).toFixed(1)}%. Đây không phải độ chính xác.</p>
+      <p className="text-sm text-slate-700">{windowed ? 'Điểm cảnh báo cao nhất trên các đoạn transcript' : 'Điểm model cho nhãn cần chú ý'}: {(prediction.score * 100).toFixed(1)}%. Đây không phải độ chính xác.</p>
+      {windowed && <p className="text-sm text-slate-700">Đã quét transcript bằng nhiều cửa sổ token, sử dụng checkpoint XLM-R thật. Quy tắc lấy điểm cao nhất là heuristic chưa được hiệu chuẩn như xác suất cho toàn cuộc gọi.</p>}
       {data.outdated && <p role="alert" className="font-semibold text-amber-900">Transcript đã thay đổi sau lần dự đoán này. Cần chạy lại.</p>}
-      {prediction.truncated && <p className="text-sm text-amber-900">Cuộc gọi dài hơn giới hạn token; model chỉ đọc một phần transcript. Không dùng để kết luận toàn cuộc gọi.</p>}
+      {prediction.truncated && <p className="text-sm text-amber-900">{windowed
+        ? 'Transcript vượt giới hạn 48 cửa sổ an toàn, một số vùng chưa được quét. Không dùng điểm này để kết luận toàn cuộc gọi.'
+        : 'Kết quả phiên cũ chỉ đọc phần đầu transcript. Hệ thống sẽ tự chạy lại phiên bản quét theo cửa sổ.'}</p>}
       <p className="break-all text-xs text-slate-500">Model: {prediction.model} · {prediction.createdAt}</p>
     </div>}
     {!loading && !prediction && !error && <p role="status" className="mt-3 text-sm text-slate-700">
