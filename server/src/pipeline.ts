@@ -64,6 +64,7 @@ export class Pipeline {
     private config: Config,
     private client: InferenceClient,
     private log: (msg: string, err?: unknown) => void = () => {},
+    private onReady: (callId: string) => void = () => {},
   ) {}
 
   /** Re-queue anything that was in flight when the server last stopped. */
@@ -190,6 +191,10 @@ export class Pipeline {
       }
     }
     this.save(id, log, { status: 'ready', stage: null, error: null, progress: 100 })
+    // QA is an independent *real* model. A failed or unavailable QA must not
+    // rewrite audio-pipeline history or mark valid ASR/SER processing as failed.
+    try { this.onReady(id) }
+    catch (error) { this.log('automatic QA scheduling failed for ' + id, error) }
   }
 
   private audioPath(row: Row): string {
