@@ -20,9 +20,9 @@ for (const [name,url] of endpoints) {
       if(kind !== 'diarization' && (!c.ready || c.mock)){console.error('  ERROR: '+kind+' must be genuine and ready.');failed=true}
       if(kind==='ser' && c.verified !== true){console.error('  ERROR: SER checkpoint not verified in the running inference process. Run held-out package verification and real audio smoke test.');failed=true}
     }
+    console.log('  QA model: '+(h.qa?.adapter || '(unavailable)')+', ready='+Boolean(h.qa?.ready)+', domain='+(h.qa?.domain || 'unknown'))
+    if(!h.qa?.ready){console.error('  ERROR: synthetic trained QA classifier missing; do not claim QA model deployment.');failed=true}
   }catch(e){failed=true;console.error(name+' unavailable:',e.message)}
 }
-console.log('  QA model: '+(h.qa?.adapter || '(unavailable)')+', ready='+Boolean(h.qa?.ready)+', domain='+(h.qa?.domain || 'unknown'))
-    if(!h.qa?.ready){console.error('  ERROR: synthetic trained QA classifier missing; do not claim QA model deployment.');failed=true}
 console.log('This health check cannot establish held-out accuracy or cross-domain validity.')
 if(failed)process.exitCode=1
