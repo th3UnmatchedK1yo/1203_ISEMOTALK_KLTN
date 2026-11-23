@@ -62,7 +62,8 @@ describe.skipIf(process.platform !== 'linux')('FTISU frontend/API parallel mode'
     expect(cases.status).toBe(200)
     const blocked = await fetch('http://127.0.0.1:' + port + '/api/calls/upload', { method: 'POST' })
     expect(blocked.status).toBe(503)
-    expect((await blocked.json()).code).toBe('inference_paused_for_training')
+    const blockBody = await blocked.json() as {code?:string}
+    expect(blockBody.code).toBe('inference_paused_for_training')
     expect(output).toContain('no mock seeding')
     child.kill('SIGTERM')
   }, 15000)
