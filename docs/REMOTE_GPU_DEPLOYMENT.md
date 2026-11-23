@@ -5,10 +5,10 @@
 The laptop serves ONLY React/Vite. The group Linux GPU server runs BOTH the Express API and Python FastAPI inference, holding SQLite, recording uploads, and private model weights. Browser calls same-origin /api. Vite proxies /api via an SSH local-forward to the remote API, without directly exposing the server ports to the Internet.
 
     Laptop: React/Vite preview 127.0.0.1:5173
-        /api -> 127.0.0.1:13001 (SSH forwarded)
+        /api -> 127.0.0.1:13101 (SSH forwarded)
         |
         group Linux GPU host, SSH
-            Express API 127.0.0.1:3001 -> SQLite + server/data/uploads
+            Express API 127.0.0.1:3101 -> SQLite + server/data/uploads
                   |
                   | audio PATH on the SAME Linux filesystem
                   v
@@ -92,13 +92,13 @@ The first check may intentionally fail because the checkpoint has not yet been l
 
 This creates one REAL recorded call in remote SQLite and verifies that both ASR and SER processing stages are actual inference, not mock. Do not use an actual private customer recording unless authorized.
 
-The preflight checks GPU, config and requires real ASR and real SER names; no assets are downloaded. The server launcher forces NODE_ENV=production and ISEMO_AUTO_SEED=0; Python and API bind localhost on ports 8001 and 3001. Health must show ASR and SER mock=false, ready=true. The SER checkpoint verification flag may remain false until first actual model load; run a genuine audio smoke test and then verify status. A healthy adapter alone does not prove accuracy.
+The preflight checks GPU, config and requires real ASR and real SER names; no assets are downloaded. The server launcher forces NODE_ENV=production and ISEMO_AUTO_SEED=0; Python and API bind localhost on ports 8001 and 3101. Health must show ASR and SER mock=false, ready=true. The SER checkpoint verification flag may remain false until first actual model load; run a genuine audio smoke test and then verify status. A healthy adapter alone does not prove accuracy.
 
 ## 4. Laptop - SSH tunnel and web ONLY
 
 PowerShell terminal A:
 
-    ssh -N -L 127.0.0.1:13001:127.0.0.1:3001 ftisu-ser
+    ssh -N -L 127.0.0.1:13101:127.0.0.1:3101 ftisu-ser
 
 Keep the SSH terminal open. If tunnel cannot connect, DO NOT fall back to a local mock API.
 
@@ -121,7 +121,7 @@ Open http://127.0.0.1:5173. The remote:web launcher verifies the SSH-proxied API
 5. Mono unknown speaker remains unknown until reliable identification; no invented customer-specific KPI.
 6. QA confirmation, case link, callback tasks and history persist after server restart in remote SQLite. Backup both DB and recordings before migrations.
 7. Collect cold/warm latency, RAM/VRAM and failure/retry evidence on the real GPU host; test safe model coexistence. One GPU is enough if measured; do NOT run every experiment checkpoint simultaneously.
-8. Validate no public ports 3001/8001; research models and recordings are private. Multi-user deployment needs auth, access control, audit and retention work.
+8. Validate no public ports 3101/8001; research models and recordings are private. Multi-user deployment needs auth, access control, audit and retention work.
 
 ## 6. Modeling and datasets
 
