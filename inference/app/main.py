@@ -1,6 +1,7 @@
 """FastAPI inference service for ISEmoTalk. Local-only: bind to 127.0.0.1."""
 from __future__ import annotations
 
+import os
 from typing import Literal, Optional
 
 from fastapi import FastAPI, HTTPException, Request
@@ -62,6 +63,19 @@ def create_app(settings: Optional[Settings] = None, service: Optional[InferenceS
     app.state.service = svc
     qa_model = QATriageModel()
     app.state.qa_triage = qa_model
+
+    @app.on_event("startup")
+    def verify_trained_qa_on_startup():
+        # Only genuine deployments opt into this gate. Having a file on disk
+        # is not enough: prove the CUDA checkpoint loads and yields a model
+        # prediction before the Node API tells the user it is available.
+        if os.getenv("ISEMO_QA_EAGER_VERIFY", "0") == "1":
+            result = qa_model.predict(
+                "agent: Xin chào, em có thể hỗ trợ gì?\\n"
+                "customer: Tôi cần được kiểm tra lại tài khoản."
+            )
+            if result.get("source") != "model" or not result.get("modelSha256"):
+                raise RuntimeError("QA warmup returned invalid model provenance.")
 
     @app.exception_handler(RequestValidationError)
     async def _invalid_request(_: Request, e: RequestValidationError):
