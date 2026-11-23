@@ -80,20 +80,34 @@ curl.exe --noproxy "*" --max-time 8 -i http://127.0.0.1:13001/api/analytics
 
 **Gioi han trung thuc:** khong co audio trong import no-audio preview, nen AudioPlayer khong phat duoc; ASR/SER/QA model khong chay. Day la MVP UX/nghiep vu, chua phai demo end-to-end AI.
 
-## E. Tuy chon: demo AudioPlayer bang bo mau HOAN TOAN tach biet
+## E. Demo đầy đủ Calls/Audio/Review/Cases trên dữ liệu mẫu TÁCH BIỆT
 
-Chi neu can minh hoa audio UI trong khi GPU dang train. **Khong seed vao FTISU DB that o 3101.** Cach ly du lieu mau trong `~/services/isemotalk-midterm-demo`; audio la song am tong hop, **khong phai loi noi**.
+Khi Windows đã mở được `localhost:5173`, nhưng FTISU operational DB đang có `calls=0`, không cần sửa tunnel hay bật AI. Để có đầy đủ màn hình, nút phát audio và dữ liệu cảm xúc **mô phỏng**, dùng lệnh khởi chạy **riêng, an toàn** sau.
 
-FTISU terminal rieng:
+**Trên FTISU:** Chỉ nhấn Ctrl+C ở cửa sổ `npm run remote:api-preview`, để nguyên cửa sổ GPU training và SSH tunnel. Trong cùng terminal FTISU, chạy:
+
+```bash
+cd ~/services/isemotalk
+git pull --ff-only origin feat/remote-gpu-full-pipeline-20261123
+source ~/.local/share/isemotalk-node-env.sh
+npm run remote:midterm-demo
+```
+
+Lệnh mới chỉ dùng Node + SQLite, không dùng GPU/Python. Nó tự tạo dữ liệu minh họa **trong `~/services/isemotalk-midterm-demo`**, không đặt vào `~/services/isemotalk-data`; khi chạy lại không xóa phần đã review và không tạo trùng bộ mẫu. Vẫn nghe API ở **cổng 3101**.
+
+**Trên Windows:** Giữ SSH tunnel 13001→3101 và frontend 5173 như cũ, nhấn Ctrl+R trong trình duyệt. Tab Calls sẽ có dữ liệu mẫu. Chạy lại `npm run remote:mvp-check` nếu cần; kết quả phải báo `calls>0`. Trong banner có chữ **BẢN MẪU GIỮA KỲ** để không nhầm với kết quả thực.
+
+Các dữ liệu cảm xúc và nhãn người nói ở bộ mẫu là mock. Audio được tạo bằng các sóng âm tổng hợp có waveform, **không có tiếng nói hay ASR thật**. Có thể dùng để kiểm tra thao tác audio player/timeline và review, nhưng không dùng số liệu model, độ chính xác hay thời gian suy luận từ dữ liệu này. Chưa có auto-calling, CRM hoặc đăng nhập nhiều reviewer.
+
+Khi muốn trở lại database operational (không có bộ mẫu), dừng riêng terminal `remote:midterm-demo`, rồi:
 
 ```bash
 cd ~/services/isemotalk
 source ~/.local/share/isemotalk-node-env.sh
-ISEMO_DATA_DIR="$HOME/services/isemotalk-midterm-demo" node --import tsx server/src/seed-cli.ts
-PORT=3102 ISEMO_DATA_DIR="$HOME/services/isemotalk-midterm-demo" npm run remote:api-preview
+npm run remote:api-preview
 ```
 
-Windows tao MOT tunnel **khac** local 13002 -> FTISU 3102, tuong tu muc A; su dung `-LocalPort 13002` khi bat frontend, va dung frontend 5173 cu truoc. Bo mau `provenance=mock`; **khong** bao cao la du doan tu model F4 hay am thanh speech. Khong chiem 3101/3001 va khong can GPU. Khong bat buoc de hoan thanh MVP nghiep vu.
+Không chạy lệnh `seed:demo --reset` trên operational DB, không đổi biến `ISEMO_DATA_DIR` sang thư mục thật khi seed, và không xóa hai thư mục dữ liệu.
 
 ## F. Sau khi GPU train xong: full model acceptance
 
