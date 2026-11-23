@@ -109,6 +109,43 @@ npm run remote:api-preview
 
 Không chạy lệnh `seed:demo --reset` trên operational DB, không đổi biến `ISEMO_DATA_DIR` sang thư mục thật khi seed, và không xóa hai thư mục dữ liệu.
 
+## E2. DEMO CÓ TIẾNG NÓI TỪ FILE DATASET GỐC (thay cho sóng âm demo)
+
+Khi QA train xong, FTISU đã có các file:
+- `~/services/isemotalk-private/datasets/onevoice`: 1.200 cuộc gọi TTS có lời thoại, nhãn QA của dataset (giả lập cuộc gọi, không phải khách hàng thật), CC BY-NC-SA 4.0.
+- `~/services/isemotalk-private/datasets/fpt-fosd-sample`: 100 đoạn thu âm giọng người thật (FOSD train), CC BY 4.0.
+- `~/services/isemotalk-private/datasets/fleurs-vi-test`: 120 đoạn thu âm tiếng Việt (FLEURS test), CC BY 4.0.
+
+**Giữ nguyên bộ dữ liệu đã tải**, không download hay seed sóng giả. Lệnh dưới đây chép một số WAV nguồn vào một SQLite **riêng** (`~/services/isemotalk-speech-demo`). Trình phát nghe chính file WAV đó. Tệp nguồn giữ nguyên và hash SHA256 được ghi trong stage log. Transcript lấy trực tiếp từ dataset; ONE utterance đại diện toàn bộ recording (không phải ASR, không được xem là alignment đúng từng lượt). Không tự gán nhãn cảm xúc.
+
+1. **FTISU:** Trong terminal đang chạy `remote:midterm-demo` hoặc `remote:api-preview`, bấm `Ctrl+C` **CHỈ với terminal API này**. ĐỪNG dừng mô hình hay xóa SQLite/dataset.
+2. **FTISU** chạy:
+
+```bash
+cd ~/services/isemotalk
+git pull --ff-only origin feat/remote-gpu-full-pipeline-20261123
+source ~/.local/share/isemotalk-node-env.sh
+npm run remote:speech-demo
+```
+
+3. **Windows** giữ tunnel `13001 -> 3101`. Vì frontend code mới có cảnh báo nguồn dữ liệu, hãy dừng **chỉ frontend** ở 5173 (`Ctrl+C` trong Windows frontend terminal), sau đó:
+```powershell
+cd C:\Users\Legion\Documents\1203_KLTN
+git pull --ff-only origin feat/remote-gpu-full-pipeline-20261123
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\start-vscode-preview.ps1 -LocalPort 13001
+```
+4. Nhấn Ctrl+R ở `http://127.0.0.1:5173`. Mở file có tên `TTS TỔNG HỢP · OneVoice` để nghe **lời thoại tổng đài bằng TTS**; mở file `GIỌNG THẬT · FPT FOSD` hoặc `GIỌNG THẬT · FLEURS` để nghe giọng người thực. Không có thêm transcript timeline theo câu, SER timeline, hoặc model prediction vì bước ASR/SER chưa chạy.
+5. Kiểm tra `npm run remote:mvp-check` ở Windows sẽ thấy `ORIGINAL WAV SPEECH DATASET WORKSPACE`.
+
+**Không nhầm ba khái niệm:**
+- WAV lấy thật từ nguồn và phát đúng file ≠ âm thanh cuộc gọi CSKH người thật.
+- OneVoice là WAV có lời nói nhưng TTS tổng hợp; FOSD/FLEURS là giọng người thật nhưng không phải cuộc gọi chăm sóc khách hàng.
+- XLM-R seed 2026/2027/2028 train xong ≠ PhoWhisper ASR / F4 SER đã suy luận trên các tệp WAV.
+
+Dữ liệu được dùng cho khóa luận phi thương mại; vẫn giữ attribution, giấy phép và revision dữ liệu nguồn. Không đưa file âm thanh lên public GitHub.
+
+**Trở về SQLite operational**: `Ctrl+C` trong terminal `remote:speech-demo` rồi `npm run remote:api-preview` (và sau này `npm run remote:server` khi model verified). Dữ liệu operational trước đó vẫn tách biệt. Không xóa `isemotalk-midterm-demo` hay `isemotalk-speech-demo` để sửa lỗi.
+
 ## F. Sau khi GPU train xong: full model acceptance
 
 - Xem ket qua seed2027/2028 + baselines, audit test splits. Dung `monitor-parallel.sh`; khong overwrite.
