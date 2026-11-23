@@ -10,7 +10,7 @@ const navItems = [
   { path: '/cases', label: 'Vụ việc', icon: BriefcaseBusiness },
   { path: '/analytics', label: 'Phân tích', icon: BarChart3 },
   { path: '/calls/new', label: 'Tải lên', icon: UploadCloud },
-  { path: '/research', label: 'Nghiên cứu', icon: BookOpen },
+  { path: '/research', label: 'Mô hình & giới hạn', icon: BookOpen },
 ]
 
 export function AppShell({ children }: AppShellProps) {
