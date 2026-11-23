@@ -1,7 +1,7 @@
 // Read-only preflight for the GPU host. Requires ONLY Node.js 22+.
 // This is not a deployment or a guarantee that trained SER is accurate.
 import { readFileSync, existsSync } from 'node:fs'
-import { resolve } from 'node:path'
+import { resolve, isAbsolute } from 'node:path'
 import { execFileSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import os from 'node:os'
@@ -26,7 +26,7 @@ console.log('Database and audio directory:', data)
 if (asr === 'mock' || !asr) problems.push('ASR is not configured as a real model.')
 if (ser !== 'checkpoint') problems.push('SER must be checkpoint; mock is not acceptable for remote inference.')
 if (!factory || !config) problems.push('ISEMO_SER_FACTORY and ISEMO_SER_CONFIG must identify a verified private package.')
-if (config && !resolve(config).startsWith('/')) problems.push('ISEMO_SER_CONFIG must be an absolute Linux path.')
+if (config && !isAbsolute(config)) problems.push('ISEMO_SER_CONFIG must be an absolute Linux path.')
 if (config && !existsSync(config)) problems.push('Private SER configuration file does not exist at the configured path.')
 const py = process.env.ISEMO_PYTHON || resolve(root,'inference/.venv/bin/python')
 if (!existsSync(py)) problems.push('Python inference environment does not exist: '+py+'; create/use an approved GPU Python venv.')
