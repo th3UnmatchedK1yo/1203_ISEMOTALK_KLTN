@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, Check, Save, AlertTriangle, RefreshCw, Download, ChevronRight, Headphones, Sparkles, ClipboardCheck, BriefcaseBusiness, FileAudio } from 'lucide-react'
 import {
-  ApiError, apiJson, clock, emotionLabels, getCall, getSystemStatus, percent, provenanceLabel, resolveApiUrl, saveReview,
+  ApiError, apiJson, clock, emotionLabels, getCall, getSystemStatus, percent, resolveApiUrl, saveReview,
   retryProcessing, speakerLabels, stageLabels, type CallDetail, type Emotion, type Moment, type ReviewPatch,
 } from '@/api/isemotalk'
 import { startPolling } from '@/lib/polling'
