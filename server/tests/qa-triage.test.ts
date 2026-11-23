@@ -68,6 +68,17 @@ describe('QA predictions are evidence, not reviewer actions', () => {
     expect(db.prepare('SELECT COUNT(*) AS count FROM qa_triage_results').get()).toEqual({ count: 0 })
   })
 
+  it('flags old prefix-only, truncated QA results as outdated even when transcript did not change', async () => {
+    const { db, app } = setup()
+    const id = 'CALL-000001'
+    const text = repo.getUtterances(db, id).map(u => u.speaker + ': ' + u.text).join('\n')
+    const hash = (await import('node:crypto')).createHash('sha256').update(text).digest('hex')
+    db.prepare('INSERT INTO qa_triage_results (call_id,input_sha256,model_sha256,model_name,label,score,dataset_source,truncated,created_at) VALUES (?,?,?,?,?,?,?,?,?)')
+      .run(id, hash, 'a'.repeat(64), 'xlm-roberta-qa@legacy-prefix', 'routine', 0.049, 'synthetic_onevoice', 1, new Date().toISOString())
+    expect((await request(app).get('/api/calls/' + id + '/qa-triage')).body.outdated).toBe(true)
+    expect(repo.listCalls(db, {}).items[0].qaTriage?.outdated).toBe(true)
+  })
+
   it('refuses unavailable model without storing fake QA evidence', async () => {
     const { db, app } = setup()
     vi.stubGlobal('fetch', vi.fn(async () => new Response('model unavailable', { status: 503 })))
