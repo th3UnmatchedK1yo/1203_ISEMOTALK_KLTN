@@ -14,7 +14,7 @@ def build_asr(s: Settings) -> AsrAdapter:
     if s.asr == "mock":
         return MockAsr()
     if s.asr == "phowhisper":
-        return PhoWhisperAsr(s.asr_model, s.asr_device)
+        return PhoWhisperAsr(s.asr_model, s.asr_device, s.asr_revision)
     if s.asr in ("faster_whisper", "faster-whisper"):
         return FasterWhisperAsr(s.asr_model, s.asr_device, s.asr_cpu_threads)
     raise ValueError(f"ISEMO_ASR không hợp lệ: {s.asr!r} (mock | phowhisper | faster_whisper)")
