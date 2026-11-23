@@ -9,6 +9,7 @@ from typing import Optional
 import numpy as np
 
 from .base import ModelNotReady, Segment, Status
+from ..asr_segments import timestamped_asr_spans
 
 
 def _have(*mods: str) -> bool:
@@ -63,21 +64,14 @@ class PhoWhisperAsr:
             pipe = self._load()
             out = pipe(
                 {"raw": wave.astype(np.float32), "sampling_rate": sample_rate},
-                return_timestamps=True,
+                # Segment-level timestamps (True) can yield one multi-minute
+                # text block. Whisper supports aligned word timestamps, so
+                # group only real timed words into readable spans.
+                return_timestamps="word",
                 generate_kwargs={"language": "vi", "task": "transcribe"},
             )
-        segments: list[Segment] = []
-        chunks = out.get("chunks") or []
-        for i, ch in enumerate(chunks):
-            text = (ch.get("text") or "").strip()
-            start, end = ch.get("timestamp") or (None, None)
-            if not text:
-                continue
-            start = float(start or 0.0)
-            if end is None:  # last chunk may be open-ended
-                end = float(chunks[i + 1]["timestamp"][0]) if i + 1 < len(chunks) and chunks[i + 1]["timestamp"][0] is not None else duration
-            end = min(float(end), duration)
-            if end <= start:
-                end = min(start + 0.5, duration)
-            segments.append(Segment(round(start, 2), round(end, 2), text))
-        return segments
+        try:
+            return timestamped_asr_spans(out.get("chunks") or [], duration)
+        except ValueError as exc:
+            # Never invent timestamps by dividing a long text by word count.
+            raise ModelNotReady("PhoWhisper word alignment failed: " + str(exc)) from exc
