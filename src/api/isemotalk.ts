@@ -67,6 +67,7 @@ export interface CallItem {
   utteranceCount: number
   reviewedCount: number
   updatedAt: string
+  qaTriage?: { label: 'routine' | 'needs_attention'; score: number; outdated: boolean; truncated: boolean } | null
 }
 
 export type StageKey = 'validate' | 'transcribe' | 'diarize' | 'emotion' | 'finalize'
