@@ -81,9 +81,10 @@ export function GuidePage() {
         {[
           {name: 'PhoWhisper · ASR',status:'Có code chạy thật',detail:'Đổi ghi âm thành chữ. Độ chính xác trên cuộc gọi phải đo bằng transcript chuẩn. Mono audio không tự phân biệt nhân viên và khách.'},
           {name:'XLM-R · Sàng lọc',status:'Có model thật, giới hạn dữ liệu',detail:'Phân loại văn bản tổng hợp OneVoice thành thông thường / cần chú ý. Đây không phải điểm chất lượng nhân viên.'},
-          {name:'Diarization · Tách người nói',status:'Chưa triển khai hoàn chỉnh',detail:'Các đoạn audio mới hiện chưa được AI tự gán vai trò Agent/Customer. Không được xem các khung thời gian như lượt thoại.'},
-          {name:'SER · Theo dõi cảm xúc',status:'Chưa có đầu ra F4 đã xác minh',detail:'Không hiển thị biểu đồ cảm xúc hoặc kết luận khách giận khi model chưa thật sự chạy.'},
-          {name:'LLM · Tóm tắt nguyên nhân',status:'Chưa triển khai',detail:'Định hướng tiếp theo là tóm tắt có trích đoạn bằng chứng, không bịa đánh giá 10/10.'},
+          {name:'Diarization · Tách người nói',status:'Code đã tích hợp · chỉ chạy sau khi stage Pyannote',detail:'Community-1 nhận diện nhóm giọng ẩn danh A/B theo thời gian. QA nghe để xác nhận ai là Agent/Customer. Các cửa sổ nhiều giọng để nguyên là chưa rõ.'},
+          {name:'SER F4 · Theo dõi cảm xúc',status:'Đã nối checkpoint gate · chưa có xác minh FTISU',detail:'Biểu đồ thời gian chỉ xuất hiện khi checkpoint F4 gốc được tìm, xác minh và chạy thật trên ghi âm. Không tự bịa cảm xúc từ XLM-R.'},
+          {name:'LLM · Tóm tắt nguyên nhân',status:'Có API local · cần Qwen chạy thật trên FTISU',detail:'Khi Qwen nội bộ đã bật, người QA bấm phân tích để nhận nguyên nhân, coaching và bấm nghe đoạn làm chứng cứ. Không gửi audio lên cloud và không tự tạo điểm 10/10.'},
+          {name:'Rubric QA · Chấm thủ công',status:'Đã tích hợp trên hồ sơ cuộc gọi',detail:'Năm tiêu chí 15/25/20/25/15 có bằng chứng. Thiếu quy trình hoặc CRM thì giữ Chưa đủ bằng chứng; QA lưu kết luận qua nút Lưu đánh giá QA.'},
         ].map(item => <div key={item.name} className="grid gap-2 py-3 sm:grid-cols-[12rem_minmax(0,1fr)]">
           <div><p className="font-semibold text-slate-900">{item.name}</p><p className="mt-1 text-xs text-slate-600">{item.status}</p></div>
           <p className="leading-6 text-slate-700">{item.detail}</p>
