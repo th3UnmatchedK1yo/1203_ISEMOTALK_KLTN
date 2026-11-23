@@ -47,7 +47,8 @@ export function CallsPage() {
     const controller = new AbortController()
     void getSystemStatus(controller.signal)
       .then(health => {
-        if (!controller.signal.aborted) setQaReady(health.inference.reachable === true && health.inference.qa?.ready === true)
+        if (!controller.signal.aborted) setQaReady(health.inference.reachable === true && health.automation?.qa === true &&
+          health.inference.qa?.ready === true && health.inference.qa.loaded === true)
       })
       .catch(() => { if (!controller.signal.aborted) setQaReady(false) })
     return () => controller.abort()
