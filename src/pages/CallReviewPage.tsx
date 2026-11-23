@@ -244,6 +244,7 @@ function CallReviewSession({ callId }: { callId: string }) {
   const displayedTurns = sourceDialogue ? sourceDialogueTurns(form?.utterances[call.utterances[0].id]?.text ?? call.utterances[0].text).length : call.utterances.length
   const noteIsImportedProvenance = call.provenance === 'imported' && call.reviewStatus !== 'reviewed' &&
     (form?.overallNote ?? '').startsWith('NGUỒN: ')
+  const hasEmotionEvidence = call.utterances.some(u => !!(u.acoustic || u.lexical || u.fused))
   const selected = call.utterances.find(u => u.id === selectedId) ?? null
   const selectedPatch = selected ? form?.utterances[selected.id] : undefined
   const selectedMoment = call.moments.find(moment => moment.id === selectedMomentId)
@@ -399,7 +400,7 @@ function CallReviewSession({ callId }: { callId: string }) {
             : <p role="status" className="rounded-xl border border-slate-200 bg-white p-4 text-sm leading-6 text-slate-700">Chưa có transcript để sàng lọc QA. Cần ASR thật hoặc transcript có căn cứ trước khi chạy phân loại.</p>)}
         </div>
         <section className="rounded-xl border border-[#c4d4dc] bg-white p-5 shadow-sm">
-          <h2 className="text-lg font-semibold text-[#12394d]">{sourceDialogue ? 'Đánh giá nghiệp vụ cuộc gọi' : 'Đánh giá từng câu'}</h2>
+          <h2 className="text-lg font-semibold text-[#12394d]">{sourceDialogue ? 'Đánh giá nghiệp vụ cuộc gọi' : hasEmotionEvidence ? 'Đối chiếu dự đoán cảm xúc' : 'Đối chiếu ASR (tùy chọn)'}</h2>
           {sourceDialogue ? <div className="mt-3 space-y-3 text-sm leading-6 text-slate-700">
             <p className="font-medium text-slate-800">Khi nghe, hãy kiểm tra:</p>
             <ul className="list-inside list-disc space-y-1 text-slate-700">
@@ -413,11 +414,14 @@ function CallReviewSession({ callId }: { callId: string }) {
             </a>
           </div> : !selected ? <p className="mt-3 text-slate-700">Chọn một câu từ transcript.</p> : <>
             <p className="mt-2 text-sm text-slate-600">Câu {selected.idx + 1} · {clock(selected.start)} · {speakerLabels[selectedPatch?.speaker ?? selected.speaker]}</p>
-            <div className="mt-4 space-y-3 rounded-lg bg-slate-50 p-4 text-sm">
+            {!hasEmotionEvidence && <p className="mt-3 rounded-lg bg-slate-50 p-3 text-sm leading-6 text-slate-700">
+              Chưa chạy SER trên bản ghi này. Không cần gán cảm xúc bằng tay để AI xử lý QA; chỉ sửa chữ hoặc vai trò người nói nếu nghe thấy ASR sai và có bằng chứng.
+            </p>}
+            {hasEmotionEvidence && <div className="mt-4 space-y-3 rounded-lg bg-slate-50 p-4 text-sm">
               {([['Âm thanh', selected.acoustic], ['Văn bản', selected.lexical], ['Kết hợp', selected.fused]] as const).map(([label, prediction]) =>
                 <div key={label} className="flex flex-wrap items-baseline justify-between gap-2"><span className="text-slate-700">{label}</span><strong className="text-slate-900">{prediction ? emotionLabels[prediction.emotion] + ' · ' + percent(prediction.confidence) : 'Chưa có đầu ra'}</strong></div>)}
               <p className="border-t border-slate-200 pt-3 leading-6 text-slate-600">Phần trăm là điểm của mô hình cho câu này, không phải độ chính xác đã được kiểm chứng. Nhánh chưa có đầu ra được để trống.</p>
-            </div>
+            </div>}
             {inputsChanged && <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm leading-6 text-amber-950">
               Transcript hoặc người nói đã được chỉnh sửa. Dự đoán vẫn dựa trên đầu vào ban đầu; mô hình chưa được chạy lại.
               {(selected.originalText !== undefined || selected.originalSpeaker !== undefined) && <details className="mt-2">
@@ -428,6 +432,7 @@ function CallReviewSession({ callId }: { callId: string }) {
             </div>}
             <fieldset disabled={editDisabled} className="mt-4 min-w-0 disabled:opacity-70">
               <legend className="sr-only">Quyết định của người đánh giá</legend>
+              {hasEmotionEvidence && <>
               <div className="flex flex-wrap gap-2">
                 <button type="button" disabled={!selected.fused} aria-pressed={selectedPatch?.decision === 'confirmed'}
                   onClick={() => edit(selected.id, { decision: 'confirmed', emotion: null })} className={button + (selectedPatch?.decision === 'confirmed' ? ' border-teal-700 bg-teal-50 text-teal-900' : '')}><Check size={17}/> Xác nhận dự đoán</button>
@@ -439,6 +444,7 @@ function CallReviewSession({ callId }: { callId: string }) {
                 <option value="" disabled>Chọn nhãn khác dự đoán…</option>
                 {allEmotions.filter(emotion => emotion !== selected.fused?.emotion).map(emotion => <option key={emotion} value={emotion}>{emotionLabels[emotion]}</option>)}
               </select>
+              </>}
               <label className="mt-4 block text-sm font-semibold" htmlFor="speaker-select">Người nói</label>
               <select id="speaker-select" className={input} value={selectedPatch?.speaker ?? selected.speaker} onChange={e => edit(selected.id, { speaker: e.target.value as 'agent' | 'customer' | 'unknown' })}>
                 <option value="unknown">Chưa xác định</option><option value="agent">Nhân viên</option><option value="customer">Khách hàng</option>
