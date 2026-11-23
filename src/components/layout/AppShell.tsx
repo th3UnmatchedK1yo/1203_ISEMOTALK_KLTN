@@ -1,11 +1,12 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { Link, useLocation } from 'react-router-dom'
-import { Headphones, BarChart3, Menu, X, ListChecks, UploadCloud, BookOpen, BriefcaseBusiness, ChevronDown, CircleCheck, AlertCircle } from 'lucide-react'
+import { Headphones, BarChart3, Menu, X, ListChecks, UploadCloud, BookOpen, BriefcaseBusiness, ChevronDown, CircleCheck, AlertCircle, ScanSearch } from 'lucide-react'
 import { getSystemStatus } from '@/api/isemotalk'
 
 interface AppShellProps { children: ReactNode }
 
 const navItems = [
+  { path: '/scan', label: 'Chạy AI', icon: ScanSearch },
   { path: '/calls', label: 'Cuộc gọi', icon: ListChecks },
   { path: '/cases', label: 'Vụ việc', icon: BriefcaseBusiness },
   { path: '/analytics', label: 'Phân tích', icon: BarChart3 },
