@@ -75,7 +75,7 @@ export function AnalyticsPage() {
       <section className="rounded-xl border border-slate-200 bg-white p-5 sm:p-6" aria-labelledby="qa-coverage-title">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h2 id="qa-coverage-title" className="text-lg font-bold text-[#12394d]">XLM-R đã chấm bao nhiêu cuộc gọi?</h2>
+            <h2 id="qa-coverage-title" className="text-lg font-bold text-[#12394d]">XLM-R đã sàng lọc bao nhiêu cuộc gọi?</h2>
             <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-700">Chấm ở đây nghĩa là <strong>đã sàng lọc văn bản</strong>, không phải chấm chất lượng dịch vụ hay cảm xúc. Mỗi hồ sơ đủ điều kiện có thể có một chỉ số từ XLM-R.</p>
           </div>
           <Link to="/calls" className="inline-flex items-center gap-1.5 text-sm font-bold text-teal-800 hover:underline">Mở hàng đợi QA <ArrowRight size={16}/></Link>
