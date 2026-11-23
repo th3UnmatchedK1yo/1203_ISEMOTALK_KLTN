@@ -12,6 +12,9 @@ const qaMode = process.argv.slice(2).includes('--qa')
 if(process.argv.slice(2).some(x => !['--preview','--qa'].includes(x)) || (previewOnly && qaMode))
  throw Error('Use --preview for API-only, --qa for genuine QA/optional ASR, or no flag for verified full ASR+SER.')
 const port = Number(process.env.ISEMO_REMOTE_API_PORT || '13001')
+const webPort = Number(process.env.ISEMO_WEB_PORT || '5173')
+if(!Number.isInteger(webPort)||webPort<1024||webPort>65535||webPort===port)
+  throw Error('ISEMO_WEB_PORT must be a separate local web port.')
 if(!Number.isInteger(port)||port<1024||port>65535)throw Error('ISEMO_REMOTE_API_PORT must be a local unprivileged port.')
 const base = 'http://127.0.0.1:'+port
 if(!existsSync(resolve(root,'dist/index.html')))throw Error('Missing dist. Run npm run build first.')
@@ -51,10 +54,10 @@ if(!previewOnly) {
  console.warn('[FRONTEND PREVIEW ONLY] GPU training may be running; no ASR/SER/QA accuracy or end-to-end readiness is asserted.')
  console.warn('[FRONTEND PREVIEW ONLY] Calls, cases and SQLite UI can be exercised. Uploaded audio will NOT be processed until genuine inference is online.')
 }
-console.log('[remote-web] Open http://127.0.0.1:5173 (keep tunnel running).')
+console.log('[remote-web] Open http://127.0.0.1:'+webPort+' (keep tunnel running).')
 const vite = resolve(root,'node_modules/vite/bin/vite.js')
 if(!existsSync(vite))throw Error('Vite missing. Run npm ci after stopping old Node processes.')
-const child=spawn(process.execPath,[vite,'preview','--host','127.0.0.1','--port','5173','--strictPort'],{
+const child=spawn(process.execPath,[vite,'preview','--host','127.0.0.1','--port',String(webPort),'--strictPort'],{
  cwd:root,env:{...process.env,ISEMO_WEB_API_TARGET:base},stdio:'inherit',shell:false
 })
 const shutdown=signal=>{if(child.exitCode===null && child.signalCode===null)child.kill(signal)}
