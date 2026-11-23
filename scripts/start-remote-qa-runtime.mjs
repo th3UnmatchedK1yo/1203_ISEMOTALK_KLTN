@@ -60,8 +60,24 @@ if (asrRequested || autoAsr) {
     asrEnabled = true
   } catch {
     if (asrRequested) throw Error('Pinned PhoWhisper-base missing; cannot provide real ASR. Stage the exact model before --asr.')
-    console.warn('[oneclick] Pinned PhoWhisper not cached: continuing with REAL QA over source transcripts. No ASR or SER is fabricated.')
-    asrEnabled = false
+    // One-click mode attempts to stage ONLY the pinned ASR model once,
+    // with a free-disk preflight in stage_asr_demo.py. Never download a
+    // substitute or silently present a simulated transcript.
+    try {
+      console.log('[oneclick] PhoWhisper not cached; staging pinned ASR checkpoint on FTISU (free-space guarded).')
+      execFileSync(python, ['scripts/stage_asr_demo.py'], {
+        cwd: join(root, 'inference'), stdio: 'inherit', timeout: 240000,
+        env: { ...process.env, HF_HUB_OFFLINE: '0', TRANSFORMERS_OFFLINE: '0' },
+      })
+      execFileSync(python, ['-c', `from huggingface_hub import snapshot_download; snapshot_download(repo_id="vinai/PhoWhisper-base", revision="${revision}", local_files_only=True)`], {
+        stdio: 'inherit', timeout: 15000,
+      })
+      asrEnabled = true
+    } catch (stageError) {
+      console.warn('[oneclick] ASR could not be staged: ' + (stageError instanceof Error ? stageError.message : String(stageError)))
+      console.warn('[oneclick] Continuing with REAL text QA only. Upload WAV requires an accompanying timestamped transcript until ASR is available.')
+      asrEnabled = false
+    }
   }
 }
 const env = {
