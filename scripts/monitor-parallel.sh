@@ -33,6 +33,24 @@ for seed in 2026 2027 2028; do
   fi
 done
 echo
+echo "===== QA REPLICATION RUNNER ====="
+runner="$BASE/logs/experiments/runner.log"
+if [[ -r "$runner" ]]; then
+  tail -n 14 "$runner"
+else
+  echo "No runner.log found (not started or redirected elsewhere)."
+fi
+echo
+echo "===== QA BASELINE REPORTS ====="
+for seed in 2026 2027 2028; do
+  baseline="$BASE/logs/experiments/baselines-seed$seed.json"
+  if [[ -s "$baseline" ]]; then
+    echo "seed $seed: baseline report present ($baseline)"
+  else
+    echo "seed $seed: baseline not yet available"
+  fi
+done
+echo
 echo "===== REMOTE API PREVIEW ====="
 curl -sS --max-time 2 -o /dev/null -w 'HTTP %{http_code}\n' http://127.0.0.1:3101/api/system/status || true
 echo
