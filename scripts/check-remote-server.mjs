@@ -32,7 +32,11 @@ const py = process.env.ISEMO_PYTHON || resolve(root,'inference/.venv/bin/python'
 if (!existsSync(py)) problems.push('Python inference environment does not exist: '+py+'; create/use an approved GPU Python venv.')
 if (!existsSync(resolve(root,'node_modules'))) problems.push('Node modules missing; run npm ci on the server.')
 if (uploads && resolve(uploads) !== resolve(data, 'uploads')) problems.push('ISEMO_UPLOADS_DIR must match ISEMO_DATA_DIR/uploads.')
-if (process.env.PORT && process.env.PORT !== '3001') problems.push('This local SSH-forward setup expects API port 3001.')
+// Node API defaults to 3101 because the shared training host may already use 3001.
+const apiPort = Number(process.env.PORT || '3101')
+if (!Number.isInteger(apiPort) || apiPort < 1024 || apiPort > 65535 || apiPort === 8001)
+  problems.push('PORT must be a valid, distinct, unprivileged local API port (default 3101).')
+console.log('Planned loopback API port:', process.env.PORT || '3101', '| Python inference:', 8001)
 if (process.env.INFERENCE_URL && process.env.INFERENCE_URL !== 'http://127.0.0.1:8001') problems.push('Inference must run on same host at 127.0.0.1:8001.')
 try {
   const info = execFileSync('nvidia-smi', ['--query-gpu=name,memory.total,memory.free', '--format=csv,noheader'], {encoding:'utf8', timeout:5000}).trim()
