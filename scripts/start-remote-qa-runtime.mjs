@@ -124,19 +124,24 @@ if (asrRequested || autoAsr) {
 const diarSelection = join(home, '.local/share/isemotalk-diar/selected.json')
 let diarDir = ''
 let diarRevision = ''
+let diarWorker = ''
 if (existsSync(diarSelection)) {
   const d = JSON.parse(readFileSync(diarSelection,'utf8'))
   if (d?.model_id !== 'pyannote/speaker-diarization-community-1' ||
       typeof d.revision !== 'string' || !/^[a-f0-9]{40}$/.test(d.revision) ||
       typeof d.local_dir !== 'string' ||
       !resolve(d.local_dir).startsWith(resolve(home) + '/') ||
+      typeof d.python_executable !== 'string' ||
+      !resolve(d.python_executable).startsWith(resolve(home) + '/') ||
+      !existsSync(resolve(d.python_executable)) ||
       !existsSync(join(resolve(d.local_dir),'config.yaml')))
     throw Error('Diarization selected.json invalid; cannot silently enable unverified voice roles.')
   diarDir = resolve(d.local_dir)
   diarRevision = d.revision
+  diarWorker = resolve(d.python_executable)
   // Heavy dependency may be missing in current inference venv: fail before
   // accepting uploads rather than claiming pyannote is running.
-  execFileSync(python,['-c','import pyannote.audio'],{stdio:'inherit',timeout:30000})
+  execFileSync(diarWorker,['-c','import pyannote.audio'],{stdio:'inherit',timeout:30000})
   console.log('[real-qa] Anonymous speaker A/B diarization enabled from local pinned Community-1.')
 }
 
@@ -198,6 +203,7 @@ const env = {
   ISEMO_LLM_MODEL: localLlmModel,
   ISEMO_DIARIZATION: diarDir ? 'pyannote' : 'none',
   ISEMO_DIARIZATION_MODEL_DIR: diarDir,
+  ISEMO_DIARIZATION_WORKER_PYTHON: diarWorker,
   ISEMO_DIARIZATION_REVISION: diarRevision,
   ISEMO_DIARIZATION_DEVICE: process.env.ISEMO_DIARIZATION_DEVICE === 'cuda' ? 'cuda' : 'cpu',
   ISEMO_ALLOW_UNVERIFIED: '0',
