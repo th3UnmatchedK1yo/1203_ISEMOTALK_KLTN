@@ -66,6 +66,8 @@ jobs:
           node --check scripts/start-remote-web.mjs
           node --check scripts/check-remote-models.mjs
           node --check scripts/check-remote-server.mjs
+          node --check scripts/start-remote-server.mjs
+          node --check scripts/remote-real-smoke.mjs
       - name: Build frontend
         run: npm run build
       - name: Typecheck backend
