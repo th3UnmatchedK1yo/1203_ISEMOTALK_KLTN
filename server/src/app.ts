@@ -138,6 +138,7 @@ export function createApp({ db, config, client, pipeline }: AppDeps) {
     if (previewOnly) return res.json({
       api: 'ok',
       previewOnly: true,
+      demoData: process.env.ISEMO_MIDTERM_DEMO === '1',
       inference: { reachable: false, error: 'Chế độ API-only preview: dịch vụ AI tạm dừng khi GPU đang huấn luyện.' },
     })
     try {
