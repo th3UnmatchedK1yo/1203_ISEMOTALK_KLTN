@@ -43,6 +43,7 @@ export interface DiarizeResult {
   speakers: Speaker[] // aligned with the request segments
   method: 'model' | 'mock' | 'none'
   detail?: string
+  turns?: Array<{ start: number; end: number; speakerId: 'A' | 'B' }>
   evidence?: InferenceEvidence
 }
 
