@@ -4,6 +4,7 @@ import { CallsPage } from './pages/CallsPage'
 import { CallReviewPage } from './pages/CallReviewPage'
 import { AnalyticsPage } from './pages/AnalyticsPage'
 import { UploadCallPage } from './pages/UploadCallPage'
+import { BatchScanPage } from './pages/BatchScanPage'
 import { ResearchPage } from './pages/ResearchPage'
 import { CasesPage } from './pages/CasesPage'
 import { NewCasePage } from './pages/NewCasePage'
@@ -17,6 +18,7 @@ function App() {
         <Route path="/" element={<CallsPage />} />
         <Route path="/calls" element={<CallsPage />} />
         <Route path="/calls/new" element={<UploadCallPage />} />
+        <Route path="/scan" element={<BatchScanPage />} />
         <Route path="/calls/:callId" element={<CallReviewPage />} />
         <Route path="/analytics" element={<AnalyticsPage />} />
         <Route path="/research" element={<ResearchPage />} />
