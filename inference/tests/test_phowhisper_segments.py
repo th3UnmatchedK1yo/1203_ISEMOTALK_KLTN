@@ -60,6 +60,7 @@ class TestWordAlignedSegments(unittest.TestCase):
         self.assertEqual(len(output), 2)
         self.assertEqual(pipe.kwargs["return_timestamps"], "word")
         self.assertEqual(pipe.kwargs["generate_kwargs"]["language"], "vi")
+        self.assertIs(pipe.kwargs["generate_kwargs"]["condition_on_prev_tokens"], False)
 
     def test_adapter_reports_missing_alignment_instead_of_faking_chat(self):
         asr = PhoWhisperAsr("vinai/PhoWhisper-base")
