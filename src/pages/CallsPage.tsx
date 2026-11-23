@@ -16,6 +16,7 @@ export function CallsPage() {
   const [provenance, setProvenance] = useState('')
   const [status, setStatus] = useState('')
   const [datasetScope, setDatasetScope] = useState<'business'|'speech_only'|'all'>('business')
+  const [listSort, setListSort] = useState<'qa_attention' | 'date'>('qa_attention')
   const [page, setPage] = useState(1)
   const [refresh, setRefresh] = useState(0)
   const [data, setData] = useState<CallList | null>(null)
@@ -32,7 +33,7 @@ export function CallsPage() {
     setLoading(true)
     setError('')
     return startPolling({
-      load: signal => getCalls({ search, priority, review, provenance, status, datasetScope, page, pageSize: 10 }, signal),
+      load: signal => getCalls({ search, priority, review, provenance, status, datasetScope, sort: listSort, page, pageSize: 10 }, signal),
       onData: next => { setData(next); setError(''); setLoading(false) },
       onError: failure => { setError(failure.message); setLoading(false) },
       shouldContinue: next => next.counts.processing > 0 || (qaReady && next.items.some(call =>
@@ -40,7 +41,7 @@ export function CallsPage() {
         (!call.qaTriage || call.qaTriage.outdated))),
       intervalMs: 4000,
     })
-  }, [search, priority, review, provenance, status, datasetScope, page, refresh, qaReady])
+  }, [search, priority, review, provenance, status, datasetScope, listSort, page, refresh, qaReady])
 
   useEffect(() => {
     const controller = new AbortController()
@@ -70,7 +71,13 @@ export function CallsPage() {
       <label className="relative block"><span className="sr-only">Tìm mã, tiêu đề hoặc khách hàng</span><Search aria-hidden="true" className="absolute left-3 top-3.5 text-slate-600" size={18}/>
         <input type="search" className="h-12 w-full rounded-lg border border-[#b5c9d2] bg-white pl-11 pr-4 text-base" placeholder="Tìm mã, tiêu đề, khách hàng…" value={searchInput} onChange={e => setSearchInput(e.target.value)}/>
       </label>
-      <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+      <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+        <label className="block text-sm font-semibold text-slate-700">Thứ tự xem xét
+          <select className={select} value={listSort} onChange={e => { setListSort(e.target.value as 'qa_attention' | 'date'); setPage(1) }}>
+            <option value="qa_attention">Gợi ý QA trước</option>
+            <option value="date">Cuộc gọi mới nhất</option>
+          </select>
+        </label>
         <label className="block text-sm font-semibold text-slate-700">Loại bản ghi<select className={select} value={datasetScope} onChange={e => { setDatasetScope(e.target.value as 'business'|'speech_only'|'all'); setPage(1) }}>
           <option value="business">Cuộc gọi CSKH / OneVoice</option>
           <option value="speech_only">Mẫu thử ASR / DataHive</option>
@@ -127,6 +134,6 @@ export function CallsPage() {
         <button type="button" disabled={loading || page * data.pageSize >= data.total} onClick={() => setPage(p => p + 1)} className="min-h-11 rounded-lg border border-slate-300 bg-white px-3 py-2 disabled:opacity-40">Sau</button>
       </div>
     </nav>}
-    <p className="text-sm leading-6 text-slate-600">Ưu tiên (SER) dựa trên các câu có vai trò khách hàng được xác định, còn “AI QA” là kết quả riêng của XLM-R phân loại transcript. Điểm model là gợi ý sàng lọc (với transcript dài có thể dùng điểm tối đa theo cửa sổ), không phải xác suất đã hiệu chuẩn hoặc kết luận nhân viên sai. Kết quả cũ khi sửa transcript sẽ được đánh dấu cần chạy lại.</p>
+    <p className="text-sm leading-6 text-slate-600">Thứ tự “Gợi ý QA trước” đưa cuộc gọi chưa được đánh giá có cảnh báo lên trước, sau đó là cuộc gọi chưa có kết quả model; người QA vẫn quyết định xử lý. Ưu tiên (SER) dựa trên các câu có vai trò khách hàng được xác định, còn “AI QA” là kết quả riêng của XLM-R phân loại transcript. Điểm model là gợi ý sàng lọc (với transcript dài có thể dùng điểm tối đa theo cửa sổ), không phải xác suất đã hiệu chuẩn hoặc kết luận nhân viên sai. Kết quả cũ khi sửa transcript sẽ được đánh dấu cần chạy lại.</p>
   </div>
 }
