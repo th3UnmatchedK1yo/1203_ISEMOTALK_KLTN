@@ -17,6 +17,7 @@ import { CallCaseLink } from '@/components/review/CallCaseLink'
 import { CallQaTriage } from '@/components/review/CallQaTriage'
 import { CallInferenceTrail } from '@/components/review/CallInferenceTrail'
 import { sourceDialogueTurns } from '@/lib/source-dialogue'
+import { speakerHintForInterval } from '@/lib/speaker-evidence'
 
 const allEmotions: Emotion[] = ['neutral', 'happy', 'sad', 'angry']
 const momentLabels: Record<string, string> = {
@@ -250,6 +251,8 @@ function CallReviewSession({ callId }: { callId: string }) {
   const selectedMoment = call.moments.find(moment => moment.id === selectedMomentId)
   const momentPatch = selectedMoment ? form?.moments[selectedMoment.id] : undefined
   const unknownCount = call.utterances.filter(u => u.speaker === 'unknown').length
+  const speakerTurns = call.stageLog.find(step => step.stage === 'diarize')?.evidence?.speakerTurns ?? []
+  const speakerGroups = new Set(speakerTurns.map(turn => turn.speakerId))
   const reviewStatus = call.reviewStatus === 'reviewed' ? 'Đã xem xét' : call.reviewStatus === 'in_progress' ? 'Đang xem xét' : 'Chưa xem xét'
   const inputsChanged = selected && (selected.fused || selected.lexical || selected.acoustic) && (
     selected.predictionInputChanged || selected.textEdited || selected.speakerEdited
@@ -379,13 +382,33 @@ function CallReviewSession({ callId }: { callId: string }) {
       <strong>{unknownCount} câu chưa xác định người nói.</strong> Những câu này không được tính vào cảm xúc khách hàng. Hãy nghe lại và gán vai trò nếu có căn cứ.
       {call.dominantEmotion === null && ' Chưa đủ dữ liệu để nhận định cảm xúc hoặc mức ưu tiên theo khách hàng.'}
     </p>}
+    {speakerTurns.length > 0 && unknownCount > 0 && <details className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm">
+      <summary className="cursor-pointer font-semibold text-[#12394d]">Pyannote phát hiện {speakerGroups.size} nhóm giọng (A/B) — xác nhận vai trò</summary>
+      <p className="mt-2 max-w-3xl leading-6 text-slate-700">Giọng A/B là các nhóm giọng do AI tách theo thời gian, <strong>chưa phải nhân viên/khách hàng</strong>. Với đoạn ASR 12 giây có nhiều giọng, hệ thống không ép gán. Hãy nghe thử cả hai giọng, rồi mới áp dụng một cách gán dưới đây. Những đoạn có bằng chứng lẫn giọng vẫn để chưa rõ.</p>
+      <div className="mt-3 flex flex-wrap gap-2">
+        {([['agent','customer','A = nhân viên, B = khách'],['customer','agent','A = khách, B = nhân viên']] as const).map(([aRole,bRole,label]) =>
+          <button key={label} className={button} type="button" onClick={() => {
+            if (!window.confirm('Bạn đã nghe và xác nhận vai trò của hai giọng? Chỉ các đoạn có bằng chứng rõ mới được gán; cần lưu đánh giá sau khi đối chiếu.')) return
+            updateForm(previous => {
+              const utterances = { ...previous.utterances }
+              for (const u of call.utterances) {
+                if (u.speaker !== 'unknown') continue
+                const hint = speakerHintForInterval(u.start,u.end,speakerTurns)
+                if (hint==='A' || hint==='B') utterances[u.id] = {...utterances[u.id],speaker:hint==='A'?aRole:bRole}
+              }
+              return {...previous, utterances}
+            })
+          }}>{label}</button>)}
+      </div>
+      <p className="mt-2 text-xs text-slate-500">Việc gán nhãn này là <strong>QA xác nhận</strong>, không được tính thành độ chính xác của diarization. Bản nháp sẽ được lưu bằng nút Lưu đánh giá QA.</p>
+    </details>}
     <div className="grid grid-cols-1 items-start gap-5 xl:grid-cols-[minmax(0,1.45fr)_minmax(360px,1fr)]">
       <div className="min-w-0 space-y-5">
         <div id="call-audio" className="scroll-mt-28">
           <CallRecording callId={call.id} audioUrl={call.audioUrl} duration={call.duration} utterances={call.utterances}
             seekRequest={seekRequest} onActiveChange={setActiveId} onSelect={selectUtterance}/>
         </div>
-        <TranscriptList utterances={call.utterances} patches={form?.utterances ?? {}} selectedId={selectedId} activeId={activeId} onSelect={selectUtterance} sourceDialogue={sourceDialogue} transcriptFromAudio={call.source === 'upload'} timingMode={call.stageLog.find(step => step.stage === 'transcribe')?.evidence?.timingMode}/>
+        <TranscriptList utterances={call.utterances} patches={form?.utterances ?? {}} selectedId={selectedId} activeId={activeId} onSelect={selectUtterance} sourceDialogue={sourceDialogue} transcriptFromAudio={call.source === 'upload'} timingMode={call.stageLog.find(step => step.stage === 'transcribe')?.evidence?.timingMode} speakerTurns={speakerTurns}/>
       </div>
       <div className="min-w-0 space-y-5">
         <div id="call-ai" className="scroll-mt-28">
