@@ -90,6 +90,7 @@ ISEMO_SER_FACTORY=src.serq1.serving.f4_factory:build_model
 ISEMO_SER_CONFIG=$PACKAGE/ser_config.json
 ISEMO_ALLOW_UNVERIFIED=0
 ISEMO_DIARIZATION=none
+ISEMO_QA_MODEL_DIR=$HOME/services/isemotalk-private/models/qa-xlm-r-seed2026-v1
 ISEMO_DATA_DIR=$HOME/services/isemotalk-data
 ISEMO_UPLOADS_DIR=$HOME/services/isemotalk-data/uploads
 EOF
