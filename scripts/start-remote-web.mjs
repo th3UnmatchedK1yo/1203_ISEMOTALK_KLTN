@@ -27,7 +27,7 @@ const comps=health.inference.components
 for(const kind of ['asr','ser']) {
  if(!comps?.[kind]?.ready || comps[kind].mock)throw Error('Refusing remote demo: '+kind+' model is not real and ready.')
 }
-if(comps.ser.verified!==true)console.warn('[remote-web] SER model is not marked verified. Check package identity + held-out samples before claiming genuine validated SER.')
+if(comps.ser.verified!==true)throw Error('SER not verified in this running inference process. Run package verification and actual real-audio smoke test on the GPU host before starting the web.')
 console.log('[remote-web] SSH tunnel OK; API + genuine model adapters reachable. Python and database are on the GPU server.')
 console.log('[remote-web] Open http://127.0.0.1:5173 (keep tunnel running).')
 const vite = resolve(root,'node_modules/vite/bin/vite.js')
