@@ -8,7 +8,9 @@ import { assertLocalDemoApiTarget } from './demo-build.mjs'
 
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)))
 const previewOnly = process.argv.slice(2).includes('--preview')
-if(process.argv.slice(2).some(x => x !== '--preview'))throw Error('Unsupported flag; use --preview only for parallel frontend checks.')
+const qaMode = process.argv.slice(2).includes('--qa')
+if(process.argv.slice(2).some(x => !['--preview','--qa'].includes(x)) || (previewOnly && qaMode))
+ throw Error('Use --preview for API-only, --qa for genuine QA/optional ASR, or no flag for verified full ASR+SER.')
 const port = Number(process.env.ISEMO_REMOTE_API_PORT || '13001')
 if(!Number.isInteger(port)||port<1024||port>65535)throw Error('ISEMO_REMOTE_API_PORT must be a local unprivileged port.')
 const base = 'http://127.0.0.1:'+port
@@ -27,6 +29,16 @@ try{
 if(health?.api!=='ok')throw Error('Remote Node API did not return its health contract.')
 if(!previewOnly) {
  if(!health?.inference?.reachable)throw Error('Remote Node API is not connected to its colocated Python inference.')
+ if(!health.inference.qa?.ready)throw Error('Trained CUDA XLM-R QA classifier is not ready.')
+ if(qaMode) {
+   const asr=health.inference.components?.asr
+   const ser=health.inference.components?.ser
+   if(!ser || ser.adapter!=='not_configured' || ser.mock || ser.ready)
+     throw Error('QA-only mode requires deliberately unavailable (not mock) SER.')
+   if(!asr || asr.mock || (asr.adapter!=='not_configured' && !asr.ready))
+     throw Error('QA-only mode requires genuine ready ASR, or explicit not_configured (never mock).')
+   console.log('[remote-web] Genuine QA model available, ASR='+asr.adapter+', SER intentionally unavailable; no fake emotion.')
+ } else {
  const comps=health.inference.components
  for(const kind of ['asr','ser']) {
   if(!comps?.[kind]?.ready || comps[kind].mock)throw Error('Refusing remote demo: '+kind+' model is not real and ready.')
@@ -34,6 +46,7 @@ if(!previewOnly) {
  if(comps.ser.verified!==true)throw Error('SER not verified in this running inference process. Run package verification and actual real-audio smoke test on the GPU host before starting the web.')
  if(!health.inference.qa?.ready)throw Error('Trained QA classifier not ready. Run bash scripts/train-callcenter-qa.sh on FTISU, then restart GPU services.')
  console.log('[remote-web] SSH tunnel OK; API + genuine model adapters reachable. Python and database are on the GPU server.')
+ }
 } else {
  console.warn('[FRONTEND PREVIEW ONLY] GPU training may be running; no ASR/SER/QA accuracy or end-to-end readiness is asserted.')
  console.warn('[FRONTEND PREVIEW ONLY] Calls, cases and SQLite UI can be exercised. Uploaded audio will NOT be processed until genuine inference is online.')
