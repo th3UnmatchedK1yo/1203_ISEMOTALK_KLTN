@@ -18,6 +18,7 @@ export class AutoQa {
   private abort: AbortController | null = null
   private stopped = false
   private warned = false
+  private lastScannedId = ''
 
   constructor(
     private db: DB,
@@ -69,9 +70,15 @@ export class AutoQa {
     if (this.stopped) return
     // Source imports may have been added to the database without passing the
     // normal audio pipeline. This bounded scan also heals after an API restart.
-    const rows = this.db.prepare(
-      "SELECT id FROM calls WHERE status='ready' AND provenance IN ('imported','real') ORDER BY created_at DESC LIMIT 200",
-    ).all() as Array<{id:string}>
+    const scan = this.db.prepare(
+      "SELECT id FROM calls WHERE status='ready' AND provenance IN ('imported','real') AND id > ? ORDER BY id ASC LIMIT 200",
+    )
+    let rows = scan.all(this.lastScannedId) as Array<{id:string}>
+    if (!rows.length) {
+      this.lastScannedId = ''
+      rows = scan.all(this.lastScannedId) as Array<{id:string}>
+    }
+    if (rows.length) this.lastScannedId = rows[rows.length - 1].id
     for (const row of rows) if (this.eligible(row.id)) this.pending.add(row.id)
     await this.pump()
   }
