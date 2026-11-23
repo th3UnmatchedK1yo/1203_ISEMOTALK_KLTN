@@ -497,9 +497,16 @@ function CallReviewSession({ callId }: { callId: string }) {
           </fieldset>
           <button type="button" onClick={() => void save()} disabled={!canSave} className={primaryButton + ' mt-5 w-full'}><Save size={18}/>{saving ? 'Đang lưu…' : 'Lưu đánh giá QA'}</button>
           {!dirty && call.status === 'ready' && <p className="mt-2 text-center text-xs text-slate-500">Nhập nhận xét hoặc thay đổi trạng thái để bật nút lưu.</p>}
-          {call.status === 'ready' && <a className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-teal-800 underline-offset-4 hover:underline" href={resolveApiUrl('/api/calls/' + encodeURIComponent(call.id) + '/export.csv')}><Download size={17}/> Xuất kết quả CSV đã lưu</a>}
-          {call.status === 'ready' && <a className="mt-3 block text-sm font-semibold text-teal-800 underline-offset-4 hover:underline" href={resolveApiUrl('/api/calls/' + encodeURIComponent(call.id) + '/export.json')}>Tải bằng chứng và đầu vào gốc (JSON)</a>}
-          {dirty && <p className="mt-2 text-sm text-slate-600">Tệp xuất chỉ gồm dữ liệu đã lưu; bản nháp chưa được đưa vào.</p>}
+          {call.status === 'ready' && <details className="mt-4 border-t border-slate-100 pt-3">
+            <summary className="cursor-pointer text-xs font-semibold text-slate-700">Xuất kết quả hoặc bằng chứng gốc</summary>
+            <div className="mt-3 space-y-2">
+              <a className="inline-flex items-center gap-2 text-sm font-semibold text-teal-800 hover:underline" href={resolveApiUrl('/api/calls/' + encodeURIComponent(call.id) + '/export.csv')}>
+                <Download size={16}/> Xuất đánh giá đã lưu (CSV)
+              </a>
+              <a className="block text-sm font-semibold text-teal-800 hover:underline" href={resolveApiUrl('/api/calls/' + encodeURIComponent(call.id) + '/export.json')}>Tải bằng chứng gốc và lịch sử (JSON)</a>
+            </div>
+            {dirty && <p className="mt-2 text-xs text-slate-600">Tệp xuất chỉ gồm dữ liệu đã lưu, chưa bao gồm bản nháp.</p>}
+          </details>}
         </section>
       </div>
     </div>
