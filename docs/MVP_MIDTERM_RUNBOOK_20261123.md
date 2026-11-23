@@ -59,7 +59,7 @@ git pull --ff-only origin feat/remote-gpu-full-pipeline-20261123
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\start-vscode-preview.ps1 -LocalPort 13001
 ```
 
-Lenh nay build va chi chay frontend, mo `http://127.0.0.1:5173`. Giu terminal foreground. Neu local co file chua commit, khong reset/clean/force checkout; `db-check-result.json` untracked duoc giu.
+Lenh nay build va chi chay frontend, mo `http://127.0.0.1:5173`. Giu terminal foreground. Sau do mo **PowerShell thu hai** tai repo Windows va chay `npm run remote:mvp-check` de kiem tra read-only API, SQLite contracts, frontend HTML va Vite /api proxy qua tunnel. Lenh kiem tra khong ghi DB, khong goi Python va khong can GPU. Neu local co file chua commit, khong reset/clean/force checkout; `db-check-result.json` untracked duoc giu.
 
 ## D. Kich ban MVP khong model, khong GPU — 4 den 6 phut
 
