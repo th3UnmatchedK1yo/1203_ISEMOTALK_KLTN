@@ -15,6 +15,7 @@ import { TranscriptList } from '@/components/review/TranscriptList'
 import { CallWorkflowPanel } from '@/components/review/CallWorkflowPanel'
 import { CallCaseLink } from '@/components/review/CallCaseLink'
 import { CallQaTriage } from '@/components/review/CallQaTriage'
+import { CallInsightsPanel } from '@/components/review/CallInsightsPanel'
 import { CallInferenceTrail } from '@/components/review/CallInferenceTrail'
 import { sourceDialogueTurns } from '@/lib/source-dialogue'
 import { speakerHintForInterval } from '@/lib/speaker-evidence'
@@ -417,6 +418,7 @@ function CallReviewSession({ callId }: { callId: string }) {
                 autoEligible={call.provenance === 'real' || (call.provenance === 'imported' && call.title.startsWith('TTS TỔNG HỢP · OneVoice'))}/>
             : <p role="status" className="rounded-xl border border-slate-200 bg-white p-4 text-sm leading-6 text-slate-700">Chưa có transcript để sàng lọc QA. Cần ASR thật hoặc transcript có căn cứ trước khi chạy phân loại.</p>)}
         </div>
+        {call.status === 'ready' && call.utterances.length > 0 && <CallInsightsPanel callId={call.id} utterances={call.utterances} onEvidence={selectUtterance}/>}
         <section className="rounded-xl border border-[#c4d4dc] bg-white p-5 shadow-sm">
           <h2 className="text-lg font-semibold text-[#12394d]">{sourceDialogue ? 'Đánh giá nghiệp vụ cuộc gọi' : hasEmotionEvidence ? 'Đối chiếu dự đoán cảm xúc' : 'Đối chiếu ASR (tùy chọn)'}</h2>
           {sourceDialogue ? <div className="mt-3 space-y-3 text-sm leading-6 text-slate-700">
