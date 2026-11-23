@@ -22,6 +22,8 @@ type AudioReference = {
   revision: string
   origin: 'human_recording' | 'synthetic_speech'
   split: string
+  sourceQaLabel?: 0 | 1
+  employeeId?: string
 }
 const config = loadConfig()
 const home = process.env.HOME
@@ -101,23 +103,41 @@ function loadOneVoice(limit: number) {
       m.synthetic !== true || !validRevision(m.commit))
     throw Error('Refusing OneVoice without pinned synthetic-data provenance')
   const result: AudioReference[] = []
-  for (const item of lines(records)) {
-    if (result.length >= limit) break
-    const rel = String(item.audio_relpath || '')
-    const text = String(item.text || '').trim()
-    if (!rel || !text || text.length > 4000) continue
-    try {
-      const wav = boundedFile(root, rel)
-      const id = rel.replaceAll(/[\\/]+/g, '-')
-      result.push({
-        id, text, wav, dataset: 'nhatminh/OneVoice',
-        license: 'CC BY-NC-SA 4.0 (noncommercial)',
-        revision: String(m.commit), origin: 'synthetic_speech', split: 'source_metadata',
-        title: 'TTS TỔNG HỢP · OneVoice · ' + String(result.length + 1).padStart(2, '0'),
-      })
-    } catch (error) {
-      console.warn('[speech-demo] Skipping unavailable OneVoice audio', rel, String(error))
+  const rows = lines(records)
+  const seenAgents = new Set<string>()
+  const seenPaths = new Set<string>()
+  const counts = new Map<number, number>([[0, 0], [1, 0]])
+  const quota = Math.ceil(limit / 2)
+  // Deterministic, varied TTS agents and both dataset labels. A second pass
+  // allows repeats only if the available data cannot satisfy unique agents.
+  for (const uniqueOnly of [true, false]) {
+    for (const item of rows) {
+      if (result.length >= limit) break
+      const label = Number(item.label)
+      if ((label !== 0 && label !== 1) || (counts.get(label) ?? 0) >= quota) continue
+      const rel = String(item.audio_relpath || '')
+      const text = String(item.text || '').trim()
+      const employeeId = String(item.employee_id || '').trim()
+      if (!rel || !text || text.length > 4000 || seenPaths.has(rel)) continue
+      if (uniqueOnly && (!employeeId || seenAgents.has(employeeId))) continue
+      try {
+        const wav = boundedFile(root, rel)
+        const id = rel.replaceAll(/[\\/]+/g, '-')
+        result.push({
+          id, text, wav, dataset: 'nhatminh/OneVoice',
+          license: 'CC BY-NC-SA 4.0 (noncommercial)',
+          revision: String(m.commit), origin: 'synthetic_speech', split: 'source_metadata',
+          sourceQaLabel: label, employeeId,
+          title: 'TTS TỔNG HỢP · OneVoice · ' + String(result.length + 1).padStart(2, '0'),
+        })
+        seenPaths.add(rel)
+        if (employeeId) seenAgents.add(employeeId)
+        counts.set(label, (counts.get(label) ?? 0) + 1)
+      } catch (error) {
+        console.warn('[speech-demo] Skipping unavailable OneVoice audio', rel, String(error))
+      }
     }
+    if (result.length >= limit) break
   }
   return result
 }
@@ -169,7 +189,8 @@ try {
           detail: 'Tệp ghi âm nguồn ' + rec.dataset + ' / ' + rec.id +
             ' | split=' + rec.split + ' | revision=' + rec.revision +
             ' | audio_sha256=' + sourceHash + ' | license=' + rec.license +
-            ' | ' + (rec.origin === 'human_recording' ? 'GIỌNG NGƯỜI THẬT, KHÔNG PHẢI CUỘC GỌI CSKH' : 'GIỌNG TTS, KỊCH BẢN TỔNG ĐÀI') },
+            ' | ' + (rec.origin === 'human_recording' ? 'GIỌNG NGƯỜI THẬT, KHÔNG PHẢI CUỘC GỌI CSKH' : 'GIỌNG TTS, KỊCH BẢN TỔNG ĐÀI') +
+            (rec.sourceQaLabel === undefined ? '' : ' | nhãn needs_attention do dataset cung cấp=' + rec.sourceQaLabel + ' (KHÔNG PHẢI MODEL)') },
         { stage: 'transcribe', state: 'skipped', detail: 'Transcript nguồn có sẵn, KHÔNG chạy ASR; thời gian gán cho toàn bộ clip, không phải word/turn alignment' },
         { stage: 'diarize', state: 'skipped', detail: 'Không có speaker diarization/timestamp theo lượt; giữ unknown để tránh gán sai vai trò' },
         { stage: 'emotion', state: 'skipped', detail: 'SER KHÔNG chạy; không có nhãn cảm xúc hay confidence do model dự đoán' },
@@ -184,6 +205,7 @@ try {
           : 'Giọng nói TTS TỔNG HỢP theo kịch bản; KHÔNG phải cuộc gọi khách hàng thật.',
         'Transcript gốc của dataset (không phải ASR dự đoán).',
         'Chưa chạy mô hình SER; không có điểm cảm xúc được bịa.',
+        ...(rec.sourceQaLabel === undefined ? [] : ['Nhãn needs_attention gốc của OneVoice (KHÔNG phải dự đoán model): ' + rec.sourceQaLabel]),
       ].join('\n')
       db.transaction(() => {
         repo.insertCall(db, {
