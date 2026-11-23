@@ -19,8 +19,10 @@ class PhoWhisperAsr:
     name = "phowhisper"
     mock = False
 
-    def __init__(self, model_id: str, device: str = "auto") -> None:
+    def __init__(self, model_id: str, device: str = "auto", revision: str = "") -> None:
         self.model_id = model_id
+        self.revision = revision
+        self.model_identity = model_id + ("@" + revision if revision else "")
         self.device_pref = device
         self._pipe = None
         self._lock = threading.Lock()  # one GPU job at a time (RTX 3050 has 4 GB)
@@ -30,7 +32,7 @@ class PhoWhisperAsr:
             return Status(self.name, False, False,
                           "Chưa cài torch/transformers; xem docs/REAL_INFERENCE_SETUP.md và kiểm tra dung lượng/GPU trước khi cài.")
         state = "đã nạp" if self._pipe is not None else "sẽ nạp khi dùng lần đầu"
-        return Status(self.name, True, False, f"{self.model_id} ({state})")
+        return Status(self.name, True, False, f"{self.model_identity} ({state})")
 
     def _load(self):
         if self._pipe is not None:
@@ -47,6 +49,7 @@ class PhoWhisperAsr:
             self._pipe = pipeline(
                 "automatic-speech-recognition",
                 model=self.model_id,
+                revision=self.revision or None,
                 device=0 if use_cuda else -1,
                 torch_dtype=torch.float16 if use_cuda else torch.float32,
                 chunk_length_s=30,
