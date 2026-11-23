@@ -121,6 +121,9 @@ try{
    call: {title:'TTS TỔNG HỢP · OneVoice · CI UI FIXTURE'},
    utterances:[{
      speaker:'unknown',start:0,end:20,
+     // Results-import requires fused predictions; this is CI-only fake
+     // evidence used to exercise the UI, never a published AI result.
+     fused: {emotion:'neutral',confidence:0.6},
      text:'agent: Chào chị, em có thể hỗ trợ gì?\\ncustomer: Tôi không vào được tài khoản, xin kiểm tra giúp.\\nagent: Em sẽ kiểm tra và liên hệ lại.'
    }],
  })], {type:'application/json'}), 'onevoice-ui-fixture.json')
