@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # No-sudo, non-destructive setup for the GROUP GPU server.
-# Full mode: bash scripts/bootstrap-gpu-host.sh --with-ml
+# Training mode: --with-ml; later F4 research components: --with-f4
 # Does NOT change training venvs, open ports, or start services.
 set -Eeuo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -36,7 +36,7 @@ echo "[setup] Installing web/backend JavaScript dependencies in THIS checkout"
 npm ci --no-audit --no-fund
 npm run typecheck:server
 echo "[setup] JS dependencies and backend typecheck OK"
-if [[ $# -eq 0 || "$1" != "--with-ml" ]]; then
+if [[ $# -eq 0 || ( "$1" != "--with-ml" && "$1" != "--with-f4" ) ]]; then
   echo "[setup] Node ready. For isolated CUDA serving Python: bash scripts/bootstrap-gpu-host.sh --with-ml"
   exit 0
 fi
@@ -55,10 +55,14 @@ PY="$ROOT/inference/.venv/bin/python"
 # Research feature extractor pins. Official TorchAudio 2.11.1 has stable ABI
 # and supports PyTorch 2.11+ (incl 2.15) on Python 3.14. DO NOT pin 2.15.
 "$PY" -m pip install --no-cache-dir 'torch==2.15.0' 'torchaudio==2.11.1'
+# CUDA text QA training can succeed without optional FunASR/ModelScope.
 "$PY" -m pip install --no-cache-dir \
-  'transformers==5.15.0' 'funasr==1.4.2' 'modelscope==1.39.1' \
-  'accelerate>=1.0' 'scikit-learn>=1.4' 'sentencepiece>=0.2' \
-  'soundfile>=0.12' 'safetensors>=0.4'
+  'transformers==5.15.0' 'accelerate>=1.0' 'scikit-learn>=1.4' \
+  'sentencepiece>=0.2' 'soundfile>=0.12' 'safetensors>=0.4' 'huggingface_hub>=0.30'
+if [[ "$1" == "--with-f4" ]]; then
+  echo "[setup] Installing original SER extractor optional dependencies"
+  "$PY" -m pip install --no-cache-dir 'funasr==1.4.2' 'modelscope==1.39.1'
+fi
 "$PY" -m pip check
 "$PY" - <<'PY'
 import torch
