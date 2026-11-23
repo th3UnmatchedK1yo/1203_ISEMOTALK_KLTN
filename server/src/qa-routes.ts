@@ -5,6 +5,7 @@ import type { Config } from './config'
 import type { DB } from './db'
 import { HttpError } from './review'
 import * as repo from './repo'
+import type { AutoQa } from './auto-qa'
 
 // This is an AI suggestion, not a reviewer verdict. The SHA fingerprint
 // prevents changed transcript text from silently reusing old model evidence.
@@ -82,14 +83,15 @@ export async function predictAndStoreQa(
   return { result: stored(db, id), outdated: false, note: result.note }
 }
 
-export function attachQaTriageRoutes(app: Express, db: DB, config: Config) {
+export function attachQaTriageRoutes(app: Express, db: DB, config: Config, autoQa?: AutoQa | null) {
   app.get('/api/calls/:id/qa-triage', (req, res) => {
     const { hash } = makeInput(db, req.params.id)
     const result = stored(db, req.params.id)
     const legacyPrefixOnly = !!result?.truncated && !result.model.includes('/window-max-v2')
     res.json({ result, outdated: !!result && (legacyPrefixOnly ||
       (db.prepare('SELECT input_sha256 FROM qa_triage_results WHERE call_id=?')
-        .get(req.params.id) as { input_sha256: string }).input_sha256 !== hash) })
+        .get(req.params.id) as { input_sha256: string }).input_sha256 !== hash),
+      ...(autoQa ? { worker: autoQa.statusFor(req.params.id) } : {}) })
   })
 
   app.post('/api/calls/:id/qa-triage', async (req, res) => {
