@@ -60,7 +60,7 @@ npm run remote:qa-check
 npm run remote:web:qa
 ```
 
-Mở `http://127.0.0.1:5173`; chọn một **OneVoice** có transcript; bấm `Phân tích bằng model QA`. Đó là lần suy luận XLM-R thật từ model đã train, không phải label của dataset. Trang Calls có cột **AI QA** riêng với `P(cần xem)`; cột SER không hiện cảm xúc khi chưa chạy F4. Thay đổi transcript làm kết quả QA cũ **hết hiệu lực**, cần chạy lại. Lưu review/case/task vẫn làm như cũ.
+Mở `http://127.0.0.1:5173`; trong trang **Cuộc gọi**, bấm **`Chấm QA OneVoice trang này`** để xử lý lần lượt các cuộc gọi nguồn đang hiển thị bằng checkpoint XLM-R thật (không chạy trên DataHive/FOSD/FLEURS). Sau đó chọn một **OneVoice** có transcript để xem kết quả và có thể bấm `Phân tích bằng model QA` nếu muốn chạy lại một cuộc. Đó là lần suy luận XLM-R thật từ model đã train, không phải label của dataset. Trang Calls có cột **AI QA** riêng với `P(cần xem)`; cột SER không hiện cảm xúc khi chưa chạy F4. Thay đổi transcript làm kết quả QA cũ **hết hiệu lực**, cần chạy lại. Lưu review/case/task vẫn làm như cũ.
 
 LƯU Ý: QA có 3 seeds hoàn tất; default runtime sử dụng **seed 2026** để chạy demo nhất quán, không tự chọn seed 2027 chỉ vì điểm test cao nhất. Chênh lệch Precision@25 các seed cần thảo luận trong báo cáo.
 
