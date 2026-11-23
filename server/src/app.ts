@@ -138,6 +138,7 @@ export function createApp({ db, config, client, pipeline, autoQa }: AppDeps) {
   app.get('/api/system/status', async (_req, res) => {
     // These flags describe what the backend will automatically ATTEMPT,
     // not successful predictions. Runtime health exposes model readiness.
+    const runtimeCommit = /^[a-f0-9]{40}$/.test(process.env.ISEMO_RUNTIME_COMMIT || '') ? process.env.ISEMO_RUNTIME_COMMIT : null
     const automation = {
       qa: !previewOnly && process.env.ISEMO_QA_AUTOMATION === '1' && !!process.env.ISEMO_QA_MODEL_DIR,
       asr: !previewOnly && !['none', 'mock', ''].includes(process.env.ISEMO_ASR ?? ''),
@@ -146,7 +147,7 @@ export function createApp({ db, config, client, pipeline, autoQa }: AppDeps) {
     // During training, report a fast, explicit preview status without polling
     // an intentionally offline Python service or implying that it should start.
     if (previewOnly) return res.json({
-      api: 'ok',
+      api: 'ok', runtimeCommit,
       previewOnly: true,
       automation,
       demoData: process.env.ISEMO_MIDTERM_DEMO === '1',
@@ -154,13 +155,13 @@ export function createApp({ db, config, client, pipeline, autoQa }: AppDeps) {
       inference: { reachable: false, error: 'Chế độ API-only preview: dịch vụ AI chưa khởi động; chỉ phục vụ dữ liệu và giao diện, không chạy ASR/SER/QA.' },
     })
     try {
-      res.json({ api: 'ok', previewOnly: false,
+      res.json({ api: 'ok', runtimeCommit, previewOnly: false,
         automation,
         speechDemo: process.env.ISEMO_SPEECH_DEMO === '1',
         demoData: process.env.ISEMO_MIDTERM_DEMO === '1',
         inference: { reachable: true, ...(await client.health()) } })
     } catch (e) {
-      res.json({ api: 'ok', previewOnly: false,
+      res.json({ api: 'ok', runtimeCommit, previewOnly: false,
         automation,
         speechDemo: process.env.ISEMO_SPEECH_DEMO === '1',
         demoData: process.env.ISEMO_MIDTERM_DEMO === '1',
