@@ -28,6 +28,9 @@ type AudioReference = {
 const config = loadConfig()
 const home = process.env.HOME
 if (!home) throw Error('HOME missing')
+const expectedDataDir = path.resolve(home, 'services/isemotalk-speech-demo')
+if (process.env.ISEMO_SPEECH_DEMO !== '1' || path.resolve(config.dataDir) !== expectedDataDir)
+  throw Error('Refusing to import dataset WAVs outside isolated isemotalk-speech-demo workspace; launch npm run remote:speech-demo.')
 const datasetDir = path.resolve(home, 'services/isemotalk-private/datasets')
 const MAX_CLIP_BYTES = 30 * 1024 * 1024
 const MAX_DURATION = 240
