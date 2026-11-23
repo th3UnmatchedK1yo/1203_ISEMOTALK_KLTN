@@ -107,6 +107,7 @@ export interface SystemStatus {
   previewOnly?: boolean
   demoData?: boolean
   speechDemo?: boolean
+  automation?: { qa: boolean; asr: boolean; ser: boolean }
   inference: { reachable: boolean; error?: string } & Partial<InferenceHealth>
 }
 
