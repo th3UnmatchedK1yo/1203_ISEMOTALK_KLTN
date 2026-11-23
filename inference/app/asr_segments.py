@@ -8,9 +8,10 @@ from __future__ import annotations
 
 import math
 from collections.abc import Iterable
-from typing import Any
+from typing import Any, TYPE_CHECKING
 
-from .adapters.base import Segment
+if TYPE_CHECKING:
+    from .adapters.base import Segment
 
 MAX_WORDS = 25
 MAX_SECONDS = 12.0
@@ -61,6 +62,8 @@ def timestamped_asr_spans(chunks: Iterable[dict[str, Any]], duration: float) -> 
             raise ValueError("Whisper word timestamps are not chronological.")
         words.append((start, end, raw))
 
+    # Late import avoids a cycle when app.adapters imports asr_phowhisper.
+    from .adapters.base import Segment
     result: list[Segment] = []
     parts: list[str] = []
     begin, last_end = 0.0, 0.0
