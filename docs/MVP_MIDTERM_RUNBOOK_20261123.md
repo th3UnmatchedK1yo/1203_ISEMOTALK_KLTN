@@ -115,6 +115,27 @@ Khi QA train xong, FTISU đã có các file:
 - `~/services/isemotalk-private/datasets/onevoice`: 1.200 cuộc gọi TTS có lời thoại, nhãn QA của dataset (giả lập cuộc gọi, không phải khách hàng thật), CC BY-NC-SA 4.0.
 - `~/services/isemotalk-private/datasets/fpt-fosd-sample`: 100 đoạn thu âm giọng người thật (FOSD train), CC BY 4.0.
 - `~/services/isemotalk-private/datasets/fleurs-vi-test`: 120 đoạn thu âm tiếng Việt (FLEURS test), CC BY 4.0.
+- `~/services/isemotalk-private/datasets/datahive-vi-call-excerpts` (nếu tải thêm): bản ghi hai người gọi điện thật, chỉ lấy đoạn 90 giây, DataHive CC BY 4.0; không có transcript.
+
+### Nguồn cuộc gọi người thật 2 người (tùy chọn, nên dùng cho phần nghe)
+
+DataHive công khai mẫu hội thoại **điện thoại tự nhiên của hai người thật**, có sự đồng ý ghi âm, CC BY 4.0. **Không phải cuộc gọi chăm sóc khách hàng**, và nguồn không có transcript.
+
+Mày có thể tải một trích đoạn 90 giây (bắt đầu từ giây 30) về FTISU mà không dùng GPU bằng lệnh:
+
+```bash
+cd ~/services/isemotalk
+~/services/isemotalk-private/.venv-data/bin/python \
+  inference/scripts/download_real_phone_demo.py \
+  --output ~/services/isemotalk-private/datasets/datahive-vi-call-excerpts \
+  --count 1 --start 30 --seconds 90
+```
+
+Nguồn này ghi rõ URL, giấy phép, Hugging Face revision, SHA256 của MP3 nguồn và WAV trích đoạn. Nó chỉ dùng 1 tệp tiếng Việt từ repo `datahiveai/multilingual-conversations-sample`, không tải cả 19 giờ. WAV 16 kHz **stereo**, hai người nói tách kênh. Các nguồn audio/trích đoạn có bản quyền tương ứng; không đưa vào public GitHub.
+
+Sau khi tải, mở `npm run remote:speech-demo` như phía dưới; danh sách có mục **HỘI THOẠI ĐIỆN THOẠI THẬT · DataHive**. Nghe sẽ có hai giọng người thật, nhưng phần transcript và nhãn cảm xúc để trống cho đến khi mô hình được chạy thật.
+
+Nếu mạng Hugging Face bị lỗi, bản demo vẫn chạy được với OneVoice/FOSD/FLEURS đã lưu. Không thay bằng âm thanh hoặc transcript tự tạo.
 
 **Giữ nguyên bộ dữ liệu đã tải**, không download hay seed sóng giả. Lệnh dưới đây chép một số WAV nguồn vào một SQLite **riêng** (`~/services/isemotalk-speech-demo`). Trình phát nghe chính file WAV đó. Tệp nguồn giữ nguyên và hash SHA256 được ghi trong stage log. Transcript lấy trực tiếp từ dataset; ONE utterance đại diện toàn bộ recording (không phải ASR, không được xem là alignment đúng từng lượt). Không tự gán nhãn cảm xúc.
 
