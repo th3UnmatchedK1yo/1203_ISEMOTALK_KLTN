@@ -22,8 +22,16 @@ export function AppShell({ children }: AppShellProps) {
     getSystemStatus(controller.signal)
       .then(status => {
         if (controller.signal.aborted) return
-        if (status.speechDemo) {
-          setServiceNotice('DEMO CÓ TIẾNG NÓI: DataHive (nếu đã tải) là cuộc gọi người thật; OneVoice là hội thoại TTS; FOSD/FLEURS là giọng người thật. Chưa có suy luận ASR/SER/QA trên các bản ghi demo. Các nguồn không phải cuộc gọi CSKH thật.')
+        const qaReal = status.inference.reachable && status.inference.qa?.ready === true
+        const asrReal = status.inference.components?.asr?.ready === true &&
+          status.inference.components.asr.mock === false
+        const serUnavailable = status.inference.components?.ser?.adapter === 'not_configured'
+        if (qaReal && serUnavailable) {
+          setServiceNotice('CHẾ ĐỘ MODEL THẬT (một phần): XLM-R đang sẵn sàng phân loại QA từ transcript OneVoice. ' +
+            (asrReal ? 'PhoWhisper cũng sẵn sàng nhận dạng audio. ' : 'ASR chưa bật; audio đang dùng transcript nguồn. ') +
+            'SER fusion F4 chưa được xác minh nên không hiển thị cảm xúc giả. Dữ liệu OneVoice là hội thoại TTS, không phải cuộc gọi CSKH thực tế.')
+        } else if (status.speechDemo) {
+          setServiceNotice('DEMO CÓ TIẾNG NÓI: DataHive (nếu đã tải) là hội thoại người thật, OneVoice là cuộc gọi TTS, FOSD/FLEURS là đoạn nói người thật. Chưa chạy model trên các bản ghi nguồn.')
         } else if (status.demoData) {
           setServiceNotice('BẢN MẪU GIỮA KỲ: dữ liệu và cảm xúc đều mô phỏng; âm thanh chỉ là sóng âm tổng hợp, không có lời nói. Đây không phải dự đoán AI thật. GPU inference đang tạm dừng.')
         } else if (!status.inference.reachable) {
