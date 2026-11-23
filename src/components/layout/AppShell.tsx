@@ -22,7 +22,9 @@ export function AppShell({ children }: AppShellProps) {
     getSystemStatus(controller.signal)
       .then(status => {
         if (controller.signal.aborted) return
-        if (!status.inference.reachable) {
+        if (status.demoData) {
+          setServiceNotice('BẢN MẪU GIỮA KỲ: dữ liệu và cảm xúc đều mô phỏng; âm thanh chỉ là sóng âm tổng hợp, không có lời nói. Đây không phải dự đoán AI thật. GPU inference đang tạm dừng.')
+        } else if (!status.inference.reachable) {
           setServiceNotice('Chế độ giao diện/QA: API đã kết nối, nhưng dịch vụ AI chưa hoạt động. Không gửi audio để phân tích cho đến khi model chạy thật trên GPU.')
         } else if (status.inference.components?.asr?.mock || status.inference.components?.ser?.mock) {
           setServiceNotice('Dịch vụ đang dùng mô hình mô phỏng. Không sử dụng kết quả này làm số liệu nghiên cứu.')
