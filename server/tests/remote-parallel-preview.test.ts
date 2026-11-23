@@ -54,7 +54,9 @@ describe.skipIf(process.platform !== 'linux')('FTISU frontend/API parallel mode'
       await new Promise(r => setTimeout(r, 60))
     }
     expect(body?.api, output).toBe('ok')
+    expect(body?.previewOnly).toBe(true)
     expect(body?.inference?.reachable).toBe(false)
+    expect(body?.inference?.error).toContain('API-only preview')
     const response = await fetch('http://127.0.0.1:' + port + '/api/calls')
     const calls = await response.json() as {total:number}
     expect(calls.total).toBe(0)
