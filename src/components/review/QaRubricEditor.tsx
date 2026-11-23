@@ -54,8 +54,8 @@ export function QaRubricEditor({utterances,disabled,onApply,onEvidence}:{
               if(u)onEvidence(u.id,u.start)
             }}>Nghe lại đoạn đã chọn</button>}
           <label className="mt-2 block text-xs font-semibold text-slate-600">
-            {c.source==='policy'?'Mã chính sách, bước bắt buộc và căn cứ xác minh':''
-              ||c.source==='crm'?'Mã CRM/kết quả xử lý đã xác minh':'Ghi chú căn cứ'}
+            {c.source==='policy'?'Mã chính sách, bước bắt buộc và căn cứ xác minh':
+              c.source==='crm'?'Mã CRM/kết quả xử lý đã xác minh':'Ghi chú căn cứ'}
             <textarea className="mt-1 block min-h-16 w-full rounded-md border border-slate-300 bg-white p-2 text-sm text-slate-900"
               value={value.note} maxLength={200}
               onChange={e=>set(c.id,{note:e.target.value})}
