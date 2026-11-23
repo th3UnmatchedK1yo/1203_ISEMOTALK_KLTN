@@ -15,6 +15,20 @@ const webPort = 5174 // separate from legacy 5173 preview
 const base = 'http://127.0.0.1:' + apiPort
 const url = 'http://127.0.0.1:' + webPort
 const owned = []
+let cleaned = false
+function cleanup() {
+  if (cleaned) return
+  cleaned = true
+  for (const child of owned.reverse()) {
+    if (child.exitCode === null && child.pid) {
+      try { child.kill() } catch { /* process already gone */ }
+    }
+  }
+}
+for (const signal of ['SIGINT', 'SIGTERM']) process.once(signal, () => {
+  cleanup()
+  process.exit(0)
+})
 const log = (message) => console.log('[ISEmoTalk] ' + message)
 const delay = ms => new Promise(resolveDelay => setTimeout(resolveDelay, ms))
 const logFile = name => join(logs, name + '.log')
@@ -113,6 +127,11 @@ async function main() {
   log('XLM-R QA thật đã kết nối. ASR: ' +
     (live.inference.components.asr.ready ? 'PhoWhisper thật' : 'chưa có checkpoint cached; dùng transcript nguồn') +
     '. SER: chưa xác minh, không dùng nhãn giả.')
+  if (await webAlive()) {
+    log('Giao diện đã mở sẵn; sử dụng phiên web đang hoạt động.')
+    spawn('explorer.exe', [url], {detached:true,stdio:'ignore'}).unref()
+    await new Promise(() => {})
+  }
   const web = start('web', process.execPath, ['scripts/start-remote-web.mjs', '--qa'], {
     env: {...process.env, ISEMO_REMOTE_API_PORT: String(apiPort), ISEMO_WEB_PORT: String(webPort)},
   })
@@ -136,5 +155,6 @@ async function main() {
 main().catch(error => {
   console.error('\n[ISEmoTalk] Không mở được phiên làm việc:', error.message)
   console.error('[ISEmoTalk] Không chuyển sang demo/mô phỏng khi model thật lỗi.')
+  cleanup()
   process.exitCode = 1
 })
