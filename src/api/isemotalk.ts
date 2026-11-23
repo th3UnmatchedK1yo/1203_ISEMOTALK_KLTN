@@ -140,6 +140,7 @@ export interface Analytics {
   totals: { calls: number; utterances: number; durationSeconds: number }
   status: { ready: number; processing: number; failed: number }
   provenance: { mock: number; real: number; imported: number; unknown: number }
+  qaTriage?: { eligible: number; scored: number; needsAttention: number; routine: number; waiting: number; needsRerun: number }
   review: { unreviewed: number; in_progress: number; reviewed: number; completionRate: number }
   priority: { high: number; medium: number; low: number; unknown?: number }
   customerEmotion: Record<Emotion, number>
