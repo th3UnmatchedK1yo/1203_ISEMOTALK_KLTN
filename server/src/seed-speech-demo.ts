@@ -133,10 +133,13 @@ function probe(wav: string) {
 function sha(file: string) {
   return createHash('sha256').update(fs.readFileSync(file)).digest('hex')
 }
+// Call-center conversations are the first items in the demo, even though
+// their speaking voices are synthesized. Human FOSD/FLEURS are short speech,
+// NOT customer-support conversations. Do not conflate the two data domains.
 const refs = [
-  ...loadRecorded('fpt-fosd-sample', 'doof-ferb/fpt_fosd', 'train', 7, 'FPT FOSD'),
+  ...loadOneVoice(12),
+  ...loadRecorded('fpt-fosd-sample', 'doof-ferb/fpt_fosd', 'train', 6, 'FPT FOSD'),
   ...loadRecorded('fleurs-vi-test', 'google/fleurs', 'test', 6, 'FLEURS vi'),
-  ...loadOneVoice(4),
 ]
 if (!refs.some(r => r.origin === 'human_recording'))
   throw Error('NO REAL HUMAN RECORDINGS: first run the existing FOSD/FLEURS dataset downloader. Never substitute tones or generated speech.')
@@ -158,12 +161,19 @@ try {
       const dst = path.join(dir, 'audio.wav')
       fs.copyFileSync(rec.wav, dst, fs.constants.COPYFILE_EXCL)
       if (sha(rec.wav) !== sha(dst)) throw Error('Source and imported audio SHA256 mismatch: ' + rec.id)
+      const sourceHash = sha(rec.wav)
+      // The stage log is immutable under ordinary review edits, unlike the
+      // editable overall note. Record evidence lineage here as well.
       const stages: StageEntry[] = [
-        { stage: 'validate', state: 'done', detail: 'File WAV gốc từ tập dữ liệu đã ghim revision; không tạo âm thanh giả' },
-        { stage: 'transcribe', state: 'skipped', detail: 'Transcript tham chiếu đi kèm nguồn dữ liệu, KHÔNG chạy ASR' },
-        { stage: 'diarize', state: 'skipped', detail: 'Không có vai trò nhân viên/khách hàng; giữ unknown' },
-        { stage: 'emotion', state: 'skipped', detail: 'Chưa chạy SER; không tự gán nhãn cảm xúc' },
-        { stage: 'finalize', state: 'done', detail: 'File tiếng nói + transcript tham chiếu, không có kết quả AI' },
+        { stage: 'validate', state: 'done',
+          detail: 'Tệp ghi âm nguồn ' + rec.dataset + ' / ' + rec.id +
+            ' | split=' + rec.split + ' | revision=' + rec.revision +
+            ' | audio_sha256=' + sourceHash + ' | license=' + rec.license +
+            ' | ' + (rec.origin === 'human_recording' ? 'GIỌNG NGƯỜI THẬT, KHÔNG PHẢI CUỘC GỌI CSKH' : 'GIỌNG TTS, KỊCH BẢN TỔNG ĐÀI') },
+        { stage: 'transcribe', state: 'skipped', detail: 'Transcript nguồn có sẵn, KHÔNG chạy ASR; thời gian gán cho toàn bộ clip, không phải word/turn alignment' },
+        { stage: 'diarize', state: 'skipped', detail: 'Không có speaker diarization/timestamp theo lượt; giữ unknown để tránh gán sai vai trò' },
+        { stage: 'emotion', state: 'skipped', detail: 'SER KHÔNG chạy; không có nhãn cảm xúc hay confidence do model dự đoán' },
+        { stage: 'finalize', state: 'done', detail: 'Phát WAV từ dataset và hiển thị transcript gốc; không phải end-to-end AI' },
       ]
       const note = [
         'NGUỒN: ' + rec.dataset + ' · ' + rec.split,
