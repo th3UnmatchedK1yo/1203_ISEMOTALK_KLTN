@@ -21,7 +21,7 @@ export function installQaSchema(db: DB): void {
 
 export function qaSchemaProblems(db: DB): string[] {
   const item = db.prepare("SELECT sql FROM sqlite_master WHERE name=? AND type='table'").get(QA_TABLE) as { sql: string } | undefined
-  const normalize = (value: string) => value.replace(/\\s+/g, ' ').trim()
+  const normalize = (value: string) => value.replace(/\s+/g, ' ').trim()
   return !item || normalize(item.sql) !== normalize(QA_SCHEMA)
     ? ['Missing or altered qa_triage_results table declaration'] : []
 }
