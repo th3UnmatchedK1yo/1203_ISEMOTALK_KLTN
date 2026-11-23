@@ -120,6 +120,46 @@ if (asrRequested || autoAsr) {
   }
 }
 
+// Optional real diarization: user must stage and smoke-test Community-1.
+const diarSelection = join(home, '.local/share/isemotalk-diar/selected.json')
+let diarDir = ''
+let diarRevision = ''
+if (existsSync(diarSelection)) {
+  const d = JSON.parse(readFileSync(diarSelection,'utf8'))
+  if (d?.model_id !== 'pyannote/speaker-diarization-community-1' ||
+      typeof d.revision !== 'string' || !/^[a-f0-9]{40}$/.test(d.revision) ||
+      typeof d.local_dir !== 'string' ||
+      !resolve(d.local_dir).startsWith(resolve(home) + '/') ||
+      !existsSync(join(resolve(d.local_dir),'config.yaml')))
+    throw Error('Diarization selected.json invalid; cannot silently enable unverified voice roles.')
+  diarDir = resolve(d.local_dir)
+  diarRevision = d.revision
+  // Heavy dependency may be missing in current inference venv: fail before
+  // accepting uploads rather than claiming pyannote is running.
+  execFileSync(python,['-c','import pyannote.audio'],{stdio:'inherit',timeout:30000})
+  console.log('[real-qa] Anonymous speaker A/B diarization enabled from local pinned Community-1.')
+}
+
+// Optional F4 serving is enabled ONLY through existing held-out verification
+// and declared artifact hashes. It is never supplied by XLM-R or a mock head.
+const serSelection = join(home,'.local/share/isemotalk-ser/selected.json')
+let realSer = null
+if (existsSync(serSelection)) {
+  const v = JSON.parse(readFileSync(serSelection,'utf8'))
+  if (typeof v?.factory !== 'string' || !/^[a-zA-Z_]\w*(\.[a-zA-Z_]\w*)*:[a-zA-Z_]\w*$/.test(v.factory) ||
+      typeof v?.config !== 'string' || !resolve(v.config).startsWith(resolve(home) + '/') ||
+      !existsSync(resolve(v.config)))
+    throw Error('Invalid F4 selection manifest. Re-verify the authentic private checkpoint.')
+  const check = "from pathlib import Path;from app.adapters.ser_checkpoint import read_verification;" +
+    "ok,why=read_verification(Path(" + JSON.stringify(resolve(v.config)) + "), " + JSON.stringify(v.factory) + ");" +
+    "print(why);assert ok, why"
+  execFileSync(python,['-c',check],{
+    cwd:join(root,'inference'),stdio:'inherit',timeout:120000,
+    env:{...process.env,PYTHONPATH:join(root,'inference')},
+  })
+  realSer={factory:v.factory,config:resolve(v.config)}
+  console.log('[real-qa] Verified four-class SER package selected. This is NOT validation on real call-center speech.')
+}
 const env = {
   ...process.env,
   ISEMO_RUNTIME_COMMIT: runtimeCommit,
@@ -138,9 +178,14 @@ const env = {
   ISEMO_ASR_MODEL: asrModel,
   ISEMO_ASR_REVISION: asrRevision,
   ISEMO_ASR_DEVICE: 'cuda',
-  ISEMO_SER: 'none',
+  ISEMO_SER: realSer ? 'checkpoint' : 'none',
+  ISEMO_SER_FACTORY: realSer?.factory || '',
+  ISEMO_SER_CONFIG: realSer?.config || '',
   ISEMO_AUTO_QA_REAL_MODEL_ONLY: '1',
-  ISEMO_DIARIZATION: 'none',
+  ISEMO_DIARIZATION: diarDir ? 'pyannote' : 'none',
+  ISEMO_DIARIZATION_MODEL_DIR: diarDir,
+  ISEMO_DIARIZATION_REVISION: diarRevision,
+  ISEMO_DIARIZATION_DEVICE: process.env.ISEMO_DIARIZATION_DEVICE === 'cuda' ? 'cuda' : 'cpu',
   ISEMO_ALLOW_UNVERIFIED: '0',
   HF_HUB_OFFLINE: '1',
   TRANSFORMERS_OFFLINE: '1',
@@ -150,7 +195,8 @@ const env = {
 console.log('[real-qa] Express/SQLite: http://127.0.0.1:' + port + ' on ' + dataDir)
 console.log('[real-qa] Python: http://127.0.0.1:' + inferencePort + '; XLM-R QA trained checkpoint=' + qaModelDir)
 console.log('[real-qa] ASR=' + (asrEnabled ? 'pinned ' + asrModel + ' CUDA' : 'explicitly unavailable (use source transcript)'))
-console.log('[real-qa] SER=explicitly unavailable, no invented emotion/fusion. Real F4 requires separate verification.')
+console.log('[real-qa] DIARIZATION=' + (diarDir ? 'pinned Pyannote Community-1, anonymous A/B' : 'not configured, unknown speakers'))
+console.log('[real-qa] SER='+ (realSer ? 'verified private four-class model (needs real audio domain evaluation)' : 'unavailable, no invented emotion/fusion'))
 const commands = [
   { name: 'inference', command: 'node scripts/run-python.mjs -m uvicorn app.main:app --host 127.0.0.1 --port ' + inferencePort + ' --workers 1', env },
   { name: 'api', command: 'node --import tsx server/src/index.ts', env },
