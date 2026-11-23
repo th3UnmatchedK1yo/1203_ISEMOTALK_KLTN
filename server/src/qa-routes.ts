@@ -86,8 +86,10 @@ export function attachQaTriageRoutes(app: Express, db: DB, config: Config) {
   app.get('/api/calls/:id/qa-triage', (req, res) => {
     const { hash } = makeInput(db, req.params.id)
     const result = stored(db, req.params.id)
-    res.json({ result, outdated: !!result && (db.prepare('SELECT input_sha256 FROM qa_triage_results WHERE call_id=?')
-      .get(req.params.id) as { input_sha256: string }).input_sha256 !== hash })
+    const legacyPrefixOnly = !!result?.truncated && !result.model.includes('/window-max-v2')
+    res.json({ result, outdated: !!result && (legacyPrefixOnly ||
+      (db.prepare('SELECT input_sha256 FROM qa_triage_results WHERE call_id=?')
+        .get(req.params.id) as { input_sha256: string }).input_sha256 !== hash) })
   })
 
   app.post('/api/calls/:id/qa-triage', async (req, res) => {
