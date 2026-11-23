@@ -33,9 +33,9 @@ def _env(name: str, default: str = "") -> str:
 class Settings:
     # mock | real. "real" selects phowhisper + stereo + checkpoint unless a component is overridden.
     mode: str
-    asr: str  # mock | phowhisper | faster_whisper
+    asr: str  # mock | phowhisper | faster_whisper | none
     diarization: str  # mock | none | pyannote
-    ser: str  # mock | checkpoint
+    ser: str  # mock | checkpoint | none
     # Only audio under this directory may be read (the Express backend's upload folder).
     uploads_dir: Path
     asr_model: str
