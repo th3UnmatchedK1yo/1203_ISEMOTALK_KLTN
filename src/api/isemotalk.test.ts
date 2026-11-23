@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { getAnalytics, getCalls, getCall, getSystemStatus, uploadRecording, importAnalysis, resolveApiUrl, percent, saveReview } from './isemotalk'
+import { apiJson, getAnalytics, getCalls, getCall, getSystemStatus, uploadRecording, importAnalysis, resolveApiUrl, percent, saveReview } from './isemotalk'
 
 afterEach(() => vi.unstubAllGlobals())
 
@@ -119,6 +119,20 @@ describe('frontend API safety', () => {
     }))
     await expect(saveReview('CALL-0001', { baseVersion: 1, utterances: {}, moments: {} }))
       .rejects.toMatchObject({ status: 409, code: 'version_conflict' })
+  })
+
+  it.each([
+    ['CASE-000017', 'CASE-000017'],
+    ['CASE-1000000', 'CASE-1000000'],
+    ['CASE-000017/contacts', undefined],
+    [17, undefined],
+  ])('only exposes a valid case ID for conflict recovery (%s)', async (caseId, expected) => {
+    vi.stubGlobal('fetch', async () => Response.json(
+      { error: 'Already created', code: 'creation_request_conflict', caseId }, { status: 409 },
+    ))
+    await expect(apiJson('/api/cases')).rejects.toMatchObject({
+      status: 409, code: 'creation_request_conflict', caseId: expected,
+    })
   })
 
   it('shows missing or invalid scores as unavailable instead of a misleading percentage', () => {

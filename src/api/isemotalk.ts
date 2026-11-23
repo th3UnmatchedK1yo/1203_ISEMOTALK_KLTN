@@ -171,6 +171,7 @@ export class ApiError extends Error {
     message: string,
     public readonly status: number,
     public readonly code?: string,
+    public readonly caseId?: string,
   ) {
     super(message)
     this.name = 'ApiError'
@@ -226,7 +227,7 @@ export async function apiJson<T>(url: string, options: RequestInit = {}): Promis
   options.signal?.throwIfAborted()
 
   if (!response.ok) {
-    const errorBody = body as { error?: unknown; code?: unknown; details?: unknown } | null
+    const errorBody = body as { error?: unknown; code?: unknown; details?: unknown; caseId?: unknown } | null
     const details: string[] = []
     if (Array.isArray(errorBody?.details)) {
       for (const detail of errorBody.details) {
@@ -239,7 +240,8 @@ export async function apiJson<T>(url: string, options: RequestInit = {}): Promis
     }
     const summary = typeof errorBody?.error === 'string' ? errorBody.error : 'API trả lỗi HTTP ' + response.status + '.'
     throw new ApiError([summary, ...details.map(detail => '• ' + detail)].join('\n'), response.status,
-      typeof errorBody?.code === 'string' ? errorBody.code : undefined)
+      typeof errorBody?.code === 'string' ? errorBody.code : undefined,
+      typeof errorBody?.caseId === 'string' && /^CASE-[0-9]{6,19}$/.test(errorBody.caseId) ? errorBody.caseId : undefined)
   }
   if (body == null || typeof body !== 'object') {
     throw new ApiError('API không trả dữ liệu JSON hợp lệ.', 502)

@@ -181,13 +181,21 @@ afterEach(async () => {
 })
 
 describe.skipIf(process.platform !== 'win32')('native Windows PowerShell 5.1 recovery wrapper', () => {
-  it('verifies both identities before stopping either worker, then stops both before invoking npm', async () => {
+  it('uses the first PATH Node match, verifies both identities, and stops both workers before invoking npm', async () => {
     const fixture = await mkdtemp(path.join(os.tmpdir(), 'isemo repair '))
     tempRoots.push(fixture)
     const source = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../scripts')
     await mkdir(path.join(fixture, 'scripts'))
     await mkdir(path.join(fixture, 'node_modules/vite/bin'), { recursive: true })
     await mkdir(path.join(fixture, 'fake-bin'))
+    const secondaryNodeDirectory = path.join(fixture, 'secondary-node')
+    await mkdir(secondaryNodeDirectory)
+    // A second valid executable named node.exe makes the multiple-PATH-match
+    // regression deterministic without copying the much larger Node binary.
+    // It must never run: the real Node directory precedes this directory.
+    const windowsRoot = process.env.SystemRoot
+    if (!windowsRoot) throw new Error('Windows SystemRoot is missing')
+    await copyFile(path.join(windowsRoot, 'System32/where.exe'), path.join(secondaryNodeDirectory, 'node.exe'))
     for (const name of ['repair-node-local.ps1', 'repair-node-local.mjs', 'node-repair-runtime.mjs']) {
       await copyFile(path.join(source, name), path.join(fixture, 'scripts', name))
     }
@@ -220,7 +228,7 @@ describe.skipIf(process.platform !== 'win32')('native Windows PowerShell 5.1 rec
     const execute = (extra: string[]) => new Promise<{ code: number | null; output: string }>((resolve, reject) => {
       const env = { ...process.env }
       const pathKey = Object.keys(env).find(key => key.toLowerCase() === 'path') ?? 'PATH'
-      env[pathKey] = `${path.join(fixture, 'fake-bin')};${env[pathKey] ?? ''}`
+      env[pathKey] = [path.join(fixture, 'fake-bin'), path.dirname(process.execPath), secondaryNodeDirectory, env[pathKey] ?? ''].join(';')
       const child = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File', path.join(fixture, 'scripts/repair-node-local.ps1'), ...extra], { cwd: fixture, env })
       let output = ''
       child.stdout.on('data', chunk => { output += String(chunk) })
