@@ -160,6 +160,17 @@ if (existsSync(serSelection)) {
   realSer={factory:v.factory,config:resolve(v.config)}
   console.log('[real-qa] Verified four-class SER package selected. This is NOT validation on real call-center speech.')
 }
+// Local-only, explicitly activated LLM. Never call an external completion URL.
+let localLlmModel = ''
+const llmSelection = join(home,'.local/share/isemotalk-llm/selected.json')
+if (existsSync(llmSelection)) {
+  const selected = JSON.parse(readFileSync(llmSelection,'utf8'))
+  if (typeof selected?.model !== 'string' || !/^[a-zA-Z0-9._:/-]{2,100}$/.test(selected.model))
+    throw Error('Invalid local LLM selection; run activate_local_llm.py again.')
+  localLlmModel = selected.model
+  console.log('[real-qa] LLM configured locally: ' + localLlmModel +
+    ' (runtime status will independently check the model, no cloud fallback)')
+}
 const env = {
   ...process.env,
   ISEMO_RUNTIME_COMMIT: runtimeCommit,
@@ -182,6 +193,9 @@ const env = {
   ISEMO_SER_FACTORY: realSer?.factory || '',
   ISEMO_SER_CONFIG: realSer?.config || '',
   ISEMO_AUTO_QA_REAL_MODEL_ONLY: '1',
+  ISEMO_LLM_ENABLED: localLlmModel ? '1' : '0',
+  ISEMO_LLM_URL: localLlmModel ? 'http://127.0.0.1:11434/v1/chat/completions' : '',
+  ISEMO_LLM_MODEL: localLlmModel,
   ISEMO_DIARIZATION: diarDir ? 'pyannote' : 'none',
   ISEMO_DIARIZATION_MODEL_DIR: diarDir,
   ISEMO_DIARIZATION_REVISION: diarRevision,
