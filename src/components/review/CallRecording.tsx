@@ -70,7 +70,10 @@ export const CallRecording = memo(function CallRecording({ callId, audioUrl, dur
 
   return <section className="rounded-xl border border-[#c4d4dc] bg-white p-5 shadow-sm" aria-labelledby="recording-title">
     <div className="mb-4 flex flex-wrap items-baseline justify-between gap-2">
-      <h2 id="recording-title" className="text-lg font-semibold text-[#12394d]">Âm thanh & dòng thời gian</h2>
+      <div>
+        <p className="text-xs font-bold uppercase tracking-[0.12em] text-teal-700">BƯỚC 1 · NGHE & ĐỌC</p>
+        <h2 id="recording-title" className="mt-1 text-lg font-bold text-[#12394d]">{hasEmotion ? 'Nghe và đối chiếu cảm xúc' : 'Bản ghi âm cuộc gọi'}</h2>
+      </div>
       <span className="text-sm tabular-nums text-slate-700">{clock(currentTime)} / {clock(totalTime)}</span>
     </div>
     {audioUrl ? <audio key={callId} ref={audioRef} controls preload="metadata" src={resolveApiUrl(audioUrl)} className="w-full"
@@ -97,8 +100,8 @@ export const CallRecording = memo(function CallRecording({ callId, audioUrl, dur
         <span aria-hidden="true" className="h-2.5 w-2.5 rounded-sm" style={{ background: emotionColors[emotion] }}/>{emotionLabels[emotion]}
       </span>)}</div>
       <p className="mt-3 text-sm text-slate-600">Chọn đoạn màu để nghe lại thời điểm đã được căn chỉnh. Các màu là dự đoán của model, không phải kết luận QA.</p>
-    </> : <p role="status" className="mt-4 rounded-lg bg-slate-50 p-3 text-sm leading-6 text-slate-700">
-      Chưa có dự đoán SER đã được xác minh cho bản ghi này. Hệ thống vẫn có thể dùng transcript để sàng lọc QA; không hiển thị biểu đồ cảm xúc giả.
+    </> : <p className="mt-3 text-xs leading-5 text-slate-600">
+      Chưa có kết quả SER được xác minh, nên không hiển thị timeline cảm xúc. Có thể tiếp tục nghe và đánh giá theo nội dung cuộc gọi.
     </p>}
   </section>
 })
