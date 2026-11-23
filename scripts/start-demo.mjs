@@ -12,7 +12,7 @@ try {
   console.log(`[demo] Audio chung cho API và inference: ${settings.uploadsDir}`)
   console.log('[demo] Đang khởi động 3 dịch vụ. Giữ terminal này mở; Ctrl+C để dừng cả nhóm.')
   console.log('[demo] Web: http://127.0.0.1:5173 | API: 3001 | Inference: 8001')
-  console.log('[demo] Sau các thông báo startup, mở terminal khác chạy: npm run demo:check -- --warmup-asr')
+  console.log('[demo] Sau các thông báo startup, mở terminal khác chạy: npm run demo:warmup')
 
   let stopSignal
   const markStop = signal => { stopSignal = signal }

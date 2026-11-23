@@ -3,7 +3,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { assertCallAudioOwnership } from './audio-storage'
 import { findDataViolations, type DataViolation } from './db-contract'
-import { EXPECTED_TABLES, MIGRATION_NAME, SCHEMA_VERSION, schemaProblems } from './db-schema'
+import { EXPECTED_TABLES, knownHistory, SCHEMA_VERSION, schemaProblems } from './db-schema'
 
 interface ForeignKeyFailure { table: string; rowid: number | null; parent: string; fkid: number }
 export interface DatabaseAudit {
@@ -45,13 +45,13 @@ export function auditDatabase(file: string, uploadsDir: string): DatabaseAudit {
         attempt('Migration history', () => {
           const versions = db.prepare('SELECT version,name FROM schema_migrations ORDER BY version').all() as Array<{ version: number; name: string }>
           report.schemaVersion = versions.at(-1)?.version ?? 0
-          if (versions.length !== 1 || versions[0].version !== SCHEMA_VERSION || versions[0].name !== MIGRATION_NAME) {
+          if (!knownHistory(versions)) {
             report.schemaIssues.push('Unrecognized or incomplete migration history.')
           }
         })
       }
-      if (report.schemaVersion !== SCHEMA_VERSION) report.schemaIssues.push(`Schema version ${report.schemaVersion}; application expects ${SCHEMA_VERSION}. Version 0 is a legacy database, not proof of data corruption.`)
-      attempt('Schema declarations', () => { report.schemaIssues.push(...schemaProblems(db, report.schemaVersion === SCHEMA_VERSION)) })
+      if (report.schemaVersion !== SCHEMA_VERSION) report.schemaIssues.push(`Schema version ${report.schemaVersion}; application expects ${SCHEMA_VERSION}. Older versions require migration.`)
+      attempt('Schema declarations', () => { report.schemaIssues.push(...schemaProblems(db, report.schemaVersion)) })
       for (const table of EXPECTED_TABLES) {
         if (tables.has(table)) attempt(`Count ${table}`, () => { report.counts[table] = (db.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get() as { n: number }).n })
       }

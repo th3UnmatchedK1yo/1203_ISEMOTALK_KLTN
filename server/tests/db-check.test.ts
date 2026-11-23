@@ -41,7 +41,7 @@ describe('read-only database diagnostic', () => {
     seed(p.file).close()
     const bytes = fs.readFileSync(p.file)
     const result = auditDatabase(p.file, p.uploads)
-    expect(result).toMatchObject({ ok: true, readOnly: true, schemaVersion: 1, counts: { calls: 1, utterances: 0 } })
+    expect(result).toMatchObject({ ok: true, readOnly: true, schemaVersion: 2, counts: { calls: 1, utterances: 0 } })
     expect(result.integrity).toEqual(['ok'])
     expect(result.foreignKeys).toEqual([])
     expect(result.domainViolations).toEqual([])
@@ -50,7 +50,7 @@ describe('read-only database diagnostic', () => {
     expect(JSON.stringify(result)).not.toContain('CONFIDENTIAL')
     const command = cli(['--db', p.file, '--uploads', p.uploads, '--json'])
     expect(command.status).toBe(0)
-    expect(JSON.parse(command.stdout)).toMatchObject({ ok: true, schemaVersion: 1 })
+    expect(JSON.parse(command.stdout)).toMatchObject({ ok: true, schemaVersion: 2 })
   })
 
   it('distinguishes structurally valid legacy data from invalid domains, orphan rows and duplicate ordering without migrating', () => {

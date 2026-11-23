@@ -1,4 +1,6 @@
 import type { DB } from './db'
+import { serviceDataViolations } from './service-audit'
+import { SERVICE_TABLES } from './service-schema'
 
 export const DATA_TABLES = ['calls', 'utterances', 'moment_reviews', 'id_counters', 'call_workflows', 'workflow_events', 'audio_cleanup_jobs'] as const
 export type DataTable = typeof DATA_TABLES[number]
@@ -81,5 +83,6 @@ export function findDataViolations(db: DB): DataViolation[] {
     const duplicates = db.prepare('SELECT MIN(rowid) AS id, COUNT(*) AS n FROM utterances GROUP BY call_id,idx HAVING COUNT(*)>1').all() as Array<{ id: number; n: number }>
     if (duplicates.length) results.push({ table: 'utterances', rule: 'unique_call_order', count: duplicates.length, sampleRowIds: duplicates.slice(0, 10).map(r => r.id) })
   }
+  if (SERVICE_TABLES.every(table => tables.has(table))) results.push(...serviceDataViolations(db))
   return results
 }

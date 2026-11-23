@@ -1,5 +1,7 @@
 import Database from 'better-sqlite3'
 import fs from 'node:fs'
+import { gunzipSync } from 'node:zlib'
+import { auditDatabase } from '../src/db-audit'
 import os from 'node:os'
 import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -125,7 +127,7 @@ describe('additive schema migration', () => {
     expect(() => db.exec("UPDATE calls SET status='invalid'")).toThrow()
     expect(() => db.exec("INSERT INTO utterances(call_id,id,idx,text,start,end) VALUES ('CALL-0042','duplicate',0,'x',3,4)")).toThrow()
     const migrations = db.prepare('SELECT * FROM schema_migrations').all()
-    expect(migrations).toHaveLength(1)
+    expect(migrations).toHaveLength(2)
     db.close()
     db = track(openDb(target))
     expect(db.prepare('SELECT * FROM schema_migrations').all()).toEqual(migrations)
@@ -155,11 +157,11 @@ describe('additive schema migration', () => {
   it('refuses a schema from a newer application instead of downgrading it', () => {
     const target = file()
     const db = track(openDb(target))
-    db.exec('UPDATE schema_migrations SET version=999')
+    db.exec('UPDATE schema_migrations SET version=999 WHERE version=2')
     db.close()
     expect(() => openDb(target)).toThrow(/newer|version|phiên bản/i)
     const check = track(new Database(target, { readonly: true, fileMustExist: true }))
-    expect(check.prepare('SELECT version FROM schema_migrations').get()).toEqual({ version: 999 })
+    expect(check.prepare('SELECT MAX(version) AS version FROM schema_migrations').get()).toEqual({ version: 999 })
   })
 
   it('does not stamp a migration when a legacy index name masks the required unique index', () => {
@@ -193,5 +195,82 @@ describe('additive schema migration', () => {
     expect(() => openDb(target)).toThrow(/foreign key/i)
     const after = track(new Database(target, { readonly: true }))
     expect(after.prepare("SELECT name FROM sqlite_master WHERE name='schema_migrations'").get()).toBeUndefined()
+  })
+})
+
+describe('service schema migration from the archived version 1 database', () => {
+  function versionOne() {
+    const target = file()
+    fs.writeFileSync(target, gunzipSync(fs.readFileSync(new URL('./fixtures/schema-v1.db.gz', import.meta.url))))
+    const db = track(new Database(target))
+    seed(db)
+    db.exec(`INSERT INTO moment_reviews(call_id,moment_id,note) VALUES ('CALL-0042','m','Note');
+      INSERT INTO call_workflows VALUES ('CALL-0042',1,'{"ticketId":"T"}','2026-11-23');
+      INSERT INTO workflow_events(call_id,version,at,event_json) VALUES ('CALL-0042',1,'2026-11-23','{}');
+      INSERT INTO audio_cleanup_jobs(call_id,created_at) VALUES ('CALL-0003','2026-11-23');
+      UPDATE id_counters SET value=72 WHERE name='calls'`)
+    return { db, target }
+  }
+
+  it('reports a pending upgrade read-only and preserves each version 1 row including its original journal entry', () => {
+    const { db, target } = versionOne()
+    const tables = ['calls','utterances','moment_reviews','id_counters','call_workflows','workflow_events','audio_cleanup_jobs']
+    const before = tables.map(table => db.prepare('SELECT * FROM ' + table).all())
+    // Formatting may differ in a valid v1 database created from a legacy SQL dump.
+    db.exec('DROP INDEX idx_calls_date; CREATE INDEX idx_calls_date ON calls ( call_date )')
+    const firstJournal = db.prepare('SELECT * FROM schema_migrations').get()
+    db.close()
+    const bytes = fs.readFileSync(target)
+    expect(auditDatabase(target, path.dirname(target))).toMatchObject({ ok: false, schemaVersion: 1, expectedSchemaVersion: 2 })
+    expect(fs.readFileSync(target)).toEqual(bytes)
+    const upgraded = track(openDb(target))
+    tables.forEach((table, i) => {
+      const rows = upgraded.prepare('SELECT * FROM ' + table).all()
+      expect(table === 'id_counters' ? rows.filter(row => (row as {name:string}).name === 'calls') : rows).toEqual(before[i])
+    })
+    expect(upgraded.prepare('SELECT * FROM schema_migrations ORDER BY version').all()).toEqual([firstJournal, expect.objectContaining({ version: 2 })])
+    expect(upgraded.prepare('SELECT * FROM service_cases').all()).toEqual([])
+    expect(nextCallId(upgraded)).toBe('CALL-0073')
+  })
+
+  it.each([
+    ['attempts INTEGER NOT NULL DEFAULT 0', 'attempts INTEGER NOT NULL'],
+    ['attempts INTEGER NOT NULL DEFAULT 0', 'attempts TEXT NOT NULL DEFAULT 0'],
+    ['created_at TEXT NOT NULL', 'created_at TEXT'],
+  ])('refuses version 1 when cleanup column semantics were altered: %s → %s', (from, to) => {
+    const { db, target } = versionOne()
+    const table = (db.prepare("SELECT sql FROM sqlite_master WHERE name='audio_cleanup_jobs'").get() as { sql: string }).sql
+    const guards = db.prepare("SELECT sql FROM sqlite_master WHERE type='trigger' AND tbl_name='audio_cleanup_jobs'").all() as Array<{sql: string}>
+    db.exec('ALTER TABLE audio_cleanup_jobs RENAME TO old_jobs')
+    expect(table).toContain(from)
+    db.exec(table.replace(from,to))
+    db.exec('DROP TABLE old_jobs')
+    guards.forEach(guard => db.exec(guard.sql))
+    db.close()
+    const audit = auditDatabase(target, path.dirname(target))
+    expect(audit.schemaIssues.join(' ')).toContain('audio_cleanup_jobs.')
+    expect(() => openDb(target)).toThrow(/audio_cleanup_jobs/)
+    const after = track(new Database(target, { readonly: true }))
+    expect(after.prepare('SELECT version FROM schema_migrations').all()).toEqual([{ version: 1 }])
+    expect(after.prepare("SELECT 1 FROM sqlite_master WHERE name='service_cases'").get()).toBeUndefined()
+  })
+
+  it.each([
+    "DROP TRIGGER guard_calls_update",
+    "DROP TRIGGER guard_calls_update; CREATE TRIGGER guard_calls_update BEFORE UPDATE ON calls BEGIN SELECT 1; END",
+    "DROP INDEX idx_calls_date; CREATE INDEX idx_calls_date ON calls(title)",
+    "DELETE FROM id_counters WHERE name='calls'",
+    "UPDATE schema_migrations SET name='unknown'",
+    "CREATE TABLE service_contacts(unrelated TEXT)",
+    "PRAGMA foreign_keys=OFF; INSERT INTO moment_reviews(call_id,moment_id) VALUES ('missing','m')",
+  ])('refuses incompatible version 1 without partial installation: %s', sql => {
+    const { db, target } = versionOne()
+    db.exec(sql)
+    db.close()
+    expect(() => openDb(target)).toThrow()
+    const after = track(new Database(target, { readonly: true }))
+    expect(after.prepare('SELECT version FROM schema_migrations').all()).toEqual([{ version: 1 }])
+    expect(after.prepare("SELECT name FROM sqlite_master WHERE name='service_cases'").all()).toEqual([])
+    expect(after.prepare('SELECT id FROM calls').get()).toEqual({ id: 'CALL-0042' })
   })
 })

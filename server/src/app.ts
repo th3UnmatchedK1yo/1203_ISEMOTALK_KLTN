@@ -16,6 +16,9 @@ import { buildAnalytics, exportAnalyticsCsv, exportReviewsCsv } from './reports'
 import { HttpError, ReviewBody, applyReview } from './review'
 import { attachWorkflowRoutes, getWorkflow } from './workflow'
 
+import { attachServiceRoutes } from './service-routes'
+import { recordCaseRecordingDeletion } from './service-operations'
+
 const AUDIO_EXT: Record<string, string> = { '.wav': 'audio/wav', '.mp3': 'audio/mpeg', '.m4a': 'audio/mp4' }
 const DATA_EXT = new Set(['.json', '.csv'])
 
@@ -277,10 +280,11 @@ export function createApp({ db, config, client, pipeline }: AppDeps) {
       }
     }
     db.transaction(() => {
+      recordCaseRecordingDeletion(db, id)
       const removed = repo.deleteCall(db, id)
       if (!removed) throw new HttpError(404, 'Không tìm thấy cuộc gọi.')
       if (removed.audioFile) db.prepare('INSERT INTO audio_cleanup_jobs(call_id, created_at) VALUES (?,?)').run(id, new Date().toISOString())
-    })()
+    }).immediate()
     pipeline.cancel(id)
     cleanupPendingAudio(db, config.uploadsDir, id)
     res.status(204).end()
@@ -316,6 +320,7 @@ export function createApp({ db, config, client, pipeline }: AppDeps) {
     })
   })
 
+  attachServiceRoutes(app, db)
   attachWorkflowRoutes(app, db)
   app.use('/api', (_req, _res, next) => next(new HttpError(404, 'Đường dẫn API không tồn tại.')))
 

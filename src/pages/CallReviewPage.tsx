@@ -13,6 +13,7 @@ import {
 import { CallRecording, type SeekRequest } from '@/components/review/CallRecording'
 import { TranscriptList } from '@/components/review/TranscriptList'
 import { CallWorkflowPanel } from '@/components/review/CallWorkflowPanel'
+import { CallCaseLink } from '@/components/review/CallCaseLink'
 
 const allEmotions: Emotion[] = ['neutral', 'happy', 'sad', 'angry']
 const momentLabels: Record<string, string> = {
@@ -364,6 +365,7 @@ function CallReviewSession({ callId }: { callId: string }) {
         </section>
       </div>
     </div>
+    <CallCaseLink callId={call.id} callDate={call.callDate}/>
     <CallWorkflowPanel callId={call.id}/>
     {call.stageLog.length > 0 && call.status === 'ready' && <details className="rounded-xl border border-slate-300 bg-white p-5 text-sm">
       <summary className="cursor-pointer font-semibold text-slate-800">Nguồn xử lý và thời gian từng bước</summary>

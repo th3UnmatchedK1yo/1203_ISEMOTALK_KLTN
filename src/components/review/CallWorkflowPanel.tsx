@@ -105,14 +105,14 @@ export function CallWorkflowPanel({ callId }: { callId: string }) {
   return <details className="rounded-lg border border-[#b7cbd5] bg-white" open={stale ? true : undefined}>
     <summary className="cursor-pointer px-5 py-4 text-[#102D43] marker:text-teal-800">
       <span className="ml-1 inline-flex flex-wrap items-center gap-x-3 gap-y-1 align-middle">
-        <BriefcaseBusiness size={20} aria-hidden="true"/><span className="font-semibold">Hồ sơ xử lý sau cuộc gọi</span>
+        <BriefcaseBusiness size={20} aria-hidden="true"/><span className="font-semibold">Ghi chú nghiệp vụ của riêng cuộc gọi</span>
         {saved && <span className="text-sm text-slate-700">{saved.ticketId ? `${saved.ticketId} · ` : ''}{resolutionLabels[saved.resolution]}</span>}
         {overdue && <span className="text-sm font-semibold text-red-800">Quá hạn gọi lại</span>}
         {dirty && <span className="text-sm font-medium text-amber-800">Chưa lưu</span>}
       </span>
     </summary>
     <div className="border-t border-[#d4e0e6] p-5">
-      <p className="mb-4 text-sm leading-relaxed text-slate-700">Ghi nhận bối cảnh và việc cần làm tiếp. Kết quả xử lý do người phụ trách xác nhận; cảm xúc và trạng thái QA không tự đóng vụ việc.</p>
+      <p className="mb-4 text-sm leading-relaxed text-slate-700">Giữ bối cảnh và ghi chú tại thời điểm xem cuộc gọi. Khi đã liên kết vụ việc, hãy cập nhật người phụ trách, thời hạn và kết quả hiện tại trong hồ sơ vụ việc ở trên. Các ghi chú cũ này được giữ độc lập; thay đổi ở đây không cập nhật công việc trong vụ việc.</p>
       {error && <div role="alert" className="mb-4 rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-900">{error}<div className="mt-2 flex flex-wrap gap-4"><button type="button" className="underline" onClick={reload}>Nạp hồ sơ đã lưu</button>{fields && <button type="button" className="underline" onClick={exportDraft}>Tải bản nháp về</button>}</div></div>}
       {stale && <div role="alert" className="mb-4 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">Có bản nháp từ phiên bản cũ. Hệ thống tạm khóa chỉnh sửa để giữ bản nháp; tải về để đối chiếu trước khi nhập lại.<div className="mt-2 flex flex-wrap gap-4"><button type="button" className="underline" onClick={exportDraft}>Tải bản nháp</button><button type="button" className="underline" onClick={reload}>Bỏ bản nháp cũ và nạp hồ sơ</button></div></div>}
       {storageError && dirty && <div role="alert" className="mb-4 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">Không giữ được bản nháp trong trình duyệt. Hãy lưu hồ sơ hoặc tải bản nháp trước khi rời trang.<button type="button" className="ml-2 underline" onClick={exportDraft}>Tải bản nháp về</button></div>}

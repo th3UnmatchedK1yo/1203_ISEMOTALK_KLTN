@@ -1,11 +1,12 @@
 import { useState, type ReactNode } from 'react'
 import { Link, useLocation } from 'react-router-dom'
-import { Headphones, BarChart3, Menu, X, ListChecks, UploadCloud, BookOpen } from 'lucide-react'
+import { Headphones, BarChart3, Menu, X, ListChecks, UploadCloud, BookOpen, BriefcaseBusiness } from 'lucide-react'
 
 interface AppShellProps { children: ReactNode }
 
 const navItems = [
   { path: '/calls', label: 'Cuộc gọi', icon: ListChecks },
+  { path: '/cases', label: 'Vụ việc', icon: BriefcaseBusiness },
   { path: '/analytics', label: 'Phân tích', icon: BarChart3 },
   { path: '/calls/new', label: 'Tải lên', icon: UploadCloud },
   { path: '/research', label: 'Nghiên cứu', icon: BookOpen },
@@ -17,7 +18,7 @@ export function AppShell({ children }: AppShellProps) {
   const active = (path: string) =>
     path === '/calls'
       ? location.pathname === '/calls' || location.pathname === '/'
-      : location.pathname === path
+      : path === '/cases' ? location.pathname.startsWith('/cases') : location.pathname === path
 
   const navLink = (path: string, label: string, Icon: typeof ListChecks, mobile: boolean) =>
     <Link
