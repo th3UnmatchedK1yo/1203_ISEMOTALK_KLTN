@@ -79,7 +79,7 @@ export interface StageEntry {
   detail?: string
   durationMs?: number
   provenance?: Provenance
-  evidence?: { adapter: string; model?: string; device?: string; mock: boolean; verified?: boolean; timingMode?: 'word_aligned' | 'audio_window'; timingWarning?: string }
+  evidence?: { adapter: string; model?: string; device?: string; mock: boolean; verified?: boolean; timingMode?: 'word_aligned' | 'audio_window'; timingWarning?: string; speakerTurns?: Array<{ start: number; end: number; speakerId: 'A' | 'B' }> }
 }
 
 export interface ComponentHealth {
