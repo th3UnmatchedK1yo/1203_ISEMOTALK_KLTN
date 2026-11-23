@@ -118,6 +118,7 @@ export function BatchScanPage() {
 
   const asr = health?.inference.components?.asr
   const ser = health?.inference.components?.ser
+  const diar = health?.inference.components?.diarization
   const qa = health?.inference.qa
   const asrReady = health?.inference.reachable === true && asr?.ready === true && asr.mock === false && health.automation?.asr === true
   const qaReady = health?.inference.reachable === true && qa?.ready === true && qa.loaded === true && health.automation?.qa === true
@@ -194,17 +195,18 @@ export function BatchScanPage() {
       </div>
       {healthError && <p role="alert" className="mt-3 text-sm text-red-800">{healthError}</p>}
       {!health && !healthError && <p role="status" className="mt-3 text-sm text-slate-600">Đang kết nối GPU…</p>}
-      {health && <div className="mt-4 grid gap-3 sm:grid-cols-3">
+      {health && <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {([
           {name:'ASR · tạo chữ từ audio', ready: asrReady, detail: asr?.detail},
           {name:'XLM-R · sàng lọc QA', ready: qaReady, detail: qa?.detail},
+          {name:'Tách giọng A/B', ready: diar?.ready===true && diar.adapter!=='none', detail: diar?.detail ?? 'Chưa cấu hình Pyannote · khách/nhân viên chưa được tách giọng tự động'},
           {name:'SER · cảm xúc', ready: serReady, detail: serSkipped ? 'Chưa có mô hình được xác minh · sẽ bỏ qua, không tạo nhãn giả' : ser?.detail},
         ]).map(item => <div key={item.name} className="rounded-md border-l-2 border-slate-200 bg-slate-50 px-3 py-2">
           <div className="flex items-center gap-2">
             {item.ready ? <CheckCircle2 size={17} className="text-teal-800"/> : <AlertTriangle size={17} className="text-amber-700"/>}
             <strong className="text-sm text-slate-900">{item.name}</strong>
           </div>
-          <p className="mt-2 text-sm font-semibold text-slate-700">{item.ready ? 'Sẵn sàng' : item.name.startsWith('SER') && serSkipped ? 'Chưa có · bỏ qua minh bạch' : 'Chưa sẵn sàng'}</p>
+          <p className="mt-2 text-sm font-semibold text-slate-700">{item.ready ? 'Sẵn sàng' : item.name.startsWith('SER') && serSkipped ? 'Chưa có · bỏ qua minh bạch' : item.name.startsWith('Tách giọng') ? 'Chưa bật · giữ người nói ẩn danh' : 'Chưa sẵn sàng'}</p>
           <details className="mt-2 text-xs text-slate-600"><summary className="cursor-pointer">Chi tiết model</summary><p className="mt-2 break-words">{item.detail ?? 'Chưa có trạng thái'}</p></details>
         </div>)}
       </div>}
