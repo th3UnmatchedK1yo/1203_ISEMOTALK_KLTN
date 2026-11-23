@@ -130,7 +130,41 @@ export function CallsPage() {
       </details>
     </section>
     {error && <div role="alert" className="flex items-start gap-3 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-900"><AlertCircle size={19} className="shrink-0"/>{error}</div>}
-    <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm" aria-busy={loading}>
+    <div className="space-y-3 md:hidden" aria-busy={loading} aria-label="Hàng đợi QA trên di động">
+      {loading && <p role="status" className="rounded-xl border border-slate-200 bg-white p-5 text-sm">Đang tải danh sách cuộc gọi…</p>}
+      {!loading && data?.items.length === 0 && <p className="rounded-xl border border-slate-200 bg-white p-5 text-sm text-slate-700">Không tìm thấy cuộc gọi phù hợp. Thử thay đổi bộ lọc.</p>}
+      {!loading && data?.items.map(call => <article key={call.id} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+        <Link to={'/calls/' + encodeURIComponent(call.id)}
+          className="block break-words text-base font-bold leading-6 text-teal-900 hover:underline">{call.title}</Link>
+        <p className="mt-1 text-xs text-slate-600">{call.id} · {clock(call.duration)} · {provenanceLabel(call.provenance)}</p>
+        <div className="mt-3 grid grid-cols-2 gap-3 border-t border-slate-100 pt-3">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Gợi ý AI QA</p>
+            <p className={'mt-1 text-sm font-semibold ' +
+              (call.qaTriage?.label === 'needs_attention' || call.qaTriage?.outdated ? 'text-amber-900' : 'text-slate-800')}>
+              {!call.qaTriage ? 'Chưa có kết quả'
+                : call.qaTriage.outdated ? 'Cần phân tích lại'
+                : call.qaTriage.label === 'needs_attention' ? 'AI gợi ý xem kỹ' : 'Chưa có cảnh báo mạnh'}
+            </p>
+            {call.qaTriage && !call.qaTriage.outdated &&
+              <p className="mt-1 text-xs text-slate-600">Điểm: {(call.qaTriage.score * 100).toFixed(1)}%</p>}
+          </div>
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Đánh giá QA</p>
+            <p className="mt-1 text-sm text-slate-800">{reviews[call.reviewStatus]}</p>
+            {showSer && <p className="mt-1 text-xs text-slate-600">{call.dominantEmotion ? emotionLabels[call.dominantEmotion] : 'Chưa có SER'}</p>}
+          </div>
+        </div>
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-3">
+          <span className="text-xs font-semibold text-slate-600">{processing[call.status]}</span>
+          <Link to={'/calls/' + encodeURIComponent(call.id)}
+            className="inline-flex min-h-10 items-center rounded-lg bg-[#0e5665] px-4 py-2 text-sm font-semibold text-white hover:bg-[#0b4554]">
+            Mở và đánh giá
+          </Link>
+        </div>
+      </article>)}
+    </div>
+    <div className="hidden overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm md:block" aria-busy={loading}>
       <table className="w-full min-w-[700px] text-left text-sm">
         <caption className="sr-only">Hàng đợi cuộc gọi và gợi ý của AI để người QA xem xét</caption>
         <thead className="border-b border-slate-200 bg-slate-50 text-slate-700"><tr>
