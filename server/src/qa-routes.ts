@@ -49,6 +49,39 @@ function stored(db: DB, id: string) {
     source: 'model' as const,
   }
 }
+/**
+ * One canonical inference path for automatic processing and deliberate reruns.
+ * No dataset label, keyword fallback, or mock response is ever stored here.
+ * The input hash is checked again transactionally to reject stale output.
+ */
+export async function predictAndStoreQa(
+  db: DB, config: Config, id: string, signal?: AbortSignal,
+) {
+  const { text, hash } = makeInput(db, id)
+  let response: Response
+  try {
+    response = await fetch(config.inferenceUrl + '/v1/qa/triage', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text }),
+      signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(180000)]) : AbortSignal.timeout(180000),
+    })
+  } catch (error) {
+    throw new HttpError(503, 'Không liên hệ được model QA trên GPU: ' + (error as Error).message)
+  }
+  if (!response.ok) {
+    throw new HttpError(503, 'QA classifier chưa sẵn sàng (GPU inference HTTP ' + response.status + ').')
+  }
+  const result = Predicted.parse(await response.json())
+  db.transaction(() => {
+    const now = makeInput(db, id)
+    if (now.hash !== hash) throw new HttpError(409, 'Transcript đã thay đổi khi model đang chạy. Cần suy luận lại để không lưu kết quả cũ.')
+    db.prepare('INSERT INTO qa_triage_results (call_id,input_sha256,model_sha256,model_name,label,score,dataset_source,truncated,created_at) VALUES (?,?,?,?,?,?,?,?,?) ON CONFLICT(call_id) DO UPDATE SET input_sha256=excluded.input_sha256, model_sha256=excluded.model_sha256, model_name=excluded.model_name, label=excluded.label, score=excluded.score, dataset_source=excluded.dataset_source, truncated=excluded.truncated, created_at=excluded.created_at')
+      .run(id, hash, result.modelSha256, result.model, result.label,
+        result.score, result.dataset, Number(result.truncated), new Date().toISOString())
+  }).immediate()
+  return { result: stored(db, id), outdated: false, note: result.note }
+}
+
 export function attachQaTriageRoutes(app: Express, db: DB, config: Config) {
   app.get('/api/calls/:id/qa-triage', (req, res) => {
     const { hash } = makeInput(db, req.params.id)
@@ -58,27 +91,6 @@ export function attachQaTriageRoutes(app: Express, db: DB, config: Config) {
   })
 
   app.post('/api/calls/:id/qa-triage', async (req, res) => {
-    const { text, hash } = makeInput(db, req.params.id)
-    let response: Response
-    try {
-      response = await fetch(config.inferenceUrl + '/v1/qa/triage', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text }), signal: AbortSignal.timeout(180000),
-      })
-    } catch (error) {
-      throw new HttpError(503, 'Không liên hệ được model QA trên GPU: ' + (error as Error).message)
-    }
-    if (!response.ok) {
-      throw new HttpError(503, 'QA classifier chưa sẵn sàng (GPU inference HTTP ' + response.status + ').')
-    }
-    const result = Predicted.parse(await response.json())
-    db.transaction(() => {
-      const now = makeInput(db, req.params.id)
-      if (now.hash !== hash) throw new HttpError(409, 'Transcript đã thay đổi khi model đang chạy. Thử lại để không lưu kết quả cũ.')
-      db.prepare('INSERT INTO qa_triage_results (call_id,input_sha256,model_sha256,model_name,label,score,dataset_source,truncated,created_at) VALUES (?,?,?,?,?,?,?,?,?) ON CONFLICT(call_id) DO UPDATE SET input_sha256=excluded.input_sha256, model_sha256=excluded.model_sha256, model_name=excluded.model_name, label=excluded.label, score=excluded.score, dataset_source=excluded.dataset_source, truncated=excluded.truncated, created_at=excluded.created_at')
-        .run(req.params.id, hash, result.modelSha256, result.model, result.label,
-          result.score, result.dataset, Number(result.truncated), new Date().toISOString())
-    }).immediate()
-    res.json({ result: stored(db, req.params.id), outdated: false, note: result.note })
+    res.json(await predictAndStoreQa(db, config, req.params.id))
   })
 }
