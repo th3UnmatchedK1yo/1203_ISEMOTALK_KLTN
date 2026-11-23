@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, Check, Save, AlertTriangle, RefreshCw, Download } from 'lucide-react'
+import { ArrowLeft, Check, Save, AlertTriangle, RefreshCw, Download, ChevronRight, Headphones, Sparkles, ClipboardCheck, BriefcaseBusiness, FileAudio } from 'lucide-react'
 import {
   ApiError, apiJson, clock, emotionLabels, getCall, getSystemStatus, percent, provenanceLabel, resolveApiUrl, saveReview,
   retryProcessing, speakerLabels, stageLabels, type CallDetail, type Emotion, type Moment, type ReviewPatch,
@@ -15,6 +15,7 @@ import { TranscriptList } from '@/components/review/TranscriptList'
 import { CallWorkflowPanel } from '@/components/review/CallWorkflowPanel'
 import { CallCaseLink } from '@/components/review/CallCaseLink'
 import { CallQaTriage } from '@/components/review/CallQaTriage'
+import { sourceDialogueTurns } from '@/lib/source-dialogue'
 
 const allEmotions: Emotion[] = ['neutral', 'happy', 'sad', 'angry']
 const momentLabels: Record<string, string> = {
@@ -239,6 +240,9 @@ function CallReviewSession({ callId }: { callId: string }) {
   </div>
 
   const sourceDialogue = call.provenance === 'imported' && call.title.startsWith('TTS TỔNG HỢP · OneVoice') && call.utterances.length === 1
+  const displayedTurns = sourceDialogue ? sourceDialogueTurns(form?.utterances[call.utterances[0].id]?.text ?? call.utterances[0].text).length : call.utterances.length
+  const noteIsImportedProvenance = call.provenance === 'imported' && call.reviewStatus !== 'reviewed' &&
+    (form?.overallNote ?? '').startsWith('NGUỒN: ')
   const selected = call.utterances.find(u => u.id === selectedId) ?? null
   const selectedPatch = selected ? form?.utterances[selected.id] : undefined
   const selectedMoment = call.moments.find(moment => moment.id === selectedMomentId)
@@ -253,18 +257,45 @@ function CallReviewSession({ callId }: { callId: string }) {
   const canSave = dirty && !saving && !draftBackup && !versionConflict && call.status === 'ready'
 
   return <div className="space-y-5">
-    <header className="flex flex-wrap items-start justify-between gap-4">
-      <div className="min-w-0 space-y-2">
-        <Link to="/calls" className="inline-flex items-center gap-2 text-sm text-slate-700 hover:text-teal-800"><ArrowLeft size={17}/> Danh sách cuộc gọi</Link>
-        <p className="text-sm font-semibold tracking-wide text-slate-600">{call.id}</p>
-        <h1 className="break-words text-3xl font-semibold tracking-tight text-[#12394d]">{call.title}</h1>
-        <p className="text-base text-slate-700">{call.agentName || 'Chưa có tên nhân viên'} / {call.customerName || 'Chưa có tên khách hàng'} · {clock(call.duration)} · {reviewStatus}</p>
-      </div>
-      <div className="flex flex-wrap items-center gap-3">
-        <span className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-800">{provenanceLabel(call.provenance)}</span>
-        <button type="button" disabled={!canSave} onClick={() => void save()} className={primaryButton}><Save size={18}/>{saving ? 'Đang lưu…' : 'Lưu đánh giá'}</button>
+    <header className="rounded-xl border border-slate-200 bg-white px-5 py-5 shadow-sm sm:px-6">
+      <Link to="/calls" className="inline-flex items-center gap-2 text-sm font-medium text-teal-800 hover:underline"><ArrowLeft size={16}/> Trở lại danh sách</Link>
+      <div className="mt-3 flex flex-wrap items-start justify-between gap-4">
+        <div className="min-w-0">
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">{call.id} · HỒ SƠ CUỘC GỌI</p>
+          <h1 className="mt-1 break-words text-2xl font-bold tracking-tight text-[#12394d] sm:text-[1.75rem]">{call.title}</h1>
+          <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-slate-700">
+            <span className="inline-flex items-center gap-1.5"><FileAudio size={16} className="text-slate-500" aria-hidden="true"/>{clock(call.duration)} audio</span>
+            <span>{sourceDialogue ? displayedTurns + ' lượt lời kịch bản' : call.utterances.length + ' câu/đoạn'}</span>
+            <span className={'rounded-full border px-2.5 py-1 font-semibold ' + (call.reviewStatus === 'reviewed'
+              ? 'border-teal-200 bg-teal-50 text-teal-900'
+              : 'border-slate-200 bg-slate-100 text-slate-700')}>{reviewStatus}</span>
+          </div>
+          {(call.agentName || call.customerName) && <p className="mt-2 text-sm text-slate-600">
+            {call.agentName || 'Nhân viên chưa xác định'} / {call.customerName || 'Khách hàng chưa xác định'}
+          </p>}
+        </div>
+        <a href="#call-review" className={button + ' shrink-0'}><ClipboardCheck size={17}/> Đi tới phần đánh giá</a>
       </div>
     </header>
+    <nav aria-label="Các bước xem xét cuộc gọi" className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+      <p className="mb-3 px-1 text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">HƯỚNG DẪN THEO QUY TRÌNH</p>
+      <ol className="grid grid-cols-2 gap-2 lg:grid-cols-4">
+        {([
+          {href:'#call-audio', label:'Nghe & đọc', icon:Headphones, sub:'Kiểm tra bằng chứng'},
+          {href:'#call-ai', label:'Gợi ý AI', icon:Sparkles, sub:'Sàng lọc, không kết luận'},
+          {href:'#call-review', label:'Kết luận QA', icon:ClipboardCheck, sub:'Người đánh giá xác nhận'},
+          {href:'#call-case', label:'Xử lý tiếp', icon:BriefcaseBusiness, sub:'Chỉ tạo việc khi cần'},
+        ] as const).map((step, index) => <li key={step.href}>
+          <a href={step.href} className="group flex min-h-16 items-start gap-3 rounded-lg border border-transparent bg-slate-50 px-3 py-3 hover:border-teal-200 hover:bg-teal-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700">
+            <span className={'flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold ' +
+              (index === 0 ? 'bg-[#0e5665] text-white' : 'border border-slate-300 bg-white text-slate-700')}>{index + 1}</span>
+            <span className="min-w-0"><span className="block text-sm font-semibold text-slate-900">{step.label}</span>
+              <span className="mt-0.5 hidden text-xs leading-4 text-slate-600 sm:block">{step.sub}</span></span>
+            <ChevronRight size={15} className="ml-auto mt-1 hidden shrink-0 text-slate-400 group-hover:text-teal-700 xl:block" aria-hidden="true"/>
+          </a>
+        </li>)}
+      </ol>
+    </nav>
     {call.provenance === 'imported' && call.hasAudio && !call.title.startsWith('HỘI THOẠI ĐIỆN THOẠI THẬT · DataHive') &&
       <details className="rounded-lg border border-slate-200 bg-white p-4 text-sm leading-6 text-slate-700">
         <summary className="cursor-pointer font-semibold text-[#12394d]">Tùy chọn nghiên cứu: đối chiếu transcript nguồn với ASR thật</summary>
