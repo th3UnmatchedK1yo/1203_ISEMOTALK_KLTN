@@ -57,6 +57,42 @@ export function AnalyticsPage() {
       </div>)}</div>
       <p className="text-sm leading-6 text-slate-600">Có {data.status.processing} cuộc gọi đang chờ hoặc đang xử lý và {data.status.failed} cuộc gọi xử lý chưa thành công. Thống kê QA và cảm xúc chỉ dùng cuộc gọi đã sẵn sàng.</p>
 
+      {data.qaTriage && <section className="rounded-xl border border-teal-200 bg-white p-5 sm:p-6" aria-labelledby="qa-coverage-title">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-wide text-teal-800">AI SÀNG LỌC THEO HÀNG ĐỢI</p>
+            <h2 id="qa-coverage-title" className="mt-1 text-xl font-bold text-[#12394d]">XLM-R đã chấm bao nhiêu cuộc gọi?</h2>
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-700">Đếm kết quả <strong>QA theo transcript</strong>, không phải nhận diện cảm xúc. Chỉ tính những bản ghi đủ điều kiện: OneVoice có kịch bản hoặc cuộc gọi đã có transcript từ inference thực.</p>
+          </div>
+          <Link to="/calls" className="inline-flex min-h-10 items-center rounded-lg border border-teal-700 px-3 py-2 text-sm font-semibold text-teal-900 hover:bg-teal-50">Mở hàng đợi QA</Link>
+        </div>
+        <div className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
+          {([
+            ['Đủ điều kiện QA', data.qaTriage.eligible],
+            ['Đã có điểm AI', data.qaTriage.scored],
+            ['AI gợi ý xem kỹ', data.qaTriage.needsAttention],
+            ['Chờ / cần chạy lại', data.qaTriage.waiting + data.qaTriage.needsRerun],
+          ] as const).map(([label,value]) => <div key={label} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+            <p className="text-xs font-semibold text-slate-600">{label}</p>
+            <p className="mt-1 text-2xl font-bold tabular-nums text-slate-900">{value}</p>
+          </div>)}
+        </div>
+        <div className="mt-4">
+          <div className="flex items-center justify-between gap-3 text-sm text-slate-700">
+            <span>Độ bao phủ hồ sơ có điểm QA còn hiệu lực</span>
+            <strong className="tabular-nums">{data.qaTriage.eligible
+              ? (data.qaTriage.scored * 100 / data.qaTriage.eligible).toFixed(1) + '%' : '—'}</strong>
+          </div>
+          <progress aria-label="Tỷ lệ hồ sơ đã có kết quả XLM-R còn hiệu lực"
+            max={Math.max(1,data.qaTriage.eligible)} value={data.qaTriage.scored}
+            className="mt-2 h-3 w-full accent-teal-700"/>
+          <p className="mt-2 text-xs leading-5 text-slate-600">
+            {data.qaTriage.routine} cuộc chưa có cảnh báo mạnh · {data.qaTriage.waiting} chưa có kết quả · {data.qaTriage.needsRerun} cần chạy lại.
+            Đây là tỷ lệ hồ sơ có kết quả, <strong>không phải độ chính xác</strong>, độ bao phủ toàn bộ token hay tốc độ xử lý 10.000 cuộc.
+          </p>
+        </div>
+      </section>}
+
       <section className="rounded-xl border border-[#c4d4dc] bg-white p-5 sm:p-6" aria-labelledby="emotion-distribution-title">
         <h2 id="emotion-distribution-title" className="text-lg font-semibold text-[#12394d]">Cảm xúc trên các câu của khách hàng</h2>
         <p className="mt-2 text-sm leading-6 text-slate-600">Đếm theo câu nói đã gán vai trò khách hàng. Dùng nhãn QA khi đã sửa; các câu còn lại dùng dự đoán gốc.</p>
