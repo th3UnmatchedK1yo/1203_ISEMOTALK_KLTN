@@ -1,6 +1,7 @@
 import cors from 'cors'
 import express, { type NextFunction, type Request, type Response } from 'express'
 import fs from 'node:fs'
+import { createHash } from 'node:crypto'
 import path from 'node:path'
 import multer from 'multer'
 import { ZodError, z } from 'zod'
@@ -87,7 +88,7 @@ export function createApp({ db, config, client, pipeline }: AppDeps) {
       // without Python. Audio imports still require the unavailable probe.
       const modelAction = req.method === 'POST' &&
         (/^\/api\/calls\/upload$/.test(req.path) ||
-          /^\/api\/calls\/[^/]+\/(retry|qa-triage)$/.test(req.path))
+          /^\/api\/calls\/[^/]+\/(retry|qa-triage|reprocess)$/.test(req.path))
       if (modelAction) return res.status(503).json({
         error: 'Chế độ xem trước giao diện: GPU đang training, chưa cho gửi tác vụ model. Dữ liệu đánh giá cũ được giữ nguyên.',
         code: 'inference_paused_for_training',
@@ -143,9 +144,15 @@ export function createApp({ db, config, client, pipeline }: AppDeps) {
       inference: { reachable: false, error: 'Chế độ API-only preview: dịch vụ AI chưa khởi động; chỉ phục vụ dữ liệu và giao diện, không chạy ASR/SER/QA.' },
     })
     try {
-      res.json({ api: 'ok', inference: { reachable: true, ...(await client.health()) } })
+      res.json({ api: 'ok', previewOnly: false,
+        speechDemo: process.env.ISEMO_SPEECH_DEMO === '1',
+        demoData: process.env.ISEMO_MIDTERM_DEMO === '1',
+        inference: { reachable: true, ...(await client.health()) } })
     } catch (e) {
-      res.json({ api: 'ok', inference: { reachable: false, error: (e as Error).message } })
+      res.json({ api: 'ok', previewOnly: false,
+        speechDemo: process.env.ISEMO_SPEECH_DEMO === '1',
+        demoData: process.env.ISEMO_MIDTERM_DEMO === '1',
+        inference: { reachable: false, error: (e as Error).message } })
     }
   })
 
@@ -276,6 +283,70 @@ export function createApp({ db, config, client, pipeline }: AppDeps) {
     } finally {
       cleanup(req)
     }
+  })
+
+  // Create a NEW derived call from the untouched imported dataset recording.
+  // Never overwrite source/reference transcripts with generated ASR text.
+  app.post('/api/calls/:id/reprocess', async (req, res) => {
+    if (previewOnly) throw new HttpError(503, 'API preview không chạy model.')
+    const original = repo.getCallRow(db, req.params.id)
+    if (!original) throw new HttpError(404, 'Không tìm thấy cuộc gọi nguồn.')
+    if (original.status !== 'ready' || original.provenance !== 'imported' || !original.audio_file)
+      throw new HttpError(409, 'Chỉ phân tích lại được bản ghi có audio đã nhập và hoàn tất; không ghi đè kết quả nguồn.')
+    // Real ASR must be present; a mock or merely configured adapter cannot
+    // produce evidence for a genuine inference demonstration.
+    let status
+    try { status = await client.health() }
+    catch { throw new HttpError(503, 'Không xác nhận được ASR thật trên GPU. Hãy kiểm tra Python inference.') }
+    const asr = status.components.asr
+    if (!asr.ready || asr.mock || asr.adapter === 'not_configured' || !status.ffmpeg)
+      throw new HttpError(503, 'ASR chưa chạy thật hoặc ffmpeg không sẵn sàng. Không tạo hàng đợi không thể xử lý.')
+    const ser = status.components.ser
+    if (process.env.ISEMO_SER === 'none') {
+      if (ser.adapter !== 'not_configured' || ser.ready || ser.mock)
+        throw new HttpError(503, 'Cấu hình bỏ qua SER giữa hai dịch vụ không khớp.')
+    } else if (!ser.ready || ser.mock) {
+      throw new HttpError(503, 'SER chưa được xác minh; chỉ có thể chạy khi cấu hình chế độ QA/ASR không có SER.')
+    }
+
+    try { assertCallAudioOwnership(config.uploadsDir, original.id, original.audio_file) }
+    catch { throw new HttpError(409, 'Đường dẫn bản ghi không được xác minh thuộc cuộc gọi nguồn.') }
+    const source = path.resolve(config.uploadsDir, original.audio_file)
+    if (!fs.existsSync(source) || !fs.statSync(source).isFile())
+      throw new HttpError(404, 'Tệp ghi âm nguồn không còn tồn tại.')
+    const ext = path.extname(source).toLowerCase()
+    if (!(ext in AUDIO_EXT)) throw new HttpError(400, 'Định dạng tệp ghi âm nguồn không hỗ trợ.')
+    const id = repo.nextCallId(db)
+    const dir = path.join(config.uploadsDir, id)
+    const targetRel = path.join(id, 'audio' + ext)
+    fs.mkdirSync(dir)
+    try {
+      const dest = path.join(config.uploadsDir, targetRel)
+      fs.copyFileSync(source, dest, fs.constants.COPYFILE_EXCL)
+      const digest = (file: string) => createHash('sha256').update(fs.readFileSync(file)).digest('hex')
+      const hash = digest(source)
+      if (hash !== digest(dest)) throw new Error('Audio hash changed during copy')
+      db.transaction(() => {
+        repo.insertCall(db, {
+          id, title: ('ASR thật · ' + original.title).slice(0, 200),
+          agentName: original.agent_name || '', customerName: original.customer_name || '',
+          callDate: new Date().toISOString(), source: 'upload',
+          agentChannel: original.agent_channel || 0,
+          audioFile: targetRel, audioName: original.audio_name || path.basename(source),
+          audioMime: original.audio_mime || AUDIO_EXT[ext], stageLog: planStages('upload', true),
+          speakerSource: null,
+        })
+        repo.updateCall(db, id, {
+          overallNote: 'Bản phân tích mới từ ' + original.id +
+            '. File audio sao chép nguyên byte (SHA256 ' + hash + '). Transcript sẽ do ASR thật tạo, không sử dụng transcript nguồn. Kết quả SER chỉ có nếu checkpoint đã được xác minh.',
+        })
+      })()
+    } catch (error) {
+      fs.rmSync(dir, { recursive: true, force: true })
+      throw error
+    }
+    pipeline.enqueue(id)
+    res.status(202).json({ id, sourceCallId: original.id })
   })
 
   // ---- Calls: audio, review, retry, delete -------------------------------
