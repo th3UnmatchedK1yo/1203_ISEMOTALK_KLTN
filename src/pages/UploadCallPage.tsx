@@ -125,9 +125,11 @@ export function UploadCallPage() {
   return <div className="mx-auto max-w-5xl space-y-6">
     <div>
       <Link to="/calls" className="inline-flex items-center gap-1 text-sm text-slate-700 hover:text-teal-800"><ArrowLeft size={16}/> Danh sách cuộc gọi</Link>
-      <h1 className="mt-2 text-3xl font-semibold tracking-tight text-[#12394d]">Thêm cuộc gọi</h1>
-      <p className="mt-2 text-base text-slate-700">Tải bản ghi âm để xử lý, hoặc nhập kết quả phân tích đã có. Nguồn mô phỏng, inference và dữ liệu nhập được ghi riêng.</p>
+      <h1 className="mt-2 text-3xl font-semibold tracking-tight text-[#12394d]">Nhập dữ liệu nâng cao</h1>
+      <p className="mt-2 text-base text-slate-700">Trang này dùng khi đã có transcript kèm timestamp hoặc tệp kết quả JSON/CSV từ pipeline khác. Nếu muốn tải WAV để máy chủ tự nghe và phân tích, hãy dùng Chạy AI.</p>
     </div>
+
+    <p className="border-l-[3px] border-teal-700 bg-white px-4 py-3 text-sm leading-6 text-slate-700">Tải file âm thanh mới? <Link to="/scan" className="font-bold text-teal-800 hover:underline">Vào Chạy AI để gửi một hoặc nhiều file tự động</Link>. Trang này dành cho các tình huống nhập và đối chiếu dữ liệu nghiên cứu.</p>
 
     <section className="rounded-xl border border-[#c4d4dc] bg-white p-5 shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-2">
