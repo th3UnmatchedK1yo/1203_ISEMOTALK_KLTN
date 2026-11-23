@@ -5,7 +5,7 @@
 The laptop serves ONLY React/Vite. The group Linux GPU server runs BOTH the Express API and Python FastAPI inference, holding SQLite, recording uploads, and private model weights. Browser calls same-origin /api. Vite proxies /api via an SSH local-forward to the remote API, without directly exposing the server ports to the Internet.
 
     Laptop: React/Vite preview 127.0.0.1:5173
-        /api -> 127.0.0.1:13101 (SSH forwarded)
+        /api -> 127.0.0.1:13001 (SSH forwarded)
         |
         group Linux GPU host, SSH
             Express API 127.0.0.1:3101 -> SQLite + server/data/uploads
@@ -98,7 +98,7 @@ The preflight checks GPU, config and requires real ASR and real SER names; no as
 
 PowerShell terminal A:
 
-    ssh -N -L 127.0.0.1:13101:127.0.0.1:3101 ftisu-ser
+    ssh -N -L 127.0.0.1:13001:127.0.0.1:3101 ftisu-ser
 
 Keep the SSH terminal open. If tunnel cannot connect, DO NOT fall back to a local mock API.
 
