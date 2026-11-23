@@ -9,6 +9,7 @@ on:
       - feat/offline-faster-whisper-asr-20261102
       - fix/qa-workflow-audit-20261114
       - feat/thesis-demo-hardening-20261122
+      - feat/remote-gpu-full-pipeline-20261123
   pull_request:
     branches:
       - main
@@ -17,6 +18,7 @@ on:
       - feat/readability-theme-20261102
       - feat/offline-faster-whisper-asr-20261102
       - fix/qa-workflow-audit-20261114
+      - feat/thesis-demo-hardening-20261122
   workflow_dispatch:
 
 permissions:
@@ -59,6 +61,11 @@ jobs:
           cache: npm
       - name: Install dependencies
         run: npm ci --no-audit --no-fund
+      - name: Validate remote launcher syntax
+        run: |
+          node --check scripts/start-remote-web.mjs
+          node --check scripts/check-remote-models.mjs
+          node --check scripts/check-remote-server.mjs
       - name: Build frontend
         run: npm run build
       - name: Typecheck backend
