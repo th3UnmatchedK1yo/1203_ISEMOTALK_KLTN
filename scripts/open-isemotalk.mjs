@@ -106,8 +106,9 @@ async function main() {
     }
     if (!valid(live)) {
       if (sshProcess.exitCode !== null || sshProcess.launchError) {
-        throw Error('Không đăng nhập hoặc khởi động được FTISU. Xem lỗi SSH/GPU ở phía trên. ' +
-          'Nếu Permission denied thì kiểm tra đúng mật khẩu/SSH key của tài khoản emotalk; launcher không bỏ qua xác thực.')
+        throw Error('Phiên SSH/AI trên FTISU đã dừng trước khi backend sẵn sàng. Xem lỗi ngay phía trên: ' +
+          'nếu có Python Traceback/AttributeError là lỗi inference, KHÔNG PHẢI sai mật khẩu SSH. ' +
+          'Chỉ khi thấy Permission denied (publickey,password) mới kiểm tra xác thực SSH.')
       }
       throw Error('Đã kết nối SSH nhưng QA GPU chưa báo sẵn sàng. Xem lỗi mô hình trong console; ' +
         'không tự chuyển sang mô phỏng.')
