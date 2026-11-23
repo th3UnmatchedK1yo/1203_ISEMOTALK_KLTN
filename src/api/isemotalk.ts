@@ -103,6 +103,8 @@ export interface InferenceHealth {
 }
 export interface SystemStatus {
   api: 'ok'
+  previewOnly?: boolean
+  demoData?: boolean
   inference: { reachable: boolean; error?: string } & Partial<InferenceHealth>
 }
 
