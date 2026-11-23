@@ -266,15 +266,19 @@ export class Pipeline {
         const map: Record<string, Speaker> = {}
         current.forEach((u, i) => { if (u.speaker === 'unknown') map[u.id] = r.speakers[i] })
         const mock = r.method === 'mock' || r.evidence?.mock === true
+        const anonymous = !mock && r.method === 'model' && (r.turns?.length ?? 0) > 0
         const assigned = Object.values(map).filter((speaker) => speaker !== 'unknown').length
         return {
-          detail: assigned === 0
-            ? 'Chưa có căn cứ gán vai trò nhân viên/khách hàng; cần gán thủ công.'
-            : `${mock ? 'Gán nhãn mô phỏng' : 'Đã gán người nói bằng mô hình'} cho ${assigned} câu chưa có nhãn; giữ nguyên nhãn được cung cấp`,
-          provenance: mock ? 'mock' : 'real', evidence: r.evidence,
+          detail: anonymous
+            ? `Pyannote đã phát hiện ${new Set(r.turns!.map(t=>t.speakerId)).size} nhóm giọng ẩn danh trên ${r.turns!.length} đoạn tiếng nói. Chưa xác minh ai là nhân viên hoặc khách hàng; cần đối chiếu thủ công.`
+            : assigned === 0
+              ? 'Chưa có căn cứ gán vai trò nhân viên/khách hàng; cần gán thủ công.'
+              : `${mock ? 'Gán nhãn mô phỏng' : 'Đã gán người nói bằng mô hình'} cho ${assigned} câu chưa có nhãn; giữ nguyên nhãn được cung cấp`,
+          provenance: mock ? 'mock' : 'real',
+          evidence: { ...(r.evidence ?? {adapter:'diarizer',mock}), ...(anonymous ? {speakerTurns:r.turns} : {}) },
           commit: () => {
             repo.setSpeakers(this.db, id, map)
-            repo.updateCall(this.db, id, { speakerSource: (assigned === 0 ? 'unassigned' : mock ? 'mock' : 'model') satisfies SpeakerSource, ...(mock ? { provenance: 'mock' } : {}) })
+            repo.updateCall(this.db, id, { speakerSource: (anonymous || assigned > 0 ? mock ? 'mock' : 'model' : 'unassigned') satisfies SpeakerSource, ...(mock ? { provenance: 'mock' } : {}) })
           },
         }
       }
