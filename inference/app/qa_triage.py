@@ -15,6 +15,26 @@ from pathlib import Path
 from .adapters.base import ModelNotReady
 
 
+def window_starts(total: int, payload: int, max_windows: int = 48) -> tuple[list[int], bool]:
+    """Return bounded, deterministic overlapping token windows, preserving the tail.
+
+    Incompleteness is flagged if the 48-window safety cap prevents contiguous
+    full coverage. This is a deployment heuristic; it is not a new QA model.
+    """
+    if total < 1 or payload < 1 or max_windows < 2:
+        raise ValueError("Invalid token window parameters.")
+    if total <= payload:
+        return [0], False
+    stride = max(1, payload // 2)
+    starts = list(range(0, total - payload + 1, stride))
+    if starts[-1] != total - payload:
+        starts.append(total - payload)
+    if len(starts) <= max_windows:
+        return starts, False
+    picks = [round(i * (len(starts) - 1) / (max_windows - 1)) for i in range(max_windows)]
+    return sorted(set(starts[i] for i in picks)), True
+
+
 class QATriageModel:
     def __init__(self):
         raw = os.getenv("ISEMO_QA_MODEL_DIR", "").strip()
@@ -80,20 +100,43 @@ class QATriageModel:
             length = int(self._info.get("max_length", 256))
             if not 64 <= length <= 512:
                 raise ModelNotReady("Invalid saved QA token limit.")
-            inputs = self._tokenizer(text, truncation=True, max_length=length, return_tensors="pt")
-            # Tokenizer limit is explicit; full call long-term processing needs chunking.
-            raw = self._tokenizer(text, truncation=False, add_special_tokens=True)
-            truncated = len(raw["input_ids"]) > length
+
+            # The old implementation silently scored only the first 256 tokens:
+            # e.g. late escalations in OneVoice were never seen. Each window now
+            # uses the SAME genuine checkpoint, without any keyword fallback.
+            ids = self._tokenizer(text, add_special_tokens=False, truncation=False)["input_ids"]
+            payload = length - int(self._tokenizer.num_special_tokens_to_add(pair=False))
+            if payload < 32:
+                raise ModelNotReady("QA tokenizer special-token count is incompatible with training.")
+            starts, incomplete = window_starts(len(ids), payload, max_windows=48)
+            scores = []
             with torch.inference_mode():
-                logits = self._model(**{k: v.to("cuda:0") for k, v in inputs.items()}).logits
-                value = float(torch.softmax(logits.float(), dim=-1)[0, 1].cpu().item())
+                for start in starts:
+                    batch = self._tokenizer.prepare_for_model(
+                        ids[start:start + payload],
+                        add_special_tokens=True, return_attention_mask=True,
+                        return_tensors="pt",
+                    )
+                    logits = self._model(**{k: v.to("cuda:0") for k, v in batch.items()}).logits
+                    scores.append(float(torch.softmax(logits.float(), dim=-1)[0, 1].cpu().item()))
+            if not scores:
+                raise ModelNotReady("Tokenizer returned no usable QA window.")
+
+            # Conservative attention SCREENING heuristic: max window probability.
+            # It is NOT the trained full-call score and is NOT calibrated for the
+            # windowed deployment. Human QA still determines the actual case.
+            value = max(scores)
             return {
                 "label": "needs_attention" if value >= 0.5 else "routine",
                 "score": value,
-                "model": "xlm-roberta-qa@" + self._weight_sha[:16],
+                "model": "xlm-roberta-qa@" + self._weight_sha[:16] + "/window-max-v2",
                 "modelSha256": self._weight_sha,
                 "dataset": "synthetic_onevoice",
-                "truncated": bool(truncated),
+                "truncated": bool(incomplete),
                 "source": "model",
-                "note": "Synthetic-trained QA suggestion, not a human judgement or validated real-world accuracy.",
+                "note": (
+                    f"Scanned {len(starts)} token windows with a genuine XLM-R checkpoint, "
+                    "max-window attention heuristic; NOT a calibrated full-call probability. "
+                    + ("Some tokens omitted due to 48-window safety limit." if incomplete else "All transcript tokens covered.")
+                ),
             }
