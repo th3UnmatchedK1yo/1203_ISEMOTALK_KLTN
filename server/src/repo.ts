@@ -302,8 +302,20 @@ export function getCallDetail(db: DB, id: string): CallDetail | null {
     const outdated = rv?.evidence_key != null && rv.evidence_key !== momentEvidenceKey(m)
     return { ...m, relevance: outdated || rv?.relevance == null ? null : !!rv.relevance, note: outdated ? '' : rv?.note ?? '', reviewOutdated: outdated }
   })
+  // The batch scan polls GET /api/calls/:id for actual persisted QA scores.
+  // The list endpoint already includes this field; detail must agree with it.
+  const qaRow = db.prepare(
+    'SELECT label, score, input_sha256, model_name, truncated FROM qa_triage_results WHERE call_id=?',
+  ).get(id) as { label: 'routine' | 'needs_attention'; score: number; input_sha256: string; model_name: string; truncated: number } | undefined
+  const qaTriage: CallListItem['qaTriage'] = qaRow ? {
+    label: qaRow.label, score: qaRow.score,
+    outdated: buildQaInput(utterances).hash !== qaRow.input_sha256 ||
+      (!!qaRow.truncated && !qaRow.model_name.includes('/window-max-v2')),
+    truncated: !!qaRow.truncated,
+  } : null
   return {
     ...mapListItem(r),
+    qaTriage,
     agentChannel: r.agent_channel,
     channels: r.channels ?? null,
     speakerSource: r.speaker_source ?? null,
