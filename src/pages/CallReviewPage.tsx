@@ -381,7 +381,7 @@ function CallReviewSession({ callId }: { callId: string }) {
           <CallRecording callId={call.id} audioUrl={call.audioUrl} duration={call.duration} utterances={call.utterances}
             seekRequest={seekRequest} onActiveChange={setActiveId} onSelect={selectUtterance}/>
         </div>
-        <TranscriptList utterances={call.utterances} patches={form?.utterances ?? {}} selectedId={selectedId} activeId={activeId} onSelect={selectUtterance} sourceDialogue={sourceDialogue}/>
+        <TranscriptList utterances={call.utterances} patches={form?.utterances ?? {}} selectedId={selectedId} activeId={activeId} onSelect={selectUtterance} sourceDialogue={sourceDialogue} transcriptFromAudio={call.source === 'upload'}/>
       </div>
       <div className="min-w-0 space-y-5">
         <div id="call-ai" className="scroll-mt-28">
