@@ -18,10 +18,14 @@ PY
 echo "[qa-train] Download metadata + 24 permitted synthetic audio files for audio smoke."
 "$PY" "$ROOT/inference/scripts/download_onevoice.py" \
   --output "$DATA" --audio-limit 24
-if [[ -f "$MODEL/training_result.json" ]]; then
+if [[ -f "$MODEL/training_result.json" && -s "$MODEL/model.safetensors" ]]; then
   echo "[qa-train] Existing finished run preserved: $MODEL/training_result.json"
   echo "[qa-train] To run another experiment, choose a new versioned model output, NEVER overwrite test results."
   exit 0
+fi
+if [[ -f "$MODEL/training_result.json" || -f "$MODEL/model.safetensors" ]]; then
+  echo "ERROR: partial previous run detected at $MODEL. Preserve it; inspect logs and use a different versioned output for retry." >&2
+  exit 3
 fi
 echo "[qa-train] CUDA fine-tuning XLM-RoBERTa on needs_attention (SYNTHETIC ONLY)"
 echo "[qa-train] Training logs: $LOG/qa-xlm-r-seed2026-v1.log"
