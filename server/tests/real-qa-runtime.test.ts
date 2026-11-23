@@ -33,6 +33,35 @@ function genuinePartialHealth(asrAvailable = true): HealthInfo {
 }
 
 describe('new ASR analysis without destroying original dataset evidence', () => {
+  it('can rerun a genuine uploaded WAV after an ASR update without replacing the first result', async () => {
+    process.env.ISEMO_SER = 'none'
+    t.client.duration = 20
+    t.client.health = async () => genuinePartialHealth()
+    let run = 0
+    t.client.transcribe = vi.fn(async () => ({
+      segments: [{ start: 0, end: 5, text: 'Bản ASR lần ' + (++run), speaker: 'unknown' as const }],
+      speakerSource: 'none' as const, provenance: 'real' as const,
+      evidence: {adapter:'phowhisper',mock:false,model:'pinned-test-model'},
+    }))
+    const first = await t.api.post('/api/calls/upload').attach('audio', wav, 'direct.wav')
+    expect(first.status).toBe(202)
+    await t.pipeline.onIdle()
+    const before = (await t.api.get('/api/calls/' + first.body.id)).body
+    expect(before.provenance).toBe('real')
+    expect(before.utterances[0].text).toBe('Bản ASR lần 1')
+
+    const rerun = await t.api.post('/api/calls/' + first.body.id + '/reprocess')
+    expect(rerun.status).toBe(202)
+    expect(rerun.body.id).not.toBe(first.body.id)
+    await t.pipeline.onIdle()
+    const latest = (await t.api.get('/api/calls/' + rerun.body.id)).body
+    const original = (await t.api.get('/api/calls/' + first.body.id)).body
+    expect(latest.status).toBe('ready')
+    expect(latest.utterances[0].text).toBe('Bản ASR lần 2')
+    expect(original.utterances).toEqual(before.utterances)
+    expect(Buffer.from((await t.api.get('/api/calls/' + rerun.body.id + '/audio')).body)).toEqual(wav)
+  })
+
   it('creates a separate job and preserves original imported transcript/predictions', async () => {
     const sourceId = await importedAudio()
     const source = (await t.api.get('/api/calls/' + sourceId)).body
