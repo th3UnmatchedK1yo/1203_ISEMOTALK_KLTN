@@ -25,7 +25,7 @@ if (apiPort === 3001) throw Error('Refusing :3001; another service owns it.')
 console.log('[preview] API-only, no Python inference. Model processing WILL NOT work in this mode.')
 console.log('[preview] SQLite:', dir, '| port:', apiPort, '| no mock seeding.')
 const child = spawn(process.execPath, ['--import','tsx','server/src/index.ts'], {
-  cwd: root, env: { ...process.env, NODE_ENV:'production', ISEMO_AUTO_SEED:'0',
+  cwd: root, env: { ...process.env, NODE_ENV:'production', ISEMO_AUTO_SEED:'0', ISEMO_API_PREVIEW_ONLY:'1',
     ISEMO_DATA_DIR:dir, ISEMO_UPLOADS_DIR:resolve(dir,'uploads'),
     INFERENCE_URL:'http://127.0.0.1:8001', PORT:String(apiPort) },
   stdio:'inherit',shell:false,
