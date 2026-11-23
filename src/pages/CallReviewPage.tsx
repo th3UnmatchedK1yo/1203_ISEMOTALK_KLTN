@@ -232,16 +232,28 @@ function CallReviewSession({ callId }: { callId: string }) {
         <button type="button" disabled={!canSave} onClick={() => void save()} className={primaryButton}><Save size={18}/>{saving ? 'Đang lưu…' : 'Lưu đánh giá'}</button>
       </div>
     </header>
-    {call.provenance === 'imported' && (call.title.startsWith('TTS TỔNG HỢP') || call.title.startsWith('GIỌNG THẬT')) &&
+    {call.provenance === 'imported' &&
+      (call.title.startsWith('TTS TỔNG HỢP') || call.title.startsWith('GIỌNG THẬT') || call.title.startsWith('HỘI THOẠI ĐIỆN THOẠI THẬT')) &&
       <div className="rounded-lg border border-sky-200 bg-sky-50 p-4 text-sm leading-6 text-sky-950" role="note">
-        <strong>Đang nghe bản ghi WAV gốc từ dataset, không phải âm thanh do web tạo.</strong>
+        <strong>Đang nghe file WAV lấy từ bộ dữ liệu công bố, không phải âm thanh do web tạo.</strong>
         <p className="mt-1">{call.title.startsWith('TTS TỔNG HỢP')
-          ? 'OneVoice có lời thoại tổng đài được đọc bằng giọng TTS tổng hợp, không phải cuộc gọi khách hàng ngoài đời.'
-          : 'FOSD/FLEURS là tiếng nói ghi âm từ người thật, nhưng không phải cuộc gọi chăm sóc khách hàng.'}
-          {' '}Transcript được lấy từ nguồn dữ liệu, đang hiển thị theo toàn bộ thời lượng; chưa có timestamp tách lượt nói, ASR hay SER thật.
-          Không có nhãn cảm xúc vì hệ thống chưa chạy mô hình trên file này.</p>
+          ? 'OneVoice là kịch bản tổng đài đọc bằng giọng TTS tổng hợp; không phải cuộc gọi CSKH ngoài đời.'
+          : call.title.startsWith('HỘI THOẠI ĐIỆN THOẠI THẬT')
+            ? 'DataHive là cuộc trò chuyện qua điện thoại có hai giọng người thật. Đây là đoạn trích từ bản ghi có sự đồng ý của người tham gia, không phải cuộc gọi CSKH; dataset không có transcript nên trang này không tự dựng lời thoại.'
+            : 'FOSD/FLEURS có tiếng nói của người thật nhưng chỉ là đoạn phát biểu, không phải hội thoại tổng đài.'}
+          {' '}{call.title.startsWith('HỘI THOẠI ĐIỆN THOẠI THẬT')
+            ? 'Chưa chạy ASR hoặc SER nên chưa có transcript và nhãn cảm xúc.'
+            : 'Transcript lấy từ nguồn và gắn toàn bộ thời lượng, không có căn chỉnh thời gian từng lượt. Chưa chạy ASR hoặc SER để dự đoán.'}</p>
         <details className="mt-2"><summary className="cursor-pointer font-semibold">Nguồn, giấy phép và SHA256 của bản ghi</summary>
           <p className="mt-2 break-all text-xs">{call.stageLog.find(step => step.stage === 'validate')?.detail}</p>
+          <a href={call.title.startsWith('TTS TỔNG HỢP')
+            ? 'https://huggingface.co/datasets/nhatminh/OneVoice'
+            : call.title.startsWith('HỘI THOẠI ĐIỆN THOẠI THẬT')
+              ? 'https://huggingface.co/datasets/datahiveai/multilingual-conversations-sample'
+              : call.title.includes('FLEURS')
+                ? 'https://huggingface.co/datasets/google/fleurs'
+                : 'https://huggingface.co/datasets/doof-ferb/fpt_fosd'}
+            target="_blank" rel="noopener noreferrer" className="mt-2 inline-block font-semibold underline underline-offset-2">Xem dữ liệu và giấy phép của nhà phát hành</a>
         </details>
       </div>}
     {call.provenance === 'mock' && <p className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-950">
