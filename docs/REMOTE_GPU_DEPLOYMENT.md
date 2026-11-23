@@ -51,13 +51,14 @@ Prepare inference/.env privately with the genuine adapters; use these illustrati
     ISEMO_ASR=phowhisper
     ISEMO_ASR_MODEL=vinai/PhoWhisper-medium
     ISEMO_ASR_DEVICE=auto
+    # ISEMO_ASR_REVISION=<pin to the actual repository commit SHA after selection>
     ISEMO_DIARIZATION=none
     ISEMO_SER=checkpoint
     ISEMO_SER_FACTORY=actual_private_package.serving:build_model
     ISEMO_SER_CONFIG=/absolute/path/to/private/ser_config.json
     ISEMO_ALLOW_UNVERIFIED=0
 
-Note: PhoWhisper-medium is a serious starting ASR candidate, not a validated winner. Compare held-out Vietnamese WER/CER and server memory with other sizes before selecting. Never silently replace it with a mock or call a generic Whisper the research model.
+Note: PhoWhisper-medium is a serious starting ASR candidate, not a validated winner. Compare held-out Vietnamese WER/CER and server memory with other sizes before selecting. Once selected, pin the exact Hugging Face commit SHA in ISEMO_ASR_REVISION so ASR runs can be reproduced. Never silently replace it with a mock or call a generic Whisper the research model.
 
 The F4 private factory must load emotion2vec, PhoBERT/tokenizer, and the authentic F4 head with EXACT preprocessing, labels, model condition, and seed. A single model.pt is NOT a complete model. The already available historical weights are not proof of call-center accuracy.
 
@@ -83,6 +84,13 @@ Remote Linux terminal 1:
 Remote terminal 2:
 
     npm run remote:check
+
+The first check may intentionally fail because the checkpoint has not yet been loaded in the running FastAPI process. After performing independent package verification, run one permitted 10-30 second Vietnamese recording on the REMOTE server:
+
+    npm run remote:smoke -- /absolute/path/to/permitted_test_clip.wav
+    npm run remote:check
+
+This creates one REAL recorded call in remote SQLite and verifies that both ASR and SER processing stages are actual inference, not mock. Do not use an actual private customer recording unless authorized.
 
 The preflight checks GPU, config and requires real ASR and real SER names; no assets are downloaded. The server launcher forces NODE_ENV=production and ISEMO_AUTO_SEED=0; Python and API bind localhost on ports 8001 and 3001. Health must show ASR and SER mock=false, ready=true. The SER checkpoint verification flag may remain false until first actual model load; run a genuine audio smoke test and then verify status. A healthy adapter alone does not prove accuracy.
 
