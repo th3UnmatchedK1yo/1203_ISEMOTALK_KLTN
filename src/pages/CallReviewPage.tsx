@@ -287,21 +287,16 @@ function CallReviewSession({ callId }: { callId: string }) {
         </div>
       </div>
     </header>
-    <nav aria-label="Các bước xem xét cuộc gọi" className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
-      <p className="mb-3 px-1 text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">HƯỚNG DẪN THEO QUY TRÌNH</p>
-      <ol className="grid grid-cols-2 gap-2 lg:grid-cols-4">
+    <nav aria-label="Các bước xem xét cuộc gọi" className="border-y border-slate-200 py-2">
+      <ol className="flex flex-wrap items-center gap-x-1 gap-y-2">
         {([
-          {href:'#call-audio', label:'Nghe & đọc', icon:Headphones, sub:'Kiểm tra bằng chứng'},
-          {href:'#call-ai', label:'Gợi ý AI', icon:Sparkles, sub:'Sàng lọc, không kết luận'},
-          {href:'#call-review', label:'Kết luận QA', icon:ClipboardCheck, sub:'Người đánh giá xác nhận'},
-          {href:'#call-case', label:'Xử lý tiếp', icon:BriefcaseBusiness, sub:'Chỉ tạo việc khi cần'},
-        ] as const).map((step, index) => <li key={step.href}>
-          <a href={step.href} className="group flex min-h-16 items-start gap-3 rounded-lg border border-transparent bg-slate-50 px-3 py-3 hover:border-teal-200 hover:bg-teal-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700">
-            <span className={'flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold ' +
-              (index === 0 ? 'bg-[#0e5665] text-white' : 'border border-slate-300 bg-white text-slate-700')}>{index + 1}</span>
-            <span className="min-w-0"><span className="block text-sm font-semibold text-slate-900">{step.label}</span>
-              <span className="mt-0.5 hidden text-xs leading-4 text-slate-600 sm:block">{step.sub}</span></span>
-            <ChevronRight size={15} className="ml-auto mt-1 hidden shrink-0 text-slate-400 group-hover:text-teal-700 xl:block" aria-hidden="true"/>
+          {href:'#call-audio', label:'Nghe & đọc', icon:Headphones},
+          {href:'#call-ai', label:'Gợi ý AI', icon:Sparkles},
+          {href:'#call-review', label:'Kết luận QA', icon:ClipboardCheck},
+          {href:'#call-case', label:'Xử lý tiếp', icon:BriefcaseBusiness},
+        ] as const).map(step => <li key={step.href}>
+          <a href={step.href} className="inline-flex min-h-10 items-center gap-2 rounded-md px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-white hover:text-teal-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700">
+            <step.icon size={16} className="text-slate-500" aria-hidden="true"/>{step.label}
           </a>
         </li>)}
       </ol>
