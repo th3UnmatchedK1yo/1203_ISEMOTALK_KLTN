@@ -54,6 +54,7 @@ describe('Automatic real QA pipeline', () => {
     expect(row).toEqual({label:'needs_attention',score:.82})
     expect(db.prepare('SELECT COUNT(*) AS n FROM qa_triage_results').get()).toEqual({n:1})
     expect(fake.mock.calls.filter(c=>String(c[0]).includes('/triage'))).toHaveLength(1)
+    expect(runner.statusFor('CALL-0101').state).toBe('idle')
     await runner.stop()
   })
   it('rejects unready QA without creating synthetic predictions', async () => {
@@ -63,6 +64,7 @@ describe('Automatic real QA pipeline', () => {
     const runner=new AutoQa(db,loadConfig(),()=>{})
     await runner.sweep()
     expect(db.prepare('SELECT COUNT(*) AS n FROM qa_triage_results').get()).toEqual({n:0})
+    expect(runner.statusFor('CALL-0201')).toMatchObject({ state: 'retrying' })
     await runner.stop()
   })
 })
