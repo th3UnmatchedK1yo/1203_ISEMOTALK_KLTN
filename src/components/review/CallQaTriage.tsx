@@ -122,11 +122,11 @@ export function CallQaTriage({ callId, version, autoEligible = true }: { callId:
           <p className="font-bold leading-6 text-slate-900">
             {data?.outdated ? 'Kết quả cũ · cần phân tích lại'
               : prediction.truncated ? 'Chưa bao phủ toàn transcript · cần QA kiểm tra'
-              : prediction.label === 'needs_attention' ? 'Gợi ý: ưu tiên QA kiểm tra' : 'Chưa có cảnh báo mạnh từ XLM-R'}
+              : prediction.label === 'needs_attention' ? 'Gợi ý: ưu tiên QA kiểm tra' : 'XLM-R không gợi ý ưu tiên QA (chưa kết luận cuộc gọi đạt chuẩn)'}
           </p>
           <p className="mt-1 text-sm leading-6 text-slate-700">
-            Điểm cảnh báo{windowed ? ' cao nhất theo đoạn' : ''}: <strong>{(prediction.score * 100).toFixed(1)}%</strong>.
-            Đây là điểm sàng lọc của model, không phải độ chính xác hay kết luận lỗi nhân viên.
+            XLM-R text-only · chỉ số sàng lọc{windowed ? ' cao nhất trong các cửa sổ' : ''}: <strong>{prediction.score.toFixed(3)} / 1</strong>.
+            Ngưỡng phân loại nội bộ 0,500. Đây không phải điểm chất lượng dịch vụ, xác suất nhân viên sai, mức hài lòng hay kết luận cuộc gọi đã giải quyết xong.
           </p>
         </div>
       </div>
