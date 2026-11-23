@@ -192,11 +192,10 @@ class CheckpointSer:
         detail = f"{self.factory}: " + ("đã nạp; " + why if self._model is not None else "cấu hình sẵn; sẽ kiểm SHA256 và nạp khi dùng lần đầu")
         if self.allow_unverified:
             detail += " · cho phép chế độ gỡ lỗi chưa xác minh"
-        # A previously verified immutable package can be selected for a *cold*
-        # inference job. On its first run _load performs the FULL SHA256 check
-        # and returns genuine probabilities; do not require model residency
-        # merely to let the user submit an audio job.
-        return Status(self.name, True, False, detail, verified=bool(ok), loaded=self._model is not None)
+        # "verified" means the weights were checked in this *runtime*.
+        # The persisted held-out record only allows a cold start; full SHA256
+        # and original factory identity are checked again by _load on demand.
+        return Status(self.name, bool(ok), False, detail, verified=self.verified, loaded=self._model is not None)
 
     def _load(self):
         try:
