@@ -187,7 +187,7 @@ try{
  evidence.checks.push('Call review: source-vs-ASR/SER provenance, chat turns, guidance anchors, QA save, desktop/mobile 390')
  await page.goto(base+'/research')
  await page.getByRole('heading',{name:'Muốn làm việc gì thì vào tab nào?'}).waitFor()
- await page.getByText('Đây không phải màn hình chạy AI.',{exact:false}).first().waitFor()
+ await page.getByText(/không phải nơi chạy AI hoặc chấm điểm/).first().waitFor()
  evidence.checks.push('Model & Limits page routes users into real upload, calls, analytics and cases')
  evidence.screenshots.push(path.join(outputDir,'call-review-desktop.png'),path.join(outputDir,'call-review-mobile.png'))
 
