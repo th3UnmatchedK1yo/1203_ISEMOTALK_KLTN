@@ -63,7 +63,7 @@ async function health() {
 function valid(h) {
   const c = h?.inference?.components
   return h?.api === 'ok' && h.previewOnly !== true && h.inference?.reachable &&
-    h.inference?.qa?.ready === true && c?.ser?.adapter === 'not_configured' &&
+    h.inference?.qa?.ready === true && h.inference.qa.loaded === true && c?.ser?.adapter === 'not_configured' &&
     c.ser.mock === false && c.ser.ready === false &&
     c?.asr?.mock === false && (c.asr.ready || c.asr.adapter === 'not_configured')
 }
