@@ -52,12 +52,14 @@ fi
 PY="$ROOT/inference/.venv/bin/python"
 "$PY" -m pip install --no-cache-dir --upgrade pip
 "$PY" -m pip install --no-cache-dir -r inference/requirements-core.txt
-# Research feature extractor pins; GPU PyTorch and torchaudio must match.
-"$PY" -m pip install --no-cache-dir 'torch==2.15.0' 'torchaudio==2.15.0'
+# Research feature extractor pins. Official TorchAudio 2.11.1 has stable ABI
+# and supports PyTorch 2.11+ (incl 2.15) on Python 3.14. DO NOT pin 2.15.
+"$PY" -m pip install --no-cache-dir 'torch==2.15.0' 'torchaudio==2.11.1'
 "$PY" -m pip install --no-cache-dir \
   'transformers==5.15.0' 'funasr==1.4.2' 'modelscope==1.39.1' \
   'accelerate>=1.0' 'scikit-learn>=1.4' 'sentencepiece>=0.2' \
   'soundfile>=0.12' 'safetensors>=0.4'
+"$PY" -m pip check
 "$PY" - <<'PY'
 import torch
 from importlib.metadata import version
