@@ -275,7 +275,15 @@ function CallReviewSession({ callId }: { callId: string }) {
             {call.agentName || 'Nhân viên chưa xác định'} / {call.customerName || 'Khách hàng chưa xác định'}
           </p>}
         </div>
-        <a href="#call-review" className={button + ' shrink-0'}><ClipboardCheck size={17}/> Đi tới phần đánh giá</a>
+        <div className="flex flex-wrap items-center gap-2">
+          {call.provenance === 'real' && call.hasAudio && call.status === 'ready' &&
+            <button type="button" className={primaryButton + ' shrink-0'}
+              disabled={!realAsrAvailable || reanalyzing || saving || dirty}
+              onClick={() => void analyzeSourceAudio()}>
+              <RefreshCw size={17}/>{reanalyzing ? 'Đang tạo phân tích mới…' : 'Chạy lại ASR + QA'}
+            </button>}
+          <a href="#call-review" className={button + ' shrink-0'}><ClipboardCheck size={17}/> Đi tới phần đánh giá</a>
+        </div>
       </div>
     </header>
     <nav aria-label="Các bước xem xét cuộc gọi" className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
