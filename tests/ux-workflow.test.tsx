@@ -26,7 +26,7 @@ describe('QA workflow explains real versus unavailable model output', () => {
       activeId={null} onSelect={()=>{}} transcriptFromAudio timingMode="audio_window"/>)
     expect(html).toContain('Bản phiên âm theo thời gian')
     expect(html).toContain('Đoạn âm thanh · chưa xác định người nói')
-    expect(html).toContain('KHOẢNG AUDIO')
+    expect(html).toContain('cửa sổ audio')
     expect(html).not.toContain('Khách hàng (nhãn kịch bản)')
     expect(html).not.toContain('Nhân viên (nhãn kịch bản)')
   })
