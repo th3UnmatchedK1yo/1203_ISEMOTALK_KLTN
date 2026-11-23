@@ -60,11 +60,11 @@ export function CallsPage() {
   return <div className="space-y-5">
     <header className="flex flex-wrap items-start justify-between gap-4">
       <div><h1 className="text-3xl font-bold tracking-tight text-[#12394d]">Hàng đợi đánh giá QA</h1>
-        <p className="mt-2 text-base text-slate-700">Chọn cuộc gọi cần xem trước, nghe bằng chứng rồi ghi nhận quyết định.</p>
+        <p className="mt-2 text-base text-slate-700">AI dùng transcript để gợi ý cuộc nên nghe trước. Người QA nghe, kiểm chứng và ghi nhận kết luận; điểm AI không phải điểm chất lượng nhân viên.</p>
       </div>
       <div className="flex flex-wrap items-center gap-3">
         <button type="button" onClick={() => setRefresh(n => n + 1)} disabled={loading} className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold hover:bg-teal-50 disabled:opacity-50"><RefreshCw size={17}/> Cập nhật</button>
-        <Link to="/calls/new" className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-[#0E5665] px-4 py-2 text-sm font-semibold text-white hover:bg-[#0B4554]"><Upload size={17}/> Thêm cuộc gọi</Link>
+        <Link to="/scan" className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-[#0E5665] px-4 py-2 text-sm font-semibold text-white hover:bg-[#0B4554]"><Upload size={17}/> Chạy AI với audio</Link>
       </div>
     </header>
     {data && <div className="grid gap-3 sm:grid-cols-3" aria-label="Tình trạng hàng đợi QA">
@@ -81,6 +81,7 @@ export function CallsPage() {
         <p className="mt-1 text-2xl font-bold tabular-nums text-slate-900">{data.counts.processing}</p>
       </div>
     </div>}
+    <p className="text-xs leading-5 text-slate-600">Các đoạn chưa biết người nói sẽ hiển thị như bản phiên âm theo thời gian, không phải chat nhân viên–khách. <Link to="/guide" className="font-semibold text-teal-800 hover:underline">Tìm hiểu quy trình</Link>.</p>
     {qaReady && <p role="status" className="text-xs leading-5 text-teal-800">XLM-R đang tự sàng lọc transcript đủ điều kiện. Người QA vẫn quyết định sau khi nghe.</p>}
     <section className="rounded-xl border border-slate-200 bg-white px-4 py-4 text-sm leading-6" aria-label="Vì sao phải sàng lọc cuộc gọi trước khi nghe">
       <div className="flex flex-wrap items-start justify-between gap-3">
