@@ -236,13 +236,13 @@ export function listCalls(db: DB, q: ListQuery) {
     items: rows.map((row) => {
       const item = mapListItem(row)
       const stored = db.prepare(
-        'SELECT label, score, input_sha256, truncated FROM qa_triage_results WHERE call_id=?',
-      ).get(row.id) as { label: 'routine' | 'needs_attention'; score: number; input_sha256: string; truncated: number } | undefined
+        'SELECT label, score, input_sha256, model_name, truncated FROM qa_triage_results WHERE call_id=?',
+      ).get(row.id) as { label: 'routine' | 'needs_attention'; score: number; input_sha256: string; model_name: string; truncated: number } | undefined
       if (stored) {
         const current = buildQaInput(getUtterances(db, row.id))
         item.qaTriage = {
           label: stored.label, score: stored.score,
-          outdated: current.hash !== stored.input_sha256,
+          outdated: current.hash !== stored.input_sha256 || (!!stored.truncated && !stored.model_name.includes('/window-max-v2')),
           truncated: !!stored.truncated,
         }
       }
