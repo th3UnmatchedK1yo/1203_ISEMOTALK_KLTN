@@ -13,9 +13,14 @@ HEAD="$ASSETS/head-m1-seed13"
 mkdir -p "$ASSETS" "$PACKAGE" "$HEAD"
 
 if [[ ! -f "$SERVING/src/serq1/serving/f4_factory.py" ]]; then
-  source_url="git@github.com:th3UnmatchedK1yo/SER_VI_TRANSFER.git"
+  source_url=""
   if [[ -d "$HOME/SER_VI_TRANSFER/.git" ]]; then
     source_url="$(git -C "$HOME/SER_VI_TRANSFER" remote get-url origin)"
+  elif [[ -n "${ISEMO_PRIVATE_SER_REMOTE:-}" ]]; then
+    source_url="$ISEMO_PRIVATE_SER_REMOTE"
+  else
+    echo "Private research checkout missing. Set ISEMO_PRIVATE_SER_REMOTE to an authorized private Git remote." >&2
+    exit 3
   fi
   echo "[stage] Cloning private research serving source to a SEPARATE checkout"
   GIT_TERMINAL_PROMPT=0 git clone --single-branch \
