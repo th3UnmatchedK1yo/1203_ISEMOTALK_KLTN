@@ -76,7 +76,7 @@ export function CallsPage() {
         <caption className="sr-only">Danh sách cuộc gọi, nguồn kết quả và trạng thái đánh giá</caption>
         <thead className="border-b bg-slate-50"><tr>
           <th scope="col" className="px-5 py-4">Cuộc gọi</th><th scope="col" className="px-4 py-4">Nhân viên / Khách hàng</th><th scope="col" className="px-4 py-4">Thời lượng</th>
-          <th scope="col" className="px-4 py-4">Cảm xúc khách hàng</th><th scope="col" className="px-4 py-4">Ưu tiên</th><th scope="col" className="px-4 py-4">Đánh giá</th><th scope="col" className="px-4 py-4">Xử lý</th>
+          <th scope="col" className="px-4 py-4">Cảm xúc khách hàng</th><th scope="col" className="px-4 py-4">Ưu tiên (SER)</th><th scope="col" className="px-4 py-4">AI QA</th><th scope="col" className="px-4 py-4">Đánh giá</th><th scope="col" className="px-4 py-4">Xử lý</th>
         </tr></thead>
         <tbody className="divide-y divide-slate-200">
           {!loading && data?.items.map(call => <tr key={call.id} className="hover:bg-teal-50/70 focus-within:bg-teal-50/70">
@@ -86,10 +86,15 @@ export function CallsPage() {
             <td className="px-4 py-4 font-mono tabular-nums">{clock(call.duration)}</td>
             <td className="px-4 py-4">{call.dominantEmotion ? emotionLabels[call.dominantEmotion] : call.status === 'ready' ? 'Chưa đủ dữ liệu' : '—'}</td>
             <td className="px-4 py-4">{call.status !== 'ready' ? '—' : call.dominantEmotion === null ? 'Chưa đủ dữ liệu' : <span className={call.priority === 'high' ? 'font-semibold text-red-800' : 'font-medium'}>{priorities[call.priority]}</span>}</td>
+            <td className="px-4 py-4">{!call.qaTriage ? <span className="text-slate-500">Chưa chạy</span> : call.qaTriage.outdated
+              ? <span className="font-medium text-amber-900">Cần chạy lại (transcript đã sửa)</span>
+              : <div className="space-y-1"><span className={'font-semibold ' + (call.qaTriage.label === 'needs_attention' ? 'text-amber-900' : 'text-teal-900')}>
+                {call.qaTriage.label === 'needs_attention' ? 'Gợi ý xem lại' : 'Chưa cần ưu tiên'}
+              </span><p className="text-xs text-slate-600">P(cần xem) {(call.qaTriage.score * 100).toFixed(0)}%{call.qaTriage.truncated ? ' · text bị cắt' : ''}</p></div>}</td>
             <td className="px-4 py-4">{reviews[call.reviewStatus]}</td>
             <td className="px-4 py-4"><span className={'inline-flex rounded-md border px-2 py-1 font-medium ' + (call.status === 'failed' ? 'border-amber-200 bg-amber-50 text-amber-900' : call.status === 'ready' ? 'border-teal-200 bg-teal-50 text-teal-900' : 'border-slate-200 bg-slate-50 text-slate-800')}>{processing[call.status]}</span></td>
           </tr>)}
-          {!loading && data?.items.length === 0 && <tr><td colSpan={7} className="p-8 text-center text-slate-700">Không tìm thấy cuộc gọi phù hợp. Thử thay đổi bộ lọc hoặc thêm cuộc gọi mới.</td></tr>}
+          {!loading && data?.items.length === 0 && <tr><td colSpan={8} className="p-8 text-center text-slate-700">Không tìm thấy cuộc gọi phù hợp. Thử thay đổi bộ lọc hoặc thêm cuộc gọi mới.</td></tr>}
           {loading && <tr><td colSpan={7} role="status" className="p-8 text-center text-slate-700">Đang tải danh sách cuộc gọi…</td></tr>}
         </tbody>
       </table>
@@ -102,6 +107,6 @@ export function CallsPage() {
         <button type="button" disabled={loading || page * data.pageSize >= data.total} onClick={() => setPage(p => p + 1)} className="min-h-11 rounded-lg border border-slate-300 bg-white px-3 py-2 disabled:opacity-40">Sau</button>
       </div>
     </nav>}
-    <p className="text-sm leading-6 text-slate-600">Ưu tiên là gợi ý từ quy tắc để sắp xếp việc xem xét. Cảm xúc khách hàng chỉ dùng những câu đã xác định vai trò; nguồn demo được ghi riêng.</p>
+    <p className="text-sm leading-6 text-slate-600">Ưu tiên (SER) dựa trên các câu có vai trò khách hàng được xác định, còn “AI QA” là kết quả riêng của XLM-R phân loại transcript. Điểm model không phải độ chính xác hay kết luận nhân viên sai. Kết quả cũ khi sửa transcript sẽ được đánh dấu cần chạy lại.</p>
   </div>
 }
