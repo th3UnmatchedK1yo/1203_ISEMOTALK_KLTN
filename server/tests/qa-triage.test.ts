@@ -5,6 +5,7 @@ import { openDb } from '../src/db'
 import { loadConfig } from '../src/config'
 import { attachQaTriageRoutes } from '../src/qa-routes'
 import * as repo from '../src/repo'
+import { migrateDatabase } from '../src/db-schema'
 
 const dbs: Array<ReturnType<typeof openDb>> = []
 afterEach(() => { for (const db of dbs.splice(0)) db.close(); vi.unstubAllGlobals() })
@@ -29,6 +30,19 @@ function setup() {
 }
 
 describe('QA predictions are evidence, not reviewer actions', () => {
+  it('upgrades archived v2 application state to v3 without deleting calls or service history', () => {
+    const { db } = setup()
+    db.exec('DROP TABLE qa_triage_results; DELETE FROM schema_migrations WHERE version=3')
+    // A historical v2 database never contained the new QA prediction table.
+    // Running migrateDatabase twice is safe and leaves prior business rows alone.
+    migrateDatabase(db)
+    migrateDatabase(db)
+    expect((db.prepare('SELECT version FROM schema_migrations ORDER BY version').all() as Array<{version:number}>)
+      .map(r => r.version)).toEqual([1, 2, 3])
+    expect(db.prepare("SELECT title FROM calls WHERE id='CALL-000001'").get()).toEqual({ title: 'Refund follow-up' })
+    expect(db.prepare('SELECT COUNT(*) AS n FROM qa_triage_results').get()).toEqual({ n: 0 })
+  })
+
   it('stores real-model provenance and detects later transcript changes', async () => {
     const { db, app } = setup()
     const endpoint = '/api/calls/CALL-000001/qa-triage'
