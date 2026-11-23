@@ -31,6 +31,23 @@ const autoAsr = process.argv.slice(2).includes('--auto-asr')
 if (process.argv.slice(2).some(arg => !['--asr', '--auto-asr'].includes(arg)) || (asrRequested && autoAsr))
   throw Error('Use --auto-asr (one-click), --asr (strict) or no flag (QA on source transcripts).')
 let asrEnabled = asrRequested
+// Explicit, source-pinned upgrade chosen by the student's FTISU staging step.
+// No silent model substitution and no download of a bigger checkpoint during
+// normal startup. Previous base ASR remains available when no upgrade exists.
+let asrModel = 'vinai/PhoWhisper-base'
+let asrRevision = '7ebdb9e88f5cc5271fb88f4d642c82ff9388650e'
+const preferredAsrFile = join(home, '.local/share/isemotalk-asr/selected.json')
+let selectedUpgrade = false
+if ((asrRequested || autoAsr) && existsSync(preferredAsrFile)) {
+  const selected = JSON.parse(readFileSync(preferredAsrFile, 'utf8'))
+  if (!['vinai/PhoWhisper-medium', 'vinai/PhoWhisper-large'].includes(selected?.model_id) ||
+      typeof selected?.revision !== 'string' || !/^[a-f0-9]{40}$/.test(selected.revision))
+    throw Error('Unsupported ASR upgrade manifest. Re-run the safe staging script; refusing silent fallback.')
+  asrModel = selected.model_id
+  asrRevision = selected.revision
+  selectedUpgrade = true
+  console.log('[real-qa] Selected stronger pinned ASR model: ' + asrModel + '@' + asrRevision)
+}
 for (const file of [join(dataDir, 'isemotalk.db'), join(qaModelDir, 'training_result.json'), join(qaModelDir, 'model.safetensors'), python]) {
   if (!existsSync(file)) throw Error('Required existing research data/model/serving venv is missing: ' + file)
 }
@@ -56,34 +73,53 @@ await new Promise((resolveListen, reject) => {
   server.listen(port, '127.0.0.1', () => server.close(resolveListen))
 })
 if (asrRequested || autoAsr) {
-  const revision = '7ebdb9e88f5cc5271fb88f4d642c82ff9388650e'
+  const verifyCached = () => execFileSync(python, ['-c',
+    'from huggingface_hub import snapshot_download; snapshot_download(repo_id=' +
+      JSON.stringify(asrModel) + ', revision=' + JSON.stringify(asrRevision) + ', local_files_only=True)',
+  ], { stdio: 'inherit', timeout: 15000 })
   try {
-    execFileSync(python, ['-c', `from huggingface_hub import snapshot_download; snapshot_download(repo_id="vinai/PhoWhisper-base", revision="${revision}", local_files_only=True)`], {
-      stdio: 'inherit', timeout: 15000,
-    })
+    verifyCached()
     asrEnabled = true
   } catch {
+    if (selectedUpgrade) {
+      throw Error('Selected ' + asrModel + ' checkpoint is not complete in HF cache. ' +
+        'Re-run inference/scripts/stage_phowhisper_upgrade.py; never silently downgrade ASR.')
+    }
     if (asrRequested) throw Error('Pinned PhoWhisper-base missing; cannot provide real ASR. Stage the exact model before --asr.')
-    // One-click mode attempts to stage ONLY the pinned ASR model once,
-    // with a free-disk preflight in stage_asr_demo.py. Never download a
-    // substitute or silently present a simulated transcript.
+    // Auto mode only stages the pinned original BASE once. Upgrading to
+    // medium/large is deliberate and is never triggered without a disk preflight.
     try {
-      console.log('[oneclick] PhoWhisper not cached; staging pinned ASR checkpoint on FTISU (free-space guarded).')
+      console.log('[oneclick] PhoWhisper-base not cached; staging pinned baseline once (disk guarded).')
       execFileSync(python, ['scripts/stage_asr_demo.py'], {
         cwd: join(root, 'inference'), stdio: 'inherit', timeout: 240000,
         env: { ...process.env, HF_HUB_OFFLINE: '0', TRANSFORMERS_OFFLINE: '0' },
       })
-      execFileSync(python, ['-c', `from huggingface_hub import snapshot_download; snapshot_download(repo_id="vinai/PhoWhisper-base", revision="${revision}", local_files_only=True)`], {
-        stdio: 'inherit', timeout: 15000,
-      })
+      verifyCached()
       asrEnabled = true
     } catch (stageError) {
       console.warn('[oneclick] ASR could not be staged: ' + (stageError instanceof Error ? stageError.message : String(stageError)))
-      console.warn('[oneclick] Continuing with REAL text QA only. Upload WAV requires an accompanying timestamped transcript until ASR is available.')
+      console.warn('[oneclick] Continuing with REAL text QA only. Upload WAV needs available ASR.')
       asrEnabled = false
     }
   }
+  if (asrEnabled && selectedUpgrade) {
+    // A trained QA checkpoint also occupies the same FTISU GPU. Do not
+    // evict unrelated research jobs or trigger a predictable CUDA OOM.
+    let gpuFree = NaN
+    try {
+      const value = execFileSync('nvidia-smi',
+        ['--query-gpu=memory.free', '--format=csv,noheader,nounits'],
+        {encoding:'utf8', timeout:5000}).trim().split('\n')[0]
+      gpuFree = Number(value.trim())
+    } catch { /* No memory estimate available. CUDA will validate at loading. */ }
+    const needMiB = asrModel.endsWith('large') ? 10000 : 6000
+    if (Number.isFinite(gpuFree) && gpuFree < needMiB)
+      throw Error('Only ' + gpuFree + ' MiB free CUDA memory; selected ' + asrModel +
+        ' needs a safe ' + needMiB + ' MiB preflight budget. ' +
+        'Do not stop other GPU jobs; use base or free memory by ending only the appropriate ISEmoTalk session.')
+  }
 }
+
 const env = {
   ...process.env,
   ISEMO_RUNTIME_COMMIT: runtimeCommit,
@@ -99,8 +135,8 @@ const env = {
   ISEMO_UPLOADS_DIR: join(dataDir, 'uploads'),
   ISEMO_QA_MODEL_DIR: qaModelDir,
   ISEMO_ASR: asrEnabled ? 'phowhisper' : 'none',
-  ISEMO_ASR_MODEL: 'vinai/PhoWhisper-base',
-  ISEMO_ASR_REVISION: '7ebdb9e88f5cc5271fb88f4d642c82ff9388650e',
+  ISEMO_ASR_MODEL: asrModel,
+  ISEMO_ASR_REVISION: asrRevision,
   ISEMO_ASR_DEVICE: 'cuda',
   ISEMO_SER: 'none',
   ISEMO_AUTO_QA_REAL_MODEL_ONLY: '1',
@@ -113,7 +149,7 @@ const env = {
 }
 console.log('[real-qa] Express/SQLite: http://127.0.0.1:' + port + ' on ' + dataDir)
 console.log('[real-qa] Python: http://127.0.0.1:' + inferencePort + '; XLM-R QA trained checkpoint=' + qaModelDir)
-console.log('[real-qa] ASR=' + (asrEnabled ? 'pinned, genuine PhoWhisper-base CUDA' : 'explicitly unavailable (use source transcript)'))
+console.log('[real-qa] ASR=' + (asrEnabled ? 'pinned ' + asrModel + ' CUDA' : 'explicitly unavailable (use source transcript)'))
 console.log('[real-qa] SER=explicitly unavailable, no invented emotion/fusion. Real F4 requires separate verification.')
 const commands = [
   { name: 'inference', command: 'node scripts/run-python.mjs -m uvicorn app.main:app --host 127.0.0.1 --port ' + inferencePort + ' --workers 1', env },
