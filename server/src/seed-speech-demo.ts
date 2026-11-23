@@ -140,6 +140,7 @@ const refs = [
 ]
 if (!refs.some(r => r.origin === 'human_recording'))
   throw Error('NO REAL HUMAN RECORDINGS: first run the existing FOSD/FLEURS dataset downloader. Never substitute tones or generated speech.')
+fs.mkdirSync(config.uploadsDir, { recursive: true })
 const db = openDb(config.dbFile)
 let created = 0, reused = 0, skipped = 0
 try {
