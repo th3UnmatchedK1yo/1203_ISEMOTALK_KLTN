@@ -39,6 +39,8 @@ export function sshRuntimeArgs() {
   return [
     '-tt', // remote PTY forwards Ctrl+C/SIGHUP to the session it owns
     '-o', 'BatchMode=no', // allow Windows console prompt if SSH key is absent
+    '-o', 'PasswordAuthentication=yes',
+    '-o', 'KbdInteractiveAuthentication=yes',
     '-o', 'NumberOfPasswordPrompts=3',
     '-o', 'ConnectTimeout=15',
     '-o', 'ExitOnForwardFailure=yes',
