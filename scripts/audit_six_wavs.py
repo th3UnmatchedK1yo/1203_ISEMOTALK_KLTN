@@ -38,7 +38,9 @@ def main()->int:
         identified={}
         for row in records:
             title=str(row.get("title","")).lower()
-            match=next((f for f in FILES if title==f or title.startswith(f+" ")),None)
+            match=next((f for f in FILES if
+                title==f or title==f[:-4] or
+                title.startswith(f+" ") or title.startswith(f[:-4]+" ")),None)
             if not match:
                 continue
             key=str(row.get("updatedAt",""))
