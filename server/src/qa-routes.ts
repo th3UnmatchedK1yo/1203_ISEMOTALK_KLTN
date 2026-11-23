@@ -35,7 +35,12 @@ function makeInput(db: DB, id: string) {
   if (!call) throw new HttpError(404, 'Không tìm thấy cuộc gọi.')
   if (call.status !== 'ready') throw new HttpError(409, 'Cuộc gọi cần hoàn tất ASR/SER trước khi chấm QA bằng model.')
   const utterances = repo.getUtterances(db, id)
-  const text = utterances.map(u => u.speaker + ': ' + u.text).join('\n').trim()
+  // OneVoice source imports contain the complete original conversation in a
+  // single unknown-speaker utterance. Do not add a synthetic "unknown:" token
+  // that was absent from the training examples.
+  const text = utterances.length === 1 && utterances[0].speaker === 'unknown'
+    ? utterances[0].text.trim()
+    : utterances.map(u => u.speaker + ': ' + u.text).join('\n').trim()
   if (!text || text.length > 100000) throw new HttpError(422, 'Transcript rỗng hoặc vượt giới hạn 100.000 ký tự.')
   return { text, hash: createHash('sha256').update(text).digest('hex') }
 }
