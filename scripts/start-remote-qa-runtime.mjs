@@ -72,6 +72,7 @@ const env = {
   ISEMO_MODE: 'real',
   ISEMO_AUTO_SEED: '0',
   ISEMO_QA_AUTOMATION: '1',
+  ISEMO_QA_EAGER_VERIFY: '1',
   ISEMO_API_PREVIEW_ONLY: '0',
   ISEMO_DATA_DIR: dataDir,
   ISEMO_UPLOADS_DIR: join(dataDir, 'uploads'),
