@@ -68,9 +68,17 @@ const instructions=[
  'Without policy or CRM accuracy, compliance, resolution MUST be unknown. No numeric QA score.',
 ].join('\n')
 export function attachInsightRoutes(app:Express,db:DB){
-  app.get('/api/insights/status',(_req,res)=>{
-    try{const cfg=config();res.json({enabled:!!cfg,model:cfg?.model??null})}
-    catch{res.json({enabled:false,model:null})}
+  app.get('/api/insights/status',async(_req,res)=>{
+    try{
+      const cfg=config()
+      if(!cfg)return res.json({enabled:false,configured:false,model:null,reason:'LLM chưa cấu hình trên FTISU.'})
+      const url=new URL('/v1/models',cfg.url)
+      const response=await fetch(url,{signal:AbortSignal.timeout(2500)})
+      if(!response.ok)throw new Error('Model service unavailable')
+      const listing=await response.json() as {data?:Array<{id?:string}>}
+      const ready=listing.data?.some(model=>model.id===cfg.model)===true
+      return res.json({enabled:ready,configured:true,model:cfg.model,reason:ready?'Local LLM available':'Model đã chọn chưa xuất hiện trong local model inventory.'})
+    }catch{return res.json({enabled:false,configured:true,model:null,reason:'Không liên hệ được LLM local; không chạy tóm tắt giả.'})}
   })
   app.post('/api/calls/:id/insights',async(req,res)=>{
     const cfg=config()
