@@ -179,6 +179,17 @@ export interface ListQuery {
 }
 
 const SORTS: Record<string, string> = {
+  // Advisory QA queue: unreviewed calls with warning/incomplete model input
+  // precede not-yet-scored calls, then routine suggestions. Human-reviewed
+  // calls come last. Never auto-close or assert business correctness.
+  qa_attention: `CASE
+    WHEN c.review_status = 'reviewed' THEN 0
+    WHEN EXISTS (
+      SELECT 1 FROM qa_triage_results q
+      WHERE q.call_id=c.id AND (q.label='needs_attention' OR q.truncated=1)
+    ) THEN 3
+    WHEN NOT EXISTS (SELECT 1 FROM qa_triage_results q WHERE q.call_id=c.id) THEN 2
+    ELSE 1 END`,
   date: 'c.call_date',
   title: 'c.title COLLATE NOCASE',
   duration: 'c.duration',
