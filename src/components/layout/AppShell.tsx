@@ -56,7 +56,8 @@ export function AppShell({ children }: AppShellProps) {
   }, [])
   const active = (path: string) =>
     path === '/calls'
-      ? location.pathname === '/calls' || location.pathname === '/'
+      ? location.pathname === '/calls' || location.pathname === '/' ||
+        (location.pathname.startsWith('/calls/') && location.pathname !== '/calls/new')
       : path === '/cases' ? location.pathname.startsWith('/cases') : location.pathname === path
 
   const navLink = (path: string, label: string, Icon: typeof ListChecks, mobile: boolean) =>
