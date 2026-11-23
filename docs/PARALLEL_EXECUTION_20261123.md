@@ -1,3 +1,54 @@
+# ACTIVE 3-LANE PLAN: RUN THESE IN PARALLEL
+
+### FTISU Linux Bash - launch THREE CPU/network data downloads (returns immediately)
+
+    cd ~/services/isemotalk
+    git pull --ff-only origin feat/remote-gpu-full-pipeline-20261123
+    bash scripts/launch-parallel-datasets.sh
+
+This launches:
+- OneVoice all 1,200 synthetic call WAVs (business QA/audio pipeline tests; noncommercial).
+- FLEURS vi_vn TEST 120 real speech clips (ASR WER evaluation, NOT call-center speech).
+- FPT FOSD 100 real speech clips (ASR diagnostic, NOT independent benchmark if ASR pretrained on FOSD).
+Separate Python data venv; no torch/CUDA, no changes to existing training venv. Results/logs remain in ~/services/isemotalk-private. Data jobs survive disconnect.
+
+### FTISU SECOND Linux Bash terminal - CUDA experiments while data downloads
+
+    cd ~/services/isemotalk
+    bash scripts/run-qa-replications.sh
+
+The original QA seed2026 experiment ALREADY FINISHED (synthetic test macro-F1 0.835, P@25 0.64). Do NOT train it again. Replication runner computes fixed-keyword/random baselines for that same heldout split, then runs only seeds 2027 and 2028 in sequence on the one GPU. It refuses a second copy or GPU collision. Results are saved in private logs and checkpoint directories, never the public repo.
+
+### FTISU THIRD Linux Bash terminal - read-only status
+
+    cd ~/services/isemotalk
+    bash scripts/monitor-parallel.sh
+
+Existing npm run remote:api-preview should STAY running at 127.0.0.1:3101 in its own terminal. It does not touch GPU; it serves QA/case frontend without accepting new AI jobs.
+
+### Windows LOCAL PowerShell - NOT the FTISU Bash prompt
+
+Open Windows Start -> type "PowerShell" -> open **Windows PowerShell**.
+Do NOT paste the Windows C:\ path into VS Code terminal labeled emotalk@ftisu.
+In the VS Code Remote SSH window, open PORTS panel -> forward FTISU 3101 -> local 13001, Private.
+Test Windows browser: http://127.0.0.1:13001/api/system/status
+Then in Windows PowerShell:
+
+    cd C:\Users\Legion\Documents\1203_KLTN
+    git status --short
+    git fetch origin
+    git switch feat/remote-gpu-full-pipeline-20261123
+    git pull --ff-only origin feat/remote-gpu-full-pipeline-20261123
+    powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\repair-node-local.ps1 -CheckOnly
+    powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\start-vscode-preview.ps1 -LocalPort 13001
+
+Keep untracked db-check-result.json; git switch is safe only if it does not overwrite local changes. Open http://127.0.0.1:5173. This is a frontend/QA database preview and explicitly labels unavailable inference. Windows does not need any ML dependencies.
+
+### AI assistant - source engineering
+
+Owns downloadable data pipelines, heldout QA baselines, independent CUDA replications, user-friendly API preview warnings, strict database/model lineage, browser/backend/Python CI, and subsequent authentic PhoWhisper/F4 serving. Running code on FTISU still requires a user's authorized SSH shell.
+
+---
 # ISEmoTalk - 3 parallel workflows (2026-11-23)
 
 Goal: FTISU trains a real call-center QA classifier on CUDA, Windows runs only the web client, assistant owns the GitHub code and database. Do not buy a VPS or train on the laptop.
