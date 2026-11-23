@@ -236,7 +236,7 @@ export class Pipeline {
         const speakerSource: SpeakerSource = r.speakerSource === 'channel' ? 'channel' : r.speakerSource === 'mock' ? 'mock' : 'unassigned'
         const provenance = r.provenance === 'mock' || r.speakerSource === 'mock' || r.evidence?.mock ? 'mock' : 'real'
         return {
-          detail: `${r.segments.length} câu · ${provenance === 'mock' ? 'ASR mô phỏng' : 'ASR thật (cần đối chiếu transcript)'}`,
+          detail: `${r.segments.length} đoạn · ${r.evidence?.timingMode === 'audio_window' ? 'PhoWhisper đã chạy lại theo cửa sổ audio do word timestamp lỗi; mốc thời gian KHÔNG căn chỉnh từng từ' : provenance === 'mock' ? 'ASR mô phỏng' : 'ASR thật (cần đối chiếu transcript)'}`,
           provenance, evidence: r.evidence,
           commit: () => {
             repo.replaceUtterances(this.db, id, r.segments.map((s) => ({ speaker: s.speaker ?? 'unknown', text: s.text, start: s.start, end: s.end })))
