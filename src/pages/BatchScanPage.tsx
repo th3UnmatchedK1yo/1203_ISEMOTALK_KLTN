@@ -177,23 +177,19 @@ export function BatchScanPage() {
   }
 
   return <div className="mx-auto max-w-6xl space-y-6">
-    <header className="space-y-2">
-      <p className="text-sm font-semibold text-teal-800">ISEmoTalk / Chạy AI</p>
-      <h1 className="text-3xl font-bold tracking-tight text-[#12394d]">Tải ghi âm. AI tự phân tích.</h1>
-      <p className="max-w-3xl text-base leading-7 text-slate-700">Chọn một hoặc nhiều file âm thanh. Server FTISU xử lý và lưu kết quả tự động; không cần nhập transcript hay nhận xét QA để AI bắt đầu.</p>
+    <header className="flex flex-wrap items-end justify-between gap-4 border-b border-slate-200 pb-6">
+      <div className="max-w-3xl">
+        <p className="text-xs font-bold uppercase tracking-wider text-teal-800">Bước đầu tiên · Phân tích tự động</p>
+        <h1 className="mt-2 text-3xl font-bold tracking-tight text-[#12394d]">Phân tích ghi âm mới</h1>
+        <p className="mt-2 text-sm leading-6 text-slate-700">Chọn WAV, MP3 hoặc M4A. Audio được gửi tới FTISU để chạy ASR và XLM-R; không cần tự nhập nội dung cuộc gọi.</p>
+        <p className="mt-2 text-xs font-medium text-slate-600">Chọn file <span className="px-2 text-slate-400">→</span> AI xử lý <span className="px-2 text-slate-400">→</span> Xem kết quả <span className="px-2 text-slate-400">→</span> QA kiểm tra</p>
+      </div>
+      <Link to="/guide" className="text-sm font-semibold text-teal-800 hover:underline">Xem hướng dẫn sử dụng</Link>
     </header>
 
-    <div className="grid gap-3 sm:grid-cols-3">
-      {[['1', 'Tải WAV / MP3 / M4A'], ['2', 'Server chạy ASR rồi QA'], ['3', 'Nhận kết quả và chọn cuộc cần xem']].map(([number, label]) =>
-        <div key={number} className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white p-4">
-          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-teal-800 text-sm font-bold text-white">{number}</span>
-          <span className="text-sm font-semibold text-slate-800">{label}</span>
-        </div>)}
-    </div>
-
-    <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+    <section className="rounded-xl border border-slate-200 bg-white p-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-lg font-bold text-[#12394d]">Máy chủ AI</h2>
+        <h2 className="text-base font-bold text-[#12394d]">Khả năng xử lý trên FTISU</h2>
         <button type="button" onClick={() => setRefreshKey(x => x + 1)} className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold"><RefreshCw size={15}/> Kiểm tra lại</button>
       </div>
       {healthError && <p role="alert" className="mt-3 text-sm text-red-800">{healthError}</p>}
@@ -203,7 +199,7 @@ export function BatchScanPage() {
           {name:'ASR · tạo chữ từ audio', ready: asrReady, detail: asr?.detail},
           {name:'XLM-R · sàng lọc QA', ready: qaReady, detail: qa?.detail},
           {name:'SER · cảm xúc', ready: serReady, detail: serSkipped ? 'Chưa có mô hình được xác minh · sẽ bỏ qua, không tạo nhãn giả' : ser?.detail},
-        ]).map(item => <div key={item.name} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+        ]).map(item => <div key={item.name} className="rounded-md border-l-2 border-slate-200 bg-slate-50 px-3 py-2">
           <div className="flex items-center gap-2">
             {item.ready ? <CheckCircle2 size={17} className="text-teal-800"/> : <AlertTriangle size={17} className="text-amber-700"/>}
             <strong className="text-sm text-slate-900">{item.name}</strong>
@@ -216,8 +212,8 @@ export function BatchScanPage() {
       {canSubmit && <p className="mt-4 text-sm text-teal-900">GPU và hàng đợi QA báo sẵn sàng. ASR đang dùng: <strong>{asr?.detail?.split(' (')[0] ?? asr?.adapter}</strong>. File chỉ được đánh dấu hoàn thành sau khi backend thực sự trả kết quả. SER có thể được bỏ qua có ghi nhận nếu chưa triển khai.</p>}
     </section>
 
-    <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-      <h2 className="text-lg font-bold text-[#12394d]">Bắt đầu phân tích</h2>
+    <section className="rounded-xl border border-slate-200 bg-white p-5">
+      <h2 className="text-lg font-bold text-[#12394d]">Chọn file để chạy AI</h2>
       <p className="mt-2 text-sm text-slate-600">Tối đa 20 file, 300 MB mỗi file, 600 MB mỗi lượt. Mỗi file tạo một hồ sơ riêng; tải tuần tự để tránh quá tải server. Đừng tải lên ghi âm không có quyền sử dụng.</p>
       <label className="mt-4 flex cursor-pointer flex-col items-center gap-2 rounded-xl border-2 border-dashed border-teal-300 bg-teal-50/50 px-4 py-8 text-center hover:bg-teal-50">
         <UploadCloud size={28} className="text-teal-800"/>
@@ -235,7 +231,7 @@ export function BatchScanPage() {
           {submitting ? <LoaderCircle className="animate-spin" size={18}/> : <FileAudio size={18}/>}
           {submitting ? 'Đang chuyển file lên server…' : 'Chạy AI phân tích'}
         </button>
-        <Link to="/calls/new" className="text-sm font-semibold text-teal-800 underline underline-offset-4">Nhập transcript hoặc kết quả đã có</Link>
+        <Link to="/calls/new" className="text-sm font-semibold text-teal-800 underline underline-offset-4">Nhập JSON/CSV nâng cao</Link>
       </div>
     </section>
 
