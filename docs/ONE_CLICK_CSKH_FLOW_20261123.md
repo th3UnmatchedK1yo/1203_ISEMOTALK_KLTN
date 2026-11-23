@@ -8,6 +8,18 @@ Trình mở sẽ tự: (1) build React hiện tại, (2) tạo SSH tunnel qua al
 
 **Điều kiện chuẩn bị một lần:** máy Windows có Node.js 22, OpenSSH + alias `ftisu-ser` đã đăng nhập bằng SSH key, repo web đã cập nhật; FTISU có Node, serving `inference/.venv` CUDA, SQLite speech-demo, checkpoint XLM-R đã train và được cấp quyền, Git remote truy cập được. Trình mở **không cài trộm model, không bật GPU mock, không ghi đè DB, không dừng dịch vụ người khác**. Nếu thiếu dependency/SSH/weights, nó báo lỗi rõ và không khẳng định inference thành công. Đây là lối mở một cú nhấp cho môi trường FTISU đã chuẩn bị, **không phải** website production công khai hay một dịch vụ tự chạy 24/7.
 
+## Cấu hình inference thực sự đang sử dụng
+
+Bản phục vụ được chọn **trên FTISU**, không chọn tùy tiện bằng các nút trang trí trên React. Chế độ one-click tự đặt `ISEMO_QA_AUTOMATION=1`, `ISEMO_QA_EAGER_VERIFY=1`, `ISEMO_SER=none` và cố gắng chuẩn bị duy nhất bản PhoWhisper-base ghim revision nếu chưa có (có kiểm tra dung lượng). Chỉ công bố QA đang chạy khi Python nạp checkpoint và chạy thử model thành công; nếu thất bại, launcher báo lỗi. Những phần không có checkpoint hợp lệ không được tạo nhãn giả.
+
+- **QA XLM-R seed 2026:** tự chấm OneVoice có transcript và những cuộc gọi mới hoàn tất ASR; bài toán `needs_attention`, chỉ là gợi ý sàng lọc.
+- **ASR PhoWhisper:** tự chuyển WAV thành văn bản chỉ khi checkpoint tải/nạp thành công; nếu thiếu mô hình, việc tải WAV không kèm transcript sẽ bị từ chối có thông báo rõ.
+- **SER F4 acoustic–lexical:** chưa chạy ở bản QA-only. Không có timeline cảm xúc hay fusion output cho cuộc gọi chưa qua F4. Cần verify model phục vụ riêng, không tự bật bằng cách đổi một checkbox.
+- **Speaker:** với WAV mono chưa có xác định người nói đáng tin cậy, giữ unknown; nhãn agent/customer của OneVoice chỉ là nhãn kịch bản, không có timestamp từng lượt.
+- **Vụ việc và task:** không tự tạo chỉ vì điểm XLM-R vượt ngưỡng. QA nghe xác minh trước, sau đó mới đặt người phụ trách và hạn xử lý.
+
+Trang **Tải lên → Khả năng xử lý hiện tại** hiển thị cờ tự động từ backend và trạng thái model đã nạp; trang **Cuộc gọi** sắp theo “Gợi ý QA trước” mặc định, có thể đổi lại theo ngày. Bộ đếm QA riêng với “Ưu tiên cảm xúc SER”. Model có thể đưa ra dự đoán sai; đó không phải quyết định cuối cùng.
+
 ## Flow nghiệp vụ trên web
 
 1. **Cuộc gọi**: Mặc định chỉ hiện bộ hồ sơ CSKH (OneVoice và những cuộc gọi do người dùng nhập/tải lên). Các clip nghiên cứu FLEURS/FOSD/DataHive được chuyển sang bộ lọc **Mẫu thử ASR / DataHive**, không bị xóa.
