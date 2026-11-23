@@ -19,9 +19,11 @@ const python = resolve(process.env.ISEMO_PYTHON || join(root, 'inference/.venv/b
 const port = Number(process.env.PORT || '3101')
 if (!Number.isInteger(port) || port < 1024 || port > 65535 || port === 8001 || port === 3001)
   throw Error('PORT must be a free unprivileged API port (default 3101).')
-const asrEnabled = process.argv.slice(2).includes('--asr')
-if (process.argv.slice(2).some(arg => arg !== '--asr'))
-  throw Error('Only --asr is supported; default is genuine text-only QA on imported transcripts.')
+const asrRequested = process.argv.slice(2).includes('--asr')
+const autoAsr = process.argv.slice(2).includes('--auto-asr')
+if (process.argv.slice(2).some(arg => !['--asr', '--auto-asr'].includes(arg)) || (asrRequested && autoAsr))
+  throw Error('Use --auto-asr (one-click), --asr (strict) or no flag (QA on source transcripts).')
+let asrEnabled = asrRequested
 for (const file of [join(dataDir, 'isemotalk.db'), join(qaModelDir, 'training_result.json'), join(qaModelDir, 'model.safetensors'), python]) {
   if (!existsSync(file)) throw Error('Required existing research data/model/serving venv is missing: ' + file)
 }
@@ -46,14 +48,17 @@ await new Promise((resolveListen, reject) => {
   )))
   server.listen(port, '127.0.0.1', () => server.close(resolveListen))
 })
-if (asrEnabled) {
+if (asrRequested || autoAsr) {
   const revision = '7ebdb9e88f5cc5271fb88f4d642c82ff9388650e'
   try {
     execFileSync(python, ['-c', `from huggingface_hub import snapshot_download; snapshot_download(repo_id="vinai/PhoWhisper-base", revision="${revision}", local_files_only=True)`], {
       stdio: 'inherit', timeout: 15000,
     })
+    asrEnabled = true
   } catch {
-    throw Error('Pinned PhoWhisper-base is not fully cached. Stage it explicitly with npm run remote:stage-asr, then retry --asr.')
+    if (asrRequested) throw Error('Pinned PhoWhisper-base missing; cannot provide real ASR. Stage the exact model before --asr.')
+    console.warn('[oneclick] Pinned PhoWhisper not cached: continuing with REAL QA over source transcripts. No ASR or SER is fabricated.')
+    asrEnabled = false
   }
 }
 const env = {
@@ -63,6 +68,7 @@ const env = {
   INFERENCE_URL: 'http://127.0.0.1:8001',
   ISEMO_MODE: 'real',
   ISEMO_AUTO_SEED: '0',
+  ISEMO_QA_AUTOMATION: '1',
   ISEMO_API_PREVIEW_ONLY: '0',
   ISEMO_DATA_DIR: dataDir,
   ISEMO_UPLOADS_DIR: join(dataDir, 'uploads'),
@@ -72,6 +78,7 @@ const env = {
   ISEMO_ASR_REVISION: '7ebdb9e88f5cc5271fb88f4d642c82ff9388650e',
   ISEMO_ASR_DEVICE: 'cuda',
   ISEMO_SER: 'none',
+  ISEMO_AUTO_QA_REAL_MODEL_ONLY: '1',
   ISEMO_DIARIZATION: 'none',
   ISEMO_ALLOW_UNVERIFIED: '0',
   HF_HUB_OFFLINE: '1',
