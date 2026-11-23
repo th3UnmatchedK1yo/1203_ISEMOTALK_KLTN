@@ -68,7 +68,9 @@ async function health() {
 }
 function valid(h) {
   const c = h?.inference?.components
-  return h?.api === 'ok' && h.previewOnly !== true && h.inference?.reachable &&
+  // A loaded QA checkpoint is NOT proof that the API background worker is on.
+  // Refuse a mismatched session instead of promising automatic screening.
+  return h?.api === 'ok' && h.previewOnly !== true && h.automation?.qa === true && h.inference?.reachable &&
     h.inference?.qa?.ready === true && h.inference.qa.loaded === true && c?.ser?.adapter === 'not_configured' &&
     c.ser.mock === false && c.ser.ready === false &&
     c?.asr?.mock === false && (c.asr.ready || c.asr.adapter === 'not_configured')
