@@ -30,7 +30,8 @@ fi
 export PATH="$BIN_DIR:$PATH"
 echo "[setup] node=$(node --version) npm=$(npm --version)"
 # Explicit local env, not an unreviewed edit of ~/.profile.
-printf 'export PATH="%s:$PATH"\n' "$BIN_DIR" > scripts/.gpu-host-node-env.sh
+mkdir -p "$HOME/.local/share"
+printf 'export PATH="%s:$PATH"\n' "$BIN_DIR" > "$HOME/.local/share/isemotalk-node-env.sh"
 echo "[setup] Installing web/backend JavaScript dependencies in THIS checkout"
 npm ci --no-audit --no-fund
 npm run typecheck:server
