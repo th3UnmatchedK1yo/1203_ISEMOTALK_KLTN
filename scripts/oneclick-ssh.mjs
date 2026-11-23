@@ -24,6 +24,14 @@ export function remoteBootCommand() {
     // forward alive if a health endpoint is present, but the laptop still
     // validates the real model's health and will refuse incompatible modes.
     'if curl -fsS --max-time 2 http://127.0.0.1:3102/api/system/status >/dev/null 2>&1; then',
+    // Compare the actual running API build against the freshly pulled source.
+    // A listening port is not evidence that Python/Node reloaded updated code.
+    '  running_sha="$(curl -fsS --max-time 2 http://127.0.0.1:3102/api/system/status | node -e \'let s="";process.stdin.on("data",c=>s+=c);process.stdin.on("end",()=>{try{process.stdout.write(JSON.parse(s).runtimeCommit||"")}catch{}})\')"',
+    '  checkout_sha="$(git rev-parse HEAD)"',
+    '  if [ "$running_sha" != "$checkout_sha" ]; then',
+    '    echo "[ISEmoTalk] Code tren FTISU da pull, NHUNG API port 3102 dang chay code cu. Hay dung dung phien ISEmoTalk cu, khong dung GPU training/ung dung khac, roi mo lai ISEmoTalk.cmd." >&2',
+    '    exit 73',
+    '  fi',
     '  echo "[ISEmoTalk] FTISU API already listening on 3102; using existing service."',
     '  while curl -fsS --max-time 2 http://127.0.0.1:3102/api/system/status >/dev/null 2>&1; do sleep 15; done',
     '  exit 0',
