@@ -64,11 +64,15 @@ if [[ "$1" == "--with-f4" ]]; then
   "$PY" -m pip install --no-cache-dir 'funasr==1.4.2' 'modelscope==1.39.1'
 fi
 "$PY" -m pip check
-"$PY" - <<'PY'
+ISEMO_BOOTSTRAP_OPTIONAL_F4="$([[ "$1" == "--with-f4" ]] && printf 1 || printf 0)" "$PY" - <<'PY'
 import torch
 from importlib.metadata import version
 print("[setup] serving Python PyTorch:", torch.__version__)
-for name in ("transformers","funasr","modelscope"):
+import os
+names = ["transformers"]
+if os.environ.get("ISEMO_BOOTSTRAP_OPTIONAL_F4") == "1":
+    names.extend(("funasr", "modelscope"))
+for name in names:
     print("[setup]", name, version(name))
 if not torch.cuda.is_available():
     raise SystemExit("ERROR: serving venv cannot see CUDA; NO CPU fallback.")
