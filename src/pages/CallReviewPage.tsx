@@ -266,8 +266,8 @@ function CallReviewSession({ callId }: { callId: string }) {
       </div>
     </header>
     {call.provenance === 'imported' && call.hasAudio && !call.title.startsWith('HỘI THOẠI ĐIỆN THOẠI THẬT · DataHive') &&
-      <div className="rounded-lg border border-teal-200 bg-teal-50 p-4 text-sm leading-6 text-teal-950">
-        <strong>Phân tích lại ghi âm bằng model thật</strong>
+      <details className="rounded-lg border border-slate-200 bg-white p-4 text-sm leading-6 text-slate-700">
+        <summary className="cursor-pointer font-semibold text-[#12394d]">Tùy chọn nghiên cứu: đối chiếu transcript nguồn với ASR thật</summary>
         <p className="mt-1">Tạo một hồ sơ mới từ chính file WAV này. ASR sẽ nghe và tạo transcript mới; transcript nguồn và bản ghi gốc vẫn giữ nguyên để đối chiếu. QA XLM-R được chạy riêng sau khi ASR hoàn tất. Nếu F4 chưa được xác minh, bước SER sẽ ghi rõ là bỏ qua.</p>
         <button type="button" className={primaryButton + ' mt-3'}
           disabled={!realAsrAvailable || reanalyzing || saving || dirty}
@@ -276,7 +276,7 @@ function CallReviewSession({ callId }: { callId: string }) {
         </button>
         {!realAsrAvailable && <p className="mt-2 text-amber-900">ASR hiện chưa sẵn sàng. Hệ thống vẫn tự chạy QA trên transcript nguồn khi model XLM-R được kết nối.</p>}
         {dirty && <p className="mt-2 text-amber-900">Hãy lưu hoặc bỏ bản nháp review trước khi tạo hồ sơ phân tích mới.</p>}
-      </div>}
+      </details>}
     {call.provenance === 'imported' &&
       (call.title.startsWith('TTS TỔNG HỢP') || call.title.startsWith('GIỌNG THẬT') || call.title.startsWith('HỘI THOẠI ĐIỆN THOẠI THẬT')) &&
       <div className="rounded-lg border border-sky-200 bg-sky-50 p-4 text-sm leading-6 text-sky-950" role="note">
