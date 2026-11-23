@@ -33,7 +33,7 @@ interface Row {
 function makeInput(db: DB, id: string) {
   const call = repo.getCallRow(db, id)
   if (!call) throw new HttpError(404, 'Không tìm thấy cuộc gọi.')
-  if (call.status !== 'ready') throw new HttpError(409, 'Cuộc gọi cần hoàn tất ASR/SER trước khi chấm QA bằng model.')
+  if (call.status !== 'ready') throw new HttpError(409, 'Cuộc gọi phải hoàn tất xử lý trước khi chạy QA bằng model; SER có thể được bỏ qua có ghi nhận nếu chưa xác minh.')
   const utterances = repo.getUtterances(db, id)
   const { text, hash } = buildQaInput(utterances)
   if (!text || text.length > 100000) throw new HttpError(422, 'Transcript rỗng hoặc vượt giới hạn 100.000 ký tự.')
