@@ -72,8 +72,8 @@ jobs:
           node --check scripts/start-remote-api-preview.mjs
       - name: Validate Linux GPU setup script without running installs
         run: |
-          bash -n scripts/bootstrap-gpu-host.sh scripts/stage-gpu-models.sh scripts/train-callcenter-qa.sh
-          python -m py_compile inference/scripts/download_onevoice.py inference/scripts/train_onevoice_qa.py inference/app/qa_triage.py
+          bash -n scripts/bootstrap-gpu-host.sh scripts/stage-gpu-models.sh scripts/train-callcenter-qa.sh scripts/launch-parallel-datasets.sh scripts/run-qa-replications.sh
+          python -m py_compile inference/scripts/download_onevoice.py inference/scripts/train_onevoice_qa.py inference/app/qa_triage.py inference/scripts/download_asr_benchmarks.py inference/scripts/eval_onevoice_baselines.py
       - name: Build frontend
         run: npm run build
       - name: Typecheck backend
