@@ -67,7 +67,7 @@ def main()->int:
     print("[diar] Real speaker turns:",len(turns),"groups:",sorted(set(t["speakerId"] for t in turns)),flush=True)
     OUTPUT.parent.mkdir(parents=True,exist_ok=True,mode=0o700)
     tmp=OUTPUT.with_suffix(".tmp")
-    tmp.write_text(json.dumps({"model_id":REPO,"revision":rev,"local_dir":str(snap)},indent=2)+"\n",encoding="utf-8")
+    tmp.write_text(json.dumps({"model_id":REPO,"revision":rev,"local_dir":str(snap),"python_executable":sys.executable},indent=2)+"\n",encoding="utf-8")
     os.chmod(tmp,0o600)
     tmp.replace(OUTPUT)
     print("[diar] Activated on next ISEmoTalk restart:",OUTPUT)
