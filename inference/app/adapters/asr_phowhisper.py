@@ -26,7 +26,9 @@ class PhoWhisperAsr:
         self.model_identity = model_id + ("@" + revision if revision else "")
         self.device_pref = device
         self._pipe = None
-        self._lock = threading.Lock()  # one GPU job at a time (RTX 3050 has 4 GB)
+        self._lock = threading.Lock()  # serialize GPU generation, including fallback retries
+        self.timing_mode = "word_aligned"
+        self.alignment_warning = ""
 
     def status(self) -> Status:
         if not _have("torch", "transformers"):
@@ -59,19 +61,61 @@ class PhoWhisperAsr:
             raise ModelNotReady(f"Không nạp được mô hình ASR '{self.model_id}': {e}") from e
         return self._pipe
 
+    @staticmethod
+    def _generation() -> dict:
+        return {"language": "vi", "task": "transcribe", "condition_on_prev_tokens": False}
+
+    def _fallback_audio_windows(
+        self, pipe, wave: np.ndarray, sample_rate: int, duration: float
+    ) -> list[Segment]:
+        """Infer independent 12-second audio windows on genuine sample bounds.
+
+        Word alignment can be inconsistent with Whisper's chunk stitching.
+        These time intervals indicate *audio window coverage*, not spoken
+        word boundaries or inferred turns; provenance must say so.
+        """
+        if sample_rate <= 0:
+            raise ModelNotReady("Invalid ASR sample rate.")
+        step = 12 * sample_rate
+        out: list[Segment] = []
+        for offset in range(0, len(wave), step):
+            clip = wave[offset:offset + step]
+            if len(clip) < sample_rate // 4:
+                continue
+            result = pipe(
+                {"raw": clip.astype(np.float32, copy=False), "sampling_rate": sample_rate},
+                return_timestamps=False,
+                generate_kwargs=self._generation(),
+            )
+            text = str(result.get("text") or "").strip()
+            if not text:
+                continue
+            start = offset / sample_rate
+            end = min(duration, (offset + len(clip)) / sample_rate)
+            if end > start:
+                out.append(Segment(round(start, 2), round(end, 2), text))
+        if not out:
+            raise ModelNotReady("PhoWhisper could not produce any transcript after its word-timestamp failure.")
+        return out
+
     def transcribe(self, wave: np.ndarray, sample_rate: int, duration: float) -> list[Segment]:
         with self._lock:
             pipe = self._load()
-            out = pipe(
-                {"raw": wave.astype(np.float32), "sampling_rate": sample_rate},
-                # Segment-level timestamps (True) can yield one multi-minute
-                # text block. Whisper supports aligned word timestamps, so
-                # group only real timed words into readable spans.
+            self.timing_mode = "word_aligned"
+            self.alignment_warning = ""
+            result = pipe(
+                {"raw": wave.astype(np.float32, copy=False), "sampling_rate": sample_rate},
                 return_timestamps="word",
-                generate_kwargs={"language": "vi", "task": "transcribe", "condition_on_prev_tokens": False},
+                generate_kwargs=self._generation(),
             )
-        try:
-            return timestamped_asr_spans(out.get("chunks") or [], duration)
-        except ValueError as exc:
-            # Never invent timestamps by dividing a long text by word count.
-            raise ModelNotReady("PhoWhisper word alignment failed: " + str(exc)) from exc
+            try:
+                segments = timestamped_asr_spans(result.get("chunks") or [], duration)
+                if segments:
+                    return segments
+                raise ValueError("Whisper returned no timestamped words.")
+            except (ValueError, TypeError) as exc:
+                # Do not drop transcript or fabricate time-aligned words.
+                # Re-run the *real model* on bounded audio clips instead.
+                self.timing_mode = "audio_window"
+                self.alignment_warning = "Whisper word alignment invalid: " + str(exc)
+                return self._fallback_audio_windows(pipe, wave, sample_rate, duration)
