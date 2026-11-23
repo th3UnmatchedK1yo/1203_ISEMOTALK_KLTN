@@ -255,7 +255,7 @@ export async function apiJson<T>(url: string, options: RequestInit = {}): Promis
 }
 
 export function getCalls(
-  filters: { search?: string; review?: string; priority?: string; provenance?: string; status?: string; page?: number; pageSize?: number },
+  filters: { search?: string; review?: string; priority?: string; provenance?: string; status?: string; datasetScope?: 'business'|'speech_only'|'all'; page?: number; pageSize?: number },
   signal?: AbortSignal,
 ): Promise<CallList> {
   const params = new URLSearchParams()
@@ -264,6 +264,7 @@ export function getCalls(
   if (filters.priority) params.set('priority', filters.priority)
   if (filters.provenance) params.set('provenance', filters.provenance)
   if (filters.status) params.set('status', filters.status)
+  if (filters.datasetScope) params.set('datasetScope', filters.datasetScope)
   params.set('sort', 'date')
   params.set('dir', 'desc')
   params.set('page', String(filters.page ?? 1))
