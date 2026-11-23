@@ -16,6 +16,7 @@ import { CallWorkflowPanel } from '@/components/review/CallWorkflowPanel'
 import { CallCaseLink } from '@/components/review/CallCaseLink'
 import { CallQaTriage } from '@/components/review/CallQaTriage'
 import { CallInsightsPanel } from '@/components/review/CallInsightsPanel'
+import { EmotionTrajectory } from '@/components/review/EmotionTrajectory'
 import { CallInferenceTrail } from '@/components/review/CallInferenceTrail'
 import { sourceDialogueTurns } from '@/lib/source-dialogue'
 import { speakerHintForInterval } from '@/lib/speaker-evidence'
@@ -409,6 +410,7 @@ function CallReviewSession({ callId }: { callId: string }) {
           <CallRecording callId={call.id} audioUrl={call.audioUrl} duration={call.duration} utterances={call.utterances}
             seekRequest={seekRequest} onActiveChange={setActiveId} onSelect={selectUtterance}/>
         </div>
+        <EmotionTrajectory call={call} onSeek={selectUtterance}/>
         <TranscriptList utterances={call.utterances} patches={form?.utterances ?? {}} selectedId={selectedId} activeId={activeId} onSelect={selectUtterance} sourceDialogue={sourceDialogue} transcriptFromAudio={call.source === 'upload'} timingMode={call.stageLog.find(step => step.stage === 'transcribe')?.evidence?.timingMode} speakerTurns={speakerTurns}/>
       </div>
       <div className="min-w-0 space-y-5">
