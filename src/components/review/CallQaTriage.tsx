@@ -23,6 +23,7 @@ export function CallQaTriage({ callId, version, autoEligible = true }: { callId:
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [modelAvailable, setModelAvailable] = useState<boolean | null>(null)
+  const [automatic, setAutomatic] = useState(false)
 
   useEffect(() => {
     const controller = new AbortController()
@@ -56,9 +57,14 @@ export function CallQaTriage({ callId, version, autoEligible = true }: { callId:
   useEffect(() => {
     const controller = new AbortController()
     setModelAvailable(null)
+    setAutomatic(false)
     void getSystemStatus(controller.signal)
       .then(status => {
-        if (!controller.signal.aborted) setModelAvailable(status.inference.reachable && status.inference.qa?.ready === true)
+        if (!controller.signal.aborted) {
+          const loaded = status.inference.reachable && status.inference.qa?.ready === true && status.inference.qa.loaded === true
+          setModelAvailable(!!loaded)
+          setAutomatic(!!loaded && status.automation?.qa === true)
+        }
       })
       .catch(() => { if (!controller.signal.aborted) setModelAvailable(false) })
     return () => controller.abort()
@@ -88,7 +94,7 @@ export function CallQaTriage({ callId, version, autoEligible = true }: { callId:
         <h2 id="qa-model-title" className="text-lg font-semibold text-[#12394d]">Sàng lọc QA tự động</h2>
         <p className="mt-1 text-sm text-slate-600">Hệ thống tự chạy XLM-R khi có transcript và checkpoint thật. Kết quả giúp QA chọn hồ sơ cần nghe, không phải kết luận nhân viên sai.</p>
       </div>
-      {modelAvailable === true && (data?.outdated || !autoEligible) && <button type="button" onClick={() => void run()} disabled={busy || loading}
+      {modelAvailable === true && (data?.outdated || !automatic) && <button type="button" onClick={() => void run()} disabled={busy || loading}
         className="inline-flex min-h-11 items-center rounded-lg border border-teal-800 bg-white px-4 py-2 text-sm font-semibold text-teal-900 hover:bg-teal-50 disabled:opacity-50">
         {busy ? 'Đang chạy trên GPU…' : 'Chạy lại khi cần'}
       </button>}
@@ -109,10 +115,10 @@ export function CallQaTriage({ callId, version, autoEligible = true }: { callId:
       <p className="break-all text-xs text-slate-500">Model: {prediction.model} · {prediction.createdAt}</p>
     </div>}
     {!loading && !prediction && !error && <p role="status" className="mt-3 text-sm text-slate-700">
-      {modelAvailable === true && autoEligible
-        ? 'Đang tự động sàng lọc bằng XLM-R trên GPU. Kết quả sẽ hiện tại đây mà không cần bấm thêm.'
-        : autoEligible ? 'QA model chưa kết nối nên chưa có dự đoán. Không hiển thị điểm giả.'
-        : 'Đây không phải dữ liệu hội thoại CSKH trong phạm vi tự động chấm; không tự suy diễn nghiệp vụ từ bản ghi này.'}
+      {!autoEligible ? 'Đây không phải dữ liệu hội thoại CSKH trong phạm vi tự động chấm; không tự suy diễn nghiệp vụ từ bản ghi này.'
+        : automatic ? 'Hệ thống đang tự sàng lọc bằng XLM-R trên GPU. Kết quả sẽ xuất hiện mà không cần bấm thêm.'
+        : modelAvailable === true ? 'Model QA thật đã sẵn sàng, nhưng chế độ xử lý tự động chưa được bật. Có thể chạy thủ công.'
+        : 'Model QA chưa kết nối hoặc chưa nạp xong; không hiển thị điểm giả.'}
     </p>}
     <p className="mt-3 text-sm leading-6 text-slate-600">Giới hạn: model được train trên OneVoice — dữ liệu tổng đài tiếng Việt tổng hợp, nhãn nghiệp vụ mô phỏng. Chưa kiểm chứng trên recording tổng đài thật. QA vẫn phải nghe, xác nhận và xử lý theo quy trình.</p>
   </section>
