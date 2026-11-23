@@ -167,6 +167,7 @@ export function createApp({ db, config, client, pipeline }: AppDeps) {
         status: str(q.status),
         provenance: str(q.provenance),
         source: str(q.source),
+        datasetScope: q.datasetScope === 'business' || q.datasetScope === 'speech_only' ? q.datasetScope : 'all',
         attention: q.attention === '1',
         sort: str(q.sort),
         dir: q.dir === 'asc' ? 'asc' : 'desc',
