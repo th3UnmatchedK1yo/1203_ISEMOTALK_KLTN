@@ -68,7 +68,7 @@ class PhoWhisperAsr:
                 # text block. Whisper supports aligned word timestamps, so
                 # group only real timed words into readable spans.
                 return_timestamps="word",
-                generate_kwargs={"language": "vi", "task": "transcribe"},
+                generate_kwargs={"language": "vi", "task": "transcribe", "condition_on_prev_tokens": False},
             )
         try:
             return timestamped_asr_spans(out.get("chunks") or [], duration)
