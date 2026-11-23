@@ -13,14 +13,18 @@ try {
  console.error('[remote] Configuration preflight failed. No services started; resolve missing verified-model assets first.')
  process.exit(1)
 }
+// Use a separate API port on the shared training server; never stop whoever owns :3001.
+const apiPort = Number(process.env.PORT || '3101')
+if (!Number.isInteger(apiPort) || apiPort < 1024 || apiPort > 65535 || apiPort === 8001)
+  throw new Error('Invalid API PORT (expected a port distinct from inference :8001).')
 const childEnv = {
  ...process.env,
  NODE_ENV:'production',
  ISEMO_AUTO_SEED:'0',
- PORT:'3001',
+ PORT:String(apiPort),
  INFERENCE_URL:'http://127.0.0.1:8001',
 }
-console.log('[remote] Starting Python :8001 and API :3001, both loopback-only on this GPU host.')
+console.log('[remote] Starting Python :8001 and API :${apiPort}, both loopback-only on this GPU host.')
 console.log('[remote] All DB/recording files remain on this host; connect using SSH local-forward.')
 const commands=[
  {name:'inference',command:'node scripts/run-python.mjs -m uvicorn app.main:app --host 127.0.0.1 --port 8001 --workers 1',env:childEnv},
