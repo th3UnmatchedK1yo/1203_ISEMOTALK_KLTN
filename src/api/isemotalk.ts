@@ -133,7 +133,7 @@ export interface CallList {
   total: number
   page: number
   pageSize: number
-  counts: { total: number; attention: number; processing: number; failed: number }
+  counts: { total: number; attention: number; processing: number; failed: number; qaAttention?: number; qaPending?: number }
 }
 
 export interface Analytics {
