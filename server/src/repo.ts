@@ -1,4 +1,5 @@
 import type { DB } from './db'
+import { buildQaInput } from './qa-input'
 import {
   type Agreement,
   type CallDerived,
@@ -47,6 +48,12 @@ export interface CallListItem {
   utteranceCount: number
   reviewedCount: number
   updatedAt: string
+  qaTriage?: {
+    label: 'routine' | 'needs_attention'
+    score: number
+    outdated: boolean
+    truncated: boolean
+  } | null
 }
 
 export interface MomentDto extends Moment {
@@ -220,7 +227,21 @@ export function listCalls(db: DB, q: ListQuery) {
     .get() as Row
 
   return {
-    items: rows.map(mapListItem),
+    items: rows.map((row) => {
+      const item = mapListItem(row)
+      const stored = db.prepare(
+        'SELECT label, score, input_sha256, truncated FROM qa_triage_results WHERE call_id=?',
+      ).get(row.id) as { label: 'routine' | 'needs_attention'; score: number; input_sha256: string; truncated: number } | undefined
+      if (stored) {
+        const current = buildQaInput(getUtterances(db, row.id))
+        item.qaTriage = {
+          label: stored.label, score: stored.score,
+          outdated: current.hash !== stored.input_sha256,
+          truncated: !!stored.truncated,
+        }
+      }
+      return item
+    }),
     total,
     page,
     pageSize,
