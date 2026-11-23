@@ -95,7 +95,7 @@ export function CallsPage() {
             <td className="px-4 py-4"><span className={'inline-flex rounded-md border px-2 py-1 font-medium ' + (call.status === 'failed' ? 'border-amber-200 bg-amber-50 text-amber-900' : call.status === 'ready' ? 'border-teal-200 bg-teal-50 text-teal-900' : 'border-slate-200 bg-slate-50 text-slate-800')}>{processing[call.status]}</span></td>
           </tr>)}
           {!loading && data?.items.length === 0 && <tr><td colSpan={8} className="p-8 text-center text-slate-700">Không tìm thấy cuộc gọi phù hợp. Thử thay đổi bộ lọc hoặc thêm cuộc gọi mới.</td></tr>}
-          {loading && <tr><td colSpan={7} role="status" className="p-8 text-center text-slate-700">Đang tải danh sách cuộc gọi…</td></tr>}
+          {loading && <tr><td colSpan={8} role="status" className="p-8 text-center text-slate-700">Đang tải danh sách cuộc gọi…</td></tr>}
         </tbody>
       </table>
     </div>
