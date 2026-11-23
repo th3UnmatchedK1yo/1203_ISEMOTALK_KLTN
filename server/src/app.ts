@@ -77,6 +77,21 @@ export function createApp({ db, config, client, pipeline }: AppDeps) {
   })
   app.use(cors({ origin: (origin, cb) => cb(null, !origin || allowedOrigin(origin)) }))
   app.use(express.json({ limit: '5mb' }))
+  // While the shared GPU is training, the API-only frontend preview must be
+  // read-only regarding model jobs. In particular no uploaded call should be
+  // queued/fail just because Python inference is intentionally offline.
+  if (process.env.ISEMO_API_PREVIEW_ONLY === '1') {
+    app.use((req, res, next) => {
+      const modelAction = req.method === 'POST' &&
+        (/^\/api\/calls\/(upload|import)$/.test(req.path) ||
+          /^\/api\/calls\/[^/]+\/(retry|qa-triage)$/.test(req.path))
+      if (modelAction) return res.status(503).json({
+        error: 'Chế độ xem trước giao diện: GPU đang training, chưa cho gửi tác vụ model. Dữ liệu đánh giá cũ được giữ nguyên.',
+        code: 'inference_paused_for_training',
+      })
+      next()
+    })
+  }
 
   const upload = multer({
     storage: multer.diskStorage({
