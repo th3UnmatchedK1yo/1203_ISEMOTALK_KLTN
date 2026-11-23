@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { AlertCircle, Search, RefreshCw, Upload } from 'lucide-react'
-import { apiJson, getCalls, getSystemStatus, clock, emotionLabels, provenanceLabel, type CallList } from '@/api/isemotalk'
+import { getCalls, getSystemStatus, clock, emotionLabels, provenanceLabel, type CallList } from '@/api/isemotalk'
 import { startPolling } from '@/lib/polling'
 
 const priorities = { high: 'Cao', medium: 'Trung bình', low: 'Thấp' }
@@ -21,8 +21,6 @@ export function CallsPage() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
   const [qaReady, setQaReady] = useState(false)
-  const [qaBatchBusy, setQaBatchBusy] = useState(false)
-  const [qaBatchMessage, setQaBatchMessage] = useState('')
 
   useEffect(() => {
     const timer = window.setTimeout(() => { setSearch(searchInput); setPage(1) }, 250)
@@ -36,10 +34,12 @@ export function CallsPage() {
       load: signal => getCalls({ search, priority, review, provenance, status, page, pageSize: 10 }, signal),
       onData: next => { setData(next); setError(''); setLoading(false) },
       onError: failure => { setError(failure.message); setLoading(false) },
-      shouldContinue: next => next.counts.processing > 0,
+      shouldContinue: next => next.counts.processing > 0 || (qaReady && next.items.some(call =>
+        call.title.startsWith('TTS TỔNG HỢP · OneVoice') && call.status === 'ready' && call.utteranceCount > 0 &&
+        (!call.qaTriage || call.qaTriage.outdated))),
       intervalMs: 4000,
     })
-  }, [search, priority, review, provenance, status, page, refresh])
+  }, [search, priority, review, provenance, status, page, refresh, qaReady])
 
   useEffect(() => {
     const controller = new AbortController()
@@ -51,31 +51,6 @@ export function CallsPage() {
     return () => controller.abort()
   }, [])
 
-  const runQaBatch = async () => {
-    if (qaBatchBusy || !qaReady || !data) return
-    // Only the dataset domain of the trained XLM-R. Do not silently label
-    // ordinary phone chats or ASR diagnostics as real customer-service QA.
-    const candidates = data.items.filter(call => call.title.startsWith('TTS TỔNG HỢP · OneVoice') &&
-      call.status === 'ready' && call.utteranceCount > 0 && (!call.qaTriage || call.qaTriage.outdated))
-    if (!candidates.length) return
-    setQaBatchBusy(true)
-    let succeeded = 0, failed = 0
-    for (const [idx, call] of candidates.entries()) {
-      setQaBatchMessage('XLM-R đang phân tích cuộc gọi ' + (idx + 1) + '/' + candidates.length + ' trên trang hiện tại…')
-      try {
-        await apiJson('/api/calls/' + encodeURIComponent(call.id) + '/qa-triage', { method: 'POST' })
-        succeeded++
-      } catch (error) {
-        failed++
-        console.warn('[QA batch] ' + call.id + ': ' + (error as Error).message)
-      }
-    }
-    setQaBatchMessage('Hoàn thành QA bằng model thật: ' + succeeded + ' thành công' +
-      (failed ? ', ' + failed + ' lỗi. Kiểm tra trạng thái model hoặc từng cuộc gọi.' : '. Đây là dữ liệu OneVoice tổng hợp.'))
-    setQaBatchBusy(false)
-    setRefresh(count => count + 1)
-  }
-
   const select = 'mt-2 h-11 w-full rounded-lg border border-[#b5c9d2] bg-white px-3 text-sm font-medium text-slate-800'
   const pages = data ? Math.max(1, Math.ceil(data.total / data.pageSize)) : 1
   return <div className="space-y-5">
@@ -84,18 +59,12 @@ export function CallsPage() {
         <p className="mt-2 text-base text-slate-700">Nghe lại bằng chứng, kiểm tra cảm xúc và ghi nhận hướng xử lý.</p>
       </div>
       <div className="flex flex-wrap items-center gap-3">
-        {qaReady && <button type="button" onClick={() => void runQaBatch()}
-          disabled={qaBatchBusy || loading || !data?.items.some(call => call.title.startsWith('TTS TỔNG HỢP · OneVoice') &&
-            call.status === 'ready' && call.utteranceCount > 0 && (!call.qaTriage || call.qaTriage.outdated))}
-          className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-teal-700 bg-teal-50 px-3 py-2 text-sm font-semibold text-teal-900 disabled:opacity-50">
-          {qaBatchBusy ? 'Đang chạy QA…' : 'Chấm QA OneVoice trang này'}
-        </button>}
-        <button type="button" onClick={() => setRefresh(n => n + 1)} disabled={loading || qaBatchBusy} className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold hover:bg-teal-50 disabled:opacity-50"><RefreshCw size={17}/> Cập nhật</button>
+        <button type="button" onClick={() => setRefresh(n => n + 1)} disabled={loading} className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold hover:bg-teal-50 disabled:opacity-50"><RefreshCw size={17}/> Cập nhật</button>
         <Link to="/calls/new" className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-[#0E5665] px-4 py-2 text-sm font-semibold text-white hover:bg-[#0B4554]"><Upload size={17}/> Thêm cuộc gọi</Link>
       </div>
     </header>
     {data && <p className="text-sm leading-6 text-slate-700">Tổng cộng <strong>{data.counts.total}</strong> cuộc gọi · <strong>{data.counts.attention}</strong> ưu tiên cao · <strong>{data.counts.processing}</strong> đang xử lý · <strong>{data.counts.failed}</strong> cần thử lại</p>}
-    {qaBatchMessage && <p role="status" className="rounded-lg border border-teal-200 bg-teal-50 p-3 text-sm text-teal-900">{qaBatchMessage}</p>}
+    {qaReady && <p role="status" className="text-sm leading-6 text-teal-800">XLM-R đang tự sàng lọc cuộc gọi đủ điều kiện. Điểm AI QA được cập nhật ngay trong danh sách, không cần bấm chấm thủ công.</p>}
     <section className="rounded-xl border border-[#c4d4dc] bg-white p-4" aria-label="Tìm và lọc cuộc gọi">
       <label className="relative block"><span className="sr-only">Tìm mã, tiêu đề hoặc khách hàng</span><Search aria-hidden="true" className="absolute left-3 top-3.5 text-slate-600" size={18}/>
         <input type="search" className="h-12 w-full rounded-lg border border-[#b5c9d2] bg-white pl-11 pr-4 text-base" placeholder="Tìm mã, tiêu đề, khách hàng…" value={searchInput} onChange={e => setSearchInput(e.target.value)}/>
