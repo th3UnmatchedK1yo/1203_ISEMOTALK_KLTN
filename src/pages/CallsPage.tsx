@@ -154,10 +154,10 @@ export function CallsPage() {
               (call.qaTriage?.label === 'needs_attention' || call.qaTriage?.outdated ? 'text-amber-900' : 'text-slate-800')}>
               {!call.qaTriage ? 'Chưa có kết quả'
                 : call.qaTriage.outdated ? 'Cần phân tích lại'
-                : call.qaTriage.label === 'needs_attention' ? 'AI gợi ý xem kỹ' : 'Chưa có cảnh báo mạnh'}
+                : call.qaTriage.label === 'needs_attention' ? 'AI gợi ý xem kỹ' : 'Không gợi ý ưu tiên QA'}
             </p>
             {call.qaTriage && !call.qaTriage.outdated &&
-              <p className="mt-1 text-xs text-slate-600">Điểm: {(call.qaTriage.score * 100).toFixed(1)}%</p>}
+              <p className="mt-1 text-xs text-slate-600">Chỉ số XLM-R: {call.qaTriage.score.toFixed(3)} / 1</p>}
           </div>
           <div>
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Đánh giá QA</p>
@@ -203,9 +203,9 @@ export function CallsPage() {
                       (call.qaTriage.label === 'needs_attention'
                         ? 'border-amber-200 bg-amber-50 text-amber-900'
                         : 'border-teal-200 bg-teal-50 text-teal-900')}>
-                      {call.qaTriage.label === 'needs_attention' ? 'AI gợi ý xem kỹ' : 'Chưa có cảnh báo mạnh'}
+                      {call.qaTriage.label === 'needs_attention' ? 'AI gợi ý xem kỹ' : 'Không gợi ý ưu tiên QA'}
                     </span>
-                    <p className="text-xs text-slate-600">Điểm cảnh báo: {(call.qaTriage.score * 100).toFixed(1)}%
+                    <p className="text-xs text-slate-600">Chỉ số XLM-R: {call.qaTriage.score.toFixed(3)} / 1 (chưa hiệu chuẩn)
                       {call.qaTriage.truncated ? ' · chưa quét hết' : ''}
                     </p>
                   </div>}
