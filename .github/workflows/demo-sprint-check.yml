@@ -69,7 +69,7 @@ jobs:
           node --check scripts/start-remote-server.mjs
           node --check scripts/remote-real-smoke.mjs
       - name: Validate Linux GPU setup script without running installs
-        run: bash -n scripts/bootstrap-gpu-host.sh
+        run: bash -n scripts/bootstrap-gpu-host.sh scripts/stage-gpu-models.sh
       - name: Build frontend
         run: npm run build
       - name: Typecheck backend
