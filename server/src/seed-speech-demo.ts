@@ -14,13 +14,13 @@ import type { StageEntry } from './domain'
 
 type AudioReference = {
   id: string
-  text: string
+  text: string | null
   wav: string
   title: string
   dataset: string
   license: string
   revision: string
-  origin: 'human_recording' | 'synthetic_speech'
+  origin: 'human_recording' | 'synthetic_speech' | 'human_phone_call'
   split: string
   sourceQaLabel?: 0 | 1
   employeeId?: string
@@ -144,6 +144,40 @@ function loadOneVoice(limit: number) {
   }
   return result
 }
+function loadHumanPhoneCalls(limit: number) {
+  const root = path.join(datasetDir, 'datahive-vi-call-excerpts')
+  const manifest = path.join(root, 'source_manifest.json')
+  if (!fs.existsSync(manifest)) return [] as AudioReference[]
+  const m = loadJson(manifest)
+  if (m.dataset_id !== 'datahiveai/multilingual-conversations-sample' ||
+      m.dataset_license !== 'cc-by-4.0' || !validRevision(m.dataset_revision) ||
+      m.transcripts_available !== false ||
+      m.source_type !== 'consented_human_phone_conversation_not_call_center' ||
+      !Array.isArray(m.records))
+    throw Error('Refusing real-phone sample without validated, pinned DataHive provenance.')
+  const results: AudioReference[] = []
+  for (const record of (m.records as Record<string, unknown>[]).slice(0, limit)) {
+    const wavName = String(record.wav || '')
+    const sourceSha = String(record.source_sha256 || '')
+    const wavSha = String(record.audio_sha256 || '')
+    const sourceMp3 = String(record.source_mp3 || '')
+    if (!/^preview\/vi_[0-9]{6}\.mp3$/.test(sourceMp3) || !/^[a-f0-9]{64}$/.test(sourceSha) ||
+        !/^[a-f0-9]{64}$/.test(wavSha) || record.human_recorded !== true ||
+        record.transcript !== null)
+      throw Error('Invalid DataHive source record: refuse guessing identity/transcript.')
+    const wav = boundedFile(root, wavName)
+    if (sha(wav) !== wavSha) throw Error('DataHive sample audio SHA256 differs from pinned manifest.')
+    results.push({
+      id: String(record.id || sourceMp3), text: null, wav,
+      dataset: 'datahiveai/multilingual-conversations-sample',
+      license: 'CC BY 4.0 · attribution DataHive AI',
+      revision: String(m.dataset_revision), origin: 'human_phone_call', split: 'excerpt_public_sample',
+      title: 'HỘI THOẠI ĐIỆN THOẠI THẬT · DataHive · ' + String(results.length + 1).padStart(2, '0'),
+    })
+  }
+  return results
+}
+
 function probe(wav: string) {
   const output = execFileSync('ffprobe', [
     '-v','error','-show_entries','format=duration','-of','default=noprint_wrappers=1:nokey=1',wav,
@@ -160,18 +194,19 @@ function sha(file: string) {
 // their speaking voices are synthesized. Human FOSD/FLEURS are short speech,
 // NOT customer-support conversations. Do not conflate the two data domains.
 const refs = [
+  ...loadHumanPhoneCalls(2),
   ...loadOneVoice(12),
   ...loadRecorded('fpt-fosd-sample', 'doof-ferb/fpt_fosd', 'train', 6, 'FPT FOSD'),
   ...loadRecorded('fleurs-vi-test', 'google/fleurs', 'test', 6, 'FLEURS vi'),
 ]
-if (!refs.some(r => r.origin === 'human_recording'))
+if (!refs.some(r => r.origin === 'human_recording' || r.origin === 'human_phone_call'))
   throw Error('NO REAL HUMAN RECORDINGS: first run the existing FOSD/FLEURS dataset downloader. Never substitute tones or generated speech.')
 fs.mkdirSync(config.uploadsDir, { recursive: true })
 const db = openDb(config.dbFile)
 let created = 0, reused = 0, skipped = 0
 try {
   const exists = db.prepare('SELECT id FROM calls WHERE title=? LIMIT 1')
-  for (const rec of refs) {
+  for (const [rank, rec] of refs.entries()) {
     if (exists.get(rec.title)) { reused++; continue }
     let duration: number
     try { duration = probe(rec.wav) }
@@ -192,37 +227,46 @@ try {
           detail: 'Tệp ghi âm nguồn ' + rec.dataset + ' / ' + rec.id +
             ' | split=' + rec.split + ' | revision=' + rec.revision +
             ' | audio_sha256=' + sourceHash + ' | license=' + rec.license +
-            ' | ' + (rec.origin === 'human_recording' ? 'GIỌNG NGƯỜI THẬT, KHÔNG PHẢI CUỘC GỌI CSKH' : 'GIỌNG TTS, KỊCH BẢN TỔNG ĐÀI') +
+            ' | ' + (rec.origin === 'human_phone_call' ? 'CUỘC ĐIỆN THOẠI NGƯỜI THẬT, KHÔNG PHẢI CSKH' :
+              rec.origin === 'human_recording' ? 'GIỌNG NGƯỜI THẬT, KHÔNG PHẢI CUỘC GỌI CSKH' : 'GIỌNG TTS, KỊCH BẢN TỔNG ĐÀI') +
             (rec.sourceQaLabel === undefined ? '' : ' | nhãn needs_attention do dataset cung cấp=' + rec.sourceQaLabel + ' (KHÔNG PHẢI MODEL)') },
-        { stage: 'transcribe', state: 'skipped', detail: 'Transcript nguồn có sẵn, KHÔNG chạy ASR; thời gian gán cho toàn bộ clip, không phải word/turn alignment' },
+        { stage: 'transcribe', state: 'skipped', detail: rec.text
+            ? 'Transcript nguồn có sẵn, KHÔNG chạy ASR; thời gian gán cho toàn bộ clip, không phải word/turn alignment'
+            : 'Nguồn KHÔNG cung cấp transcript và chưa chạy ASR; chỉ phát bản ghi âm nguyên nội dung trích đoạn' },
         { stage: 'diarize', state: 'skipped', detail: 'Không có speaker diarization/timestamp theo lượt; giữ unknown để tránh gán sai vai trò' },
         { stage: 'emotion', state: 'skipped', detail: 'SER KHÔNG chạy; không có nhãn cảm xúc hay confidence do model dự đoán' },
-        { stage: 'finalize', state: 'done', detail: 'Phát WAV từ dataset và hiển thị transcript gốc; không phải end-to-end AI' },
+        { stage: 'finalize', state: 'done', detail: rec.text
+            ? 'Phát WAV từ dataset và hiển thị transcript nguồn, không phải end-to-end AI'
+            : 'Chỉ phát WAV ghi âm cuộc gọi người thật; chưa có transcript, chưa có kết quả AI' },
       ]
       const note = [
         'NGUỒN: ' + rec.dataset + ' · ' + rec.split,
         'Revision: ' + rec.revision,
         'License: ' + rec.license,
-        rec.origin === 'human_recording'
-          ? 'Tiếng nói do con người ghi âm; KHÔNG phải cuộc gọi tổng đài.'
-          : 'Giọng nói TTS TỔNG HỢP theo kịch bản; KHÔNG phải cuộc gọi khách hàng thật.',
-        'Transcript gốc của dataset (không phải ASR dự đoán).',
+        rec.origin === 'human_phone_call'
+          ? 'CUỘC GỌI THẬT giữa người quen, được người tham gia đồng ý chia sẻ; KHÔNG phải CSKH.'
+          : rec.origin === 'human_recording'
+            ? 'Tiếng nói do con người ghi âm; KHÔNG phải cuộc gọi tổng đài.'
+            : 'Giọng nói TTS TỔNG HỢP theo kịch bản; KHÔNG phải cuộc gọi khách hàng thật.',
+        rec.text ? 'Transcript gốc của dataset (không phải ASR dự đoán).' : 'Không có transcript nguồn; CHƯA chạy ASR.',
         'Chưa chạy mô hình SER; không có điểm cảm xúc được bịa.',
         ...(rec.sourceQaLabel === undefined ? [] : ['Nhãn needs_attention gốc của OneVoice (KHÔNG phải dự đoán model): ' + rec.sourceQaLabel]),
       ].join('\n')
       db.transaction(() => {
         repo.insertCall(db, {
           id: callId, title: rec.title, agentName: '', customerName: '',
-          callDate: new Date().toISOString(), source: 'transcript_import', agentChannel: 0,
+          callDate: new Date(Date.now() - rank * 60_000).toISOString(),
+          source: rec.text ? 'transcript_import' : 'upload', agentChannel: 0,
           audioFile: relative, audioName: path.basename(rec.wav), audioMime: 'audio/wav',
           provenance: 'imported', speakerSource: 'unassigned', stageLog: stages,
         })
-        repo.replaceUtterances(db, callId, [{
+        if (rec.text) repo.replaceUtterances(db, callId, [{
           text: rec.text, speaker: 'unknown', start: 0, end: Math.round(duration * 100) / 100,
           acoustic: null, lexical: null, fused: null,
         }])
         repo.updateCall(db, callId, {
-          status: 'ready', progress: 100, duration, channels: 1,
+          status: 'ready', progress: 100, duration,
+          channels: rec.origin === 'human_phone_call' ? 2 : 1,
           overallNote: note,
         })
         repo.refreshDerived(db, callId)
