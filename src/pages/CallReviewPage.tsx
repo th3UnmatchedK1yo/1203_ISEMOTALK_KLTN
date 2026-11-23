@@ -373,20 +373,34 @@ function CallReviewSession({ callId }: { callId: string }) {
       <strong>{unknownCount} câu chưa xác định người nói.</strong> Những câu này không được tính vào cảm xúc khách hàng. Hãy nghe lại và gán vai trò nếu có căn cứ.
       {call.dominantEmotion === null && ' Chưa đủ dữ liệu để nhận định cảm xúc hoặc mức ưu tiên theo khách hàng.'}
     </p>}
-    <CallRecording callId={call.id} audioUrl={call.audioUrl} duration={call.duration} utterances={call.utterances}
-      seekRequest={seekRequest} onActiveChange={setActiveId} onSelect={selectUtterance}/>
-    {call.status === 'ready' && (call.utterances.length > 0
-      ? <CallQaTriage callId={call.id} version={call.version}
-          autoEligible={call.provenance === 'real' || (call.provenance === 'imported' && call.title.startsWith('TTS TỔNG HỢP · OneVoice'))}/>
-      : <p role="status" className="rounded-lg border border-slate-200 bg-white p-4 text-sm text-slate-700">Bản ghi này chưa có transcript nên chưa thể chạy bộ phân loại QA từ văn bản. Audio vẫn phát bình thường; cần ASR thực hoặc transcript đã xác minh trước khi chấm QA.</p>)}
     <div className="grid grid-cols-1 items-start gap-5 xl:grid-cols-[minmax(0,1.45fr)_minmax(360px,1fr)]">
-      <TranscriptList utterances={call.utterances} patches={form?.utterances ?? {}} selectedId={selectedId} activeId={activeId} onSelect={selectUtterance} sourceDialogue={sourceDialogue}/>
       <div className="min-w-0 space-y-5">
+        <div id="call-audio" className="scroll-mt-28">
+          <CallRecording callId={call.id} audioUrl={call.audioUrl} duration={call.duration} utterances={call.utterances}
+            seekRequest={seekRequest} onActiveChange={setActiveId} onSelect={selectUtterance}/>
+        </div>
+        <TranscriptList utterances={call.utterances} patches={form?.utterances ?? {}} selectedId={selectedId} activeId={activeId} onSelect={selectUtterance} sourceDialogue={sourceDialogue}/>
+      </div>
+      <div className="min-w-0 space-y-5">
+        <div id="call-ai" className="scroll-mt-28">
+          {call.status === 'ready' && (call.utterances.length > 0
+            ? <CallQaTriage callId={call.id} version={call.version}
+                autoEligible={call.provenance === 'real' || (call.provenance === 'imported' && call.title.startsWith('TTS TỔNG HỢP · OneVoice'))}/>
+            : <p role="status" className="rounded-xl border border-slate-200 bg-white p-4 text-sm leading-6 text-slate-700">Chưa có transcript để sàng lọc QA. Cần ASR thật hoặc transcript có căn cứ trước khi chạy phân loại.</p>)}
+        </div>
         <section className="rounded-xl border border-[#c4d4dc] bg-white p-5 shadow-sm">
           <h2 className="text-lg font-semibold text-[#12394d]">{sourceDialogue ? 'Đánh giá nghiệp vụ cuộc gọi' : 'Đánh giá từng câu'}</h2>
           {sourceDialogue ? <div className="mt-3 space-y-3 text-sm leading-6 text-slate-700">
-            <p>Đây là hội thoại nguồn OneVoice có nhiều lượt lời nhưng <strong>chưa có timestamp từng lượt</strong>. Không chấm cảm xúc hoặc gán vai trò cho toàn bộ đoạn như thể một người nói.</p>
-            <p>AI QA tự gợi ý mức cần xem trên toàn transcript ở phần phía trên. Hãy nghe, ghi nhận vào mục <strong>Hoàn tất đánh giá</strong>, rồi liên kết <strong>Vụ việc</strong> nếu còn vấn đề cần theo dõi.</p>
+            <p className="font-medium text-slate-800">Khi nghe, hãy kiểm tra:</p>
+            <ul className="list-inside list-disc space-y-1 text-slate-700">
+              <li>Khách đang yêu cầu giải quyết vấn đề gì?</li>
+              <li>Nhân viên đã đưa ra hướng xử lý cụ thể chưa?</li>
+              <li>Có cam kết hoặc bước tiếp theo nào cần theo dõi?</li>
+            </ul>
+            <p className="border-t border-slate-100 pt-3 text-xs leading-5 text-slate-600">Vai trò người nói do kịch bản OneVoice cung cấp, chưa có mốc thời gian từng lượt; không suy diễn nhãn cảm xúc.</p>
+            <a href="#call-review" className="inline-flex min-h-10 items-center gap-1.5 font-semibold text-teal-800 hover:underline">
+              Ghi nhận kết luận QA <ChevronRight size={16} aria-hidden="true"/>
+            </a>
           </div> : !selected ? <p className="mt-3 text-slate-700">Chọn một câu từ transcript.</p> : <>
             <p className="mt-2 text-sm text-slate-600">Câu {selected.idx + 1} · {clock(selected.start)} · {speakerLabels[selectedPatch?.speaker ?? selected.speaker]}</p>
             <div className="mt-4 space-y-3 rounded-lg bg-slate-50 p-4 text-sm">
@@ -426,8 +440,8 @@ function CallReviewSession({ callId }: { callId: string }) {
             </fieldset>
           </>}
         </section>
-        <section className="rounded-xl border border-[#c4d4dc] bg-white p-5 shadow-sm">
-          <h2 className="text-lg font-semibold text-[#12394d]">Điểm cần xem xét <span className="font-normal text-slate-600">· {call.moments.length}</span></h2>
+        {call.moments.length > 0 && <section className="rounded-xl border border-amber-200 bg-white p-5 shadow-sm">
+          <h2 className="text-lg font-semibold text-[#12394d]">Đoạn SER gợi ý nghe lại <span className="font-normal text-slate-600">· {call.moments.length}</span></h2>
           <p className="mt-2 text-sm leading-6 text-slate-600">Các quy tắc từ nhãn cảm xúc gợi ý đoạn nên nghe lại. Người đánh giá quyết định mức liên quan.</p>
           <div className="custom-scrollbar mt-4 max-h-72 space-y-2 overflow-y-auto">
             {call.moments.map(moment => <button type="button" key={moment.id} onClick={() => selectMoment(moment)} aria-pressed={selectedMomentId === moment.id}
@@ -451,9 +465,13 @@ function CallReviewSession({ callId }: { callId: string }) {
             <textarea id="moment-note" rows={2} maxLength={2000} className={input} value={momentPatch?.note ?? selectedMoment.note}
               onChange={e => { const note = e.target.value; updateForm(previous => ({ ...previous, moments: { ...previous.moments, [selectedMoment.id]: { relevance: previous.moments[selectedMoment.id] ? previous.moments[selectedMoment.id].relevance : selectedMoment.relevance, note } } })) }}/>
           </fieldset>}
-        </section>
-        <section className="rounded-xl border border-[#c4d4dc] bg-white p-5 shadow-sm">
-          <h2 className="text-lg font-semibold text-[#12394d]">Hoàn tất đánh giá</h2>
+        </section>}
+        <section id="call-review" className="scroll-mt-28 rounded-xl border-2 border-teal-700 bg-white p-5 shadow-sm">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-teal-700 text-sm font-bold text-white">3</span>
+            <h2 className="text-lg font-bold text-[#12394d]">Kết luận của người QA</h2>
+          </div>
+          <p className="mt-2 text-sm leading-6 text-slate-600">Sau khi nghe và đối chiếu gợi ý AI, ghi nhận phát hiện của bạn. Chỉ chọn hoàn tất khi đã xem xét đủ bằng chứng.</p>
           <fieldset disabled={editDisabled} className="min-w-0">
             <legend className="sr-only">Ghi chú và trạng thái đánh giá</legend>
             <label className="mt-4 block text-sm font-semibold" htmlFor="overall-note">Ghi chú tổng thể</label>
@@ -467,8 +485,18 @@ function CallReviewSession({ callId }: { callId: string }) {
         </section>
       </div>
     </div>
-    <CallCaseLink callId={call.id} callDate={call.callDate}/>
-    <CallWorkflowPanel callId={call.id}/>
+    <div id="call-case" className="scroll-mt-28 space-y-4">
+      <div className="flex flex-wrap items-center gap-2 px-1">
+        <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-slate-700 text-sm font-bold text-white">4</span>
+        <h2 className="text-lg font-bold text-[#12394d]">Xử lý tiếp nếu cần</h2>
+        <span className="text-sm text-slate-600">Chỉ tạo vụ việc sau khi QA xác nhận có vấn đề cần theo dõi.</span>
+      </div>
+      <CallCaseLink callId={call.id} callDate={call.callDate}/>
+      <details className="rounded-xl border border-slate-200 bg-white p-4">
+        <summary className="cursor-pointer text-sm font-semibold text-slate-800">Thông tin ticket, lý do gọi và lịch sử xử lý (nếu sử dụng)</summary>
+        <div className="mt-4"><CallWorkflowPanel callId={call.id}/></div>
+      </details>
+    </div>
     {call.provenance === 'imported' && call.hasAudio && !call.title.startsWith('HỘI THOẠI ĐIỆN THOẠI THẬT · DataHive') &&
       <details className="rounded-lg border border-slate-200 bg-white p-4 text-sm leading-6 text-slate-700">
         <summary className="cursor-pointer font-semibold text-[#12394d]">Tùy chọn nghiên cứu: đối chiếu transcript nguồn với ASR thật</summary>
