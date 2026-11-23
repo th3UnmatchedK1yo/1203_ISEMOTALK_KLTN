@@ -46,6 +46,8 @@ class TestWordAlignedSegments(unittest.TestCase):
             timestamped_asr_spans([{"text": "Một câu không có timestamp"}], 9.0)
         with self.assertRaisesRegex(ValueError, "exceeds audio"):
             timestamped_asr_spans([{"text": " quá giờ", "timestamp": (2, 17)}], 10.0)
+        with self.assertRaisesRegex(ValueError, "intermediate end"):
+            timestamped_asr_spans([{"text": " sai", "timestamp": (0.2, None)}, {"text": " giờ", "timestamp": (1.0, 1.5)}], 2.0)
 
     def test_phowhisper_requests_real_word_alignment_from_pipeline(self):
         pipe = FakePipe([
