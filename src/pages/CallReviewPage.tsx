@@ -474,11 +474,29 @@ function CallReviewSession({ callId }: { callId: string }) {
           <p className="mt-2 text-sm leading-6 text-slate-600">Sau khi nghe và đối chiếu gợi ý AI, ghi nhận phát hiện của bạn. Chỉ chọn hoàn tất khi đã xem xét đủ bằng chứng.</p>
           <fieldset disabled={editDisabled} className="min-w-0">
             <legend className="sr-only">Ghi chú và trạng thái đánh giá</legend>
-            <label className="mt-4 block text-sm font-semibold" htmlFor="overall-note">Ghi chú tổng thể</label>
-            <textarea id="overall-note" value={form?.overallNote ?? ''} onChange={e => { const note = e.target.value; updateForm(previous => ({ ...previous, overallNote: note })) }} maxLength={5000} rows={3} className={input}/>
-            <label className="mt-4 flex items-start gap-3 text-sm leading-6"><input type="checkbox" className="mt-1 h-4 w-4 shrink-0" checked={form?.complete ?? false} onChange={e => { const complete = e.target.checked; updateForm(previous => ({ ...previous, complete })) }}/> Đã hoàn tất việc xem xét cuộc gọi</label>
+            <label className="mt-4 block text-sm font-semibold text-slate-800" htmlFor="overall-note">Nhận xét của QA</label>
+            <textarea id="overall-note"
+              placeholder="Ví dụ: Khách chưa được hỗ trợ đăng nhập thành công; nhân viên cần xác minh lại hướng xử lý và lịch liên hệ tiếp."
+              value={noteIsImportedProvenance ? '' : (form?.overallNote ?? '')}
+              onChange={e => { const note = e.target.value; updateForm(previous => ({ ...previous, overallNote: note })) }}
+              maxLength={5000} rows={4} className={input}/>
+            {noteIsImportedProvenance && <p className="mt-2 text-xs leading-5 text-slate-600">
+              Thông tin nguồn dataset đang được giữ trong lịch sử xử lý và mục giấy phép ở phía trên.
+              Ô này dành cho đánh giá nghiệp vụ, không cần chép lại metadata.
+            </p>}
+            <label className="mt-4 flex items-start gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm leading-6">
+              <input type="checkbox" className="mt-1 h-4 w-4 shrink-0 accent-teal-700" checked={form?.complete ?? false}
+                onChange={e => { const complete = e.target.checked; updateForm(previous => ({
+                  ...previous, complete,
+                  overallNote: noteIsImportedProvenance ? '' : previous.overallNote,
+                })) }}/>
+              <span><strong className="block text-slate-900">Đã kiểm tra và hoàn tất đánh giá QA</strong>
+                <span className="block text-slate-600">Chỉ đánh dấu sau khi nghe, đối chiếu. Hoàn tất QA không có nghĩa vụ việc đã được giải quyết.</span>
+              </span>
+            </label>
           </fieldset>
-          <button type="button" onClick={() => void save()} disabled={!canSave} className={primaryButton + ' mt-5 w-full'}><Save size={18}/>{saving ? 'Đang lưu…' : 'Lưu đánh giá'}</button>
+          <button type="button" onClick={() => void save()} disabled={!canSave} className={primaryButton + ' mt-5 w-full'}><Save size={18}/>{saving ? 'Đang lưu…' : 'Lưu đánh giá QA'}</button>
+          {!dirty && call.status === 'ready' && <p className="mt-2 text-center text-xs text-slate-500">Nhập nhận xét hoặc thay đổi trạng thái để bật nút lưu.</p>}
           {call.status === 'ready' && <a className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-teal-800 underline-offset-4 hover:underline" href={resolveApiUrl('/api/calls/' + encodeURIComponent(call.id) + '/export.csv')}><Download size={17}/> Xuất kết quả CSV đã lưu</a>}
           {call.status === 'ready' && <a className="mt-3 block text-sm font-semibold text-teal-800 underline-offset-4 hover:underline" href={resolveApiUrl('/api/calls/' + encodeURIComponent(call.id) + '/export.json')}>Tải bằng chứng và đầu vào gốc (JSON)</a>}
           {dirty && <p className="mt-2 text-sm text-slate-600">Tệp xuất chỉ gồm dữ liệu đã lưu; bản nháp chưa được đưa vào.</p>}
