@@ -13,7 +13,7 @@ const name = path.basename(raw)
 if (!/\.(wav|mp3|m4a)$/i.test(name)) throw Error('Only WAV/MP3/M4A are supported.')
 const bytes = statSync(raw).size
 if (bytes < 1024 || bytes > 50*1024*1024) throw Error('Expected a short valid recording (1 KiB..50 MiB).')
-const origin = 'http://127.0.0.1:3001'
+const origin = `http://127.0.0.1:${process.env.PORT || '3101'}`
 const before = await fetch(origin+'/api/system/status',{signal:AbortSignal.timeout(10000)}).then(r=>r.json())
 for (const component of ['asr','ser']) {
   const state=before?.inference?.components?.[component]
