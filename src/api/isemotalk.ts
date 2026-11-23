@@ -27,6 +27,9 @@ export interface Utterance {
   flagged: boolean
   textEdited: boolean
   speakerEdited: boolean
+  originalText?: string
+  originalSpeaker?: Speaker
+  predictionInputChanged?: boolean
 }
 
 export interface Moment {
@@ -38,6 +41,7 @@ export interface Moment {
   utteranceIds: string[]
   relevance: boolean | null
   note: string
+  reviewOutdated?: boolean
 }
 
 export interface CallItem {
@@ -72,6 +76,9 @@ export interface StageEntry {
   startedAt?: string
   endedAt?: string
   detail?: string
+  durationMs?: number
+  provenance?: Provenance
+  evidence?: { adapter: string; model?: string; device?: string; mock: boolean; verified?: boolean }
 }
 
 export interface ComponentHealth {
@@ -79,6 +86,7 @@ export interface ComponentHealth {
   ready: boolean
   mock: boolean
   verified?: boolean
+  loaded?: boolean
   detail: string
 }
 export interface InferenceHealth {
@@ -127,8 +135,15 @@ export interface Analytics {
   status: { ready: number; processing: number; failed: number }
   provenance: { mock: number; real: number; imported: number; unknown: number }
   review: { unreviewed: number; in_progress: number; reviewed: number; completionRate: number }
-  priority: { high: number; medium: number; low: number }
+  priority: { high: number; medium: number; low: number; unknown?: number }
   customerEmotion: Record<Emotion, number>
+  coverage?: {
+    customerUtterances: number
+    customerWithEmotion: number
+    unknownSpeakerUtterances: number
+    unpredictedUtterances: number
+    callsWithCustomerEmotion: number
+  }
   modality: { utterancesWithBoth: number; conflicts: number; conflictRate: number | null }
   moments: { byType: Record<string, number>; relevance: { relevant: number; notRelevant: number; undecided: number } }
   attention: Array<{ id: string; title: string; agentName: string; negativeRatio: number; momentCount: number; provenance: Provenance | null }>
@@ -156,6 +171,7 @@ export class ApiError extends Error {
     message: string,
     public readonly status: number,
     public readonly code?: string,
+    public readonly caseId?: string,
   ) {
     super(message)
     this.name = 'ApiError'
@@ -178,25 +194,26 @@ export function resolveApiUrl(url: string | null): string | undefined {
 
 function requireShape<T>(value: T, valid: (input: T) => boolean, endpoint: string): T {
   if (!valid(value)) {
-    throw new ApiError('API ' + endpoint + ' trả cấu trúc dữ liệu không hợp lệ. Kiểm tra cổng backend và phiên bản code.', 502)
+    throw new ApiError('API ' + endpoint + ' trả cấu trúc dữ liệu không hợp lệ. Hãy kiểm tra phiên bản ứng dụng rồi thử lại.', 502)
   }
   return value
 }
 
-async function json<T>(url: string, options: RequestInit = {}): Promise<T> {
+export async function apiJson<T>(url: string, options: RequestInit = {}): Promise<T> {
   let response: Response
   try {
     response = await fetch(resolveApiUrl(url)!, { ...options, headers: { Accept: 'application/json', ...(options.headers ?? {}) } })
   } catch (error) {
     if (error instanceof Error && error.name === 'AbortError') throw error
-    throw new ApiError('Không kết nối được Express API tại cổng 3001. Mở PowerShell và chạy npm run dev:api.', 0)
+    throw new ApiError('Không kết nối được dịch vụ. Kiểm tra ứng dụng máy chủ đang chạy rồi thử lại.', 0)
   }
+  options.signal?.throwIfAborted()
 
   const contentType = response.headers.get('content-type') ?? ''
   if (!contentType.toLowerCase().includes('application/json')) {
     throw new ApiError(
       'API trả về nội dung không phải JSON (' + (contentType || 'không có Content-Type') +
-      '). Có thể request /api đang bị Vite trả về index.html. Hãy kiểm tra backend cổng 3001.',
+      '). Hãy kiểm tra kết nối và phiên bản ứng dụng.',
       response.status,
     )
   }
@@ -204,12 +221,27 @@ async function json<T>(url: string, options: RequestInit = {}): Promise<T> {
   try {
     body = await response.json()
   } catch {
-    throw new ApiError('Không đọc được JSON từ Express API.', response.status)
+    options.signal?.throwIfAborted()
+    throw new ApiError('Không đọc được phản hồi từ dịch vụ.', response.status)
   }
+  options.signal?.throwIfAborted()
 
   if (!response.ok) {
-    const errorBody = body as { error?: string; code?: string } | null
-    throw new ApiError(errorBody?.error ?? 'API trả lỗi HTTP ' + response.status + '.', response.status, errorBody?.code)
+    const errorBody = body as { error?: unknown; code?: unknown; details?: unknown; caseId?: unknown } | null
+    const details: string[] = []
+    if (Array.isArray(errorBody?.details)) {
+      for (const detail of errorBody.details) {
+        if (typeof detail !== 'string') continue
+        const readable = detail.replace(/\s+/g, ' ').trim()
+        if (!readable) continue
+        details.push(readable.length > 240 ? readable.slice(0, 239) + '…' : readable)
+        if (details.length === 3) break
+      }
+    }
+    const summary = typeof errorBody?.error === 'string' ? errorBody.error : 'API trả lỗi HTTP ' + response.status + '.'
+    throw new ApiError([summary, ...details.map(detail => '• ' + detail)].join('\n'), response.status,
+      typeof errorBody?.code === 'string' ? errorBody.code : undefined,
+      typeof errorBody?.caseId === 'string' && /^CASE-[0-9]{6,19}$/.test(errorBody.caseId) ? errorBody.caseId : undefined)
   }
   if (body == null || typeof body !== 'object') {
     throw new ApiError('API không trả dữ liệu JSON hợp lệ.', 502)
@@ -218,56 +250,60 @@ async function json<T>(url: string, options: RequestInit = {}): Promise<T> {
 }
 
 export function getCalls(
-  filters: { search?: string; review?: string; priority?: string; page?: number; pageSize?: number },
+  filters: { search?: string; review?: string; priority?: string; provenance?: string; status?: string; page?: number; pageSize?: number },
   signal?: AbortSignal,
 ): Promise<CallList> {
   const params = new URLSearchParams()
   if (filters.search) params.set('search', filters.search)
   if (filters.review) params.set('review', filters.review)
   if (filters.priority) params.set('priority', filters.priority)
+  if (filters.provenance) params.set('provenance', filters.provenance)
+  if (filters.status) params.set('status', filters.status)
   params.set('sort', 'date')
   params.set('dir', 'desc')
   params.set('page', String(filters.page ?? 1))
   params.set('pageSize', String(filters.pageSize ?? 15))
-  return json<CallList>('/api/calls?' + params.toString(), { signal })
+  return apiJson<CallList>('/api/calls?' + params.toString(), { signal })
     .then(data => requireShape(data, x => Array.isArray(x.items) && typeof x.total === 'number' && !!x.counts, '/api/calls'))
 }
 
 export function getCall(id: string, signal?: AbortSignal): Promise<CallDetail> {
-  return json<CallDetail>('/api/calls/' + encodeURIComponent(id), { signal })
+  return apiJson<CallDetail>('/api/calls/' + encodeURIComponent(id), { signal })
     .then(data => requireShape(data, x => Array.isArray(x.utterances) && Array.isArray(x.moments) && typeof x.version === 'number', '/api/calls/:id'))
 }
 
 export function saveReview(id: string, payload: ReviewPayload): Promise<CallDetail> {
-  return json<CallDetail>('/api/calls/' + encodeURIComponent(id) + '/review', {
+  return apiJson<CallDetail>('/api/calls/' + encodeURIComponent(id) + '/review', {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   }).then(data => requireShape(data, x => Array.isArray(x.utterances) && typeof x.version === 'number', '/api/calls/:id/review'))
 }
 
-export function getAnalytics(signal?: AbortSignal): Promise<Analytics> {
-  return json<Analytics>('/api/analytics', { signal })
+export function getAnalytics(signal?: AbortSignal, filters: { provenance?: string } = {}): Promise<Analytics> {
+  const params = new URLSearchParams()
+  if (filters.provenance) params.set('provenance', filters.provenance)
+  return apiJson<Analytics>('/api/analytics' + (params.size ? '?' + params.toString() : ''), { signal })
     .then(data => requireShape(data, x => !!x.totals && !!x.review && !!x.customerEmotion, '/api/analytics'))
 }
 
 export function getSystemStatus(signal?: AbortSignal): Promise<SystemStatus> {
-  return json<SystemStatus>('/api/system/status', { signal })
+  return apiJson<SystemStatus>('/api/system/status', { signal })
     .then(data => requireShape(data, x => x.api === 'ok' && !!x.inference, '/api/system/status'))
 }
 
 export function uploadRecording(form: FormData): Promise<{ id: string }> {
-  return json<{ id: string }>('/api/calls/upload', { method: 'POST', body: form })
+  return apiJson<{ id: string }>('/api/calls/upload', { method: 'POST', body: form })
     .then(data => requireShape(data, x => typeof x.id === 'string', '/api/calls/upload'))
 }
 
 export function importAnalysis(form: FormData): Promise<{ id: string }> {
-  return json<{ id: string }>('/api/calls/import', { method: 'POST', body: form })
+  return apiJson<{ id: string }>('/api/calls/import', { method: 'POST', body: form })
     .then(data => requireShape(data, x => typeof x.id === 'string', '/api/calls/import'))
 }
 
 export function retryProcessing(id: string): Promise<{ id: string }> {
-  return json<{ id: string }>('/api/calls/' + encodeURIComponent(id) + '/retry', { method: 'POST' })
+  return apiJson<{ id: string }>('/api/calls/' + encodeURIComponent(id) + '/retry', { method: 'POST' })
 }
 
 export const stageLabels: Record<StageKey, string> = {
@@ -292,13 +328,22 @@ export const emotionColors: Record<Emotion, string> = {
   angry: '#ef4444',
 }
 
+export const emotionBadgeClasses: Record<Emotion, string> = {
+  neutral: 'border-slate-300 bg-slate-100 text-slate-800',
+  happy: 'border-emerald-200 bg-emerald-50 text-emerald-900',
+  sad: 'border-blue-200 bg-blue-50 text-blue-900',
+  angry: 'border-red-200 bg-red-50 text-red-900',
+}
+
+export const speakerLabels: Record<Speaker, string> = { agent: 'Nhân viên', customer: 'Khách hàng', unknown: 'Chưa rõ người nói' }
+
 export function clock(seconds: number): string {
   const n = Math.max(0, Math.floor(seconds || 0))
   return String(Math.floor(n / 60)).padStart(2, '0') + ':' + String(n % 60).padStart(2, '0')
 }
 
 export function percent(value: number | null | undefined): string {
-  return value == null ? '—' : String(Math.round(value * 100)) + '%'
+  return value == null || !Number.isFinite(value) || value < 0 || value > 1 ? '—' : String(Math.round(value * 100)) + '%'
 }
 
 export function provenanceLabel(value: Provenance | null): string {

@@ -93,6 +93,31 @@ class TestOfflineASR(unittest.TestCase):
             self.assertTrue(seen.get("local_files_only"))
             self.assertEqual(seen.get("repo_id"), "Systran/faster-whisper-small")
 
+    def test_warmup_initializes_once_and_health_keeps_load_failure(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            for name in ("config.json", "model.bin", "tokenizer.json"):
+                (root / name).write_bytes(b"test")
+            created = []
+            def constructor(*args, **kwargs):
+                created.append(kwargs)
+                return FakeModel()
+            asr = FasterWhisperAsr(str(root), "cpu")
+            with patch("app.adapters.asr_faster_whisper.importlib.util.find_spec", return_value=True), patch.dict("sys.modules", {"faster_whisper": SimpleNamespace(WhisperModel=constructor)}):
+                self.assertFalse(asr.status().to_dict().get("loaded", True))
+                asr.warmup(); asr.warmup()
+                self.assertTrue(asr.status().to_dict()["loaded"])
+                self.assertEqual(len(created), 1)
+                self.assertTrue(created[0]["local_files_only"])
+                self.assertEqual(created[0]["num_workers"], 1)
+                self.assertGreater(created[0]["cpu_threads"], 0)
+            failed = FasterWhisperAsr(str(root), "cpu")
+            with patch("app.adapters.asr_faster_whisper.importlib.util.find_spec", return_value=True), patch.dict("sys.modules", {"faster_whisper": SimpleNamespace(WhisperModel=lambda *a, **kw: (_ for _ in ()).throw(RuntimeError("bad weights")))}):
+                with self.assertRaises(ModelNotReady):
+                    failed.warmup()
+                self.assertFalse(failed.status().ready)
+                self.assertIn("bad weights", failed.status().detail)
+
 
 if __name__ == "__main__":
     unittest.main()

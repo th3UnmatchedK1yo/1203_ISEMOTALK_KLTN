@@ -23,12 +23,23 @@ export type SpeakerSource = 'channel' | 'model' | 'provided' | 'mock' | 'unassig
 export type StageKey = 'validate' | 'transcribe' | 'diarize' | 'emotion' | 'finalize'
 export const STAGE_ORDER: StageKey[] = ['validate', 'transcribe', 'diarize', 'emotion', 'finalize']
 export type StageState = 'pending' | 'running' | 'done' | 'skipped' | 'failed'
+/** Snapshot returned by the component that actually performed this stage. */
+export interface InferenceEvidence {
+  adapter: string
+  model?: string
+  device?: string
+  mock: boolean
+  verified?: boolean
+}
 export interface StageEntry {
   stage: StageKey
   state: StageState
   startedAt?: string
   endedAt?: string
   detail?: string
+  durationMs?: number
+  provenance?: Provenance
+  evidence?: InferenceEvidence
 }
 
 export interface Prediction {
@@ -57,6 +68,9 @@ export interface Utterance {
   flagged: boolean
   textEdited: boolean
   speakerEdited: boolean
+  originalText?: string
+  originalSpeaker?: Speaker
+  predictionInputChanged?: boolean
 }
 
 export type MomentType =
@@ -83,6 +97,11 @@ export interface Moment {
   fromEmotion: Emotion | null
   description: string
   utteranceIds: string[]
+}
+
+/** Anchor IDs are stable; relevance is valid only for the same supporting evidence. */
+export function momentEvidenceKey(moment: Moment): string {
+  return JSON.stringify([1, moment.type, moment.start, moment.end, moment.emotion, moment.fromEmotion, moment.utteranceIds])
 }
 
 // ---------------------------------------------------------------------------

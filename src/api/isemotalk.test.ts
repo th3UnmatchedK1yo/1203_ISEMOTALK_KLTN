@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { getAnalytics, getCalls, getCall, getSystemStatus, uploadRecording, importAnalysis, resolveApiUrl } from './isemotalk'
+import { apiJson, getAnalytics, getCalls, getCall, getSystemStatus, uploadRecording, importAnalysis, resolveApiUrl, percent, saveReview } from './isemotalk'
 
 afterEach(() => vi.unstubAllGlobals())
 
@@ -85,6 +85,87 @@ describe('frontend API safety', () => {
       new Response(JSON.stringify(system), { headers: { 'Content-Type': 'application/json' } }),
     ))
     await expect(getSystemStatus()).resolves.toEqual(system)
+  })
+
+  it('passes source and processing filters to the backend instead of mixing demo and inference', async () => {
+    const requests: string[] = []
+    vi.stubGlobal('fetch', async (url: string) => {
+      requests.push(url)
+      return new Response(JSON.stringify({ items: [], total: 0, counts: {} }), { headers: { 'Content-Type': 'application/json' } })
+    })
+    await getCalls({ provenance: 'real', status: 'ready' })
+    const query = new URL(requests[0], 'http://localhost').searchParams
+    expect(query.get('provenance')).toBe('real')
+    expect(query.get('status')).toBe('ready')
+  })
+
+  it('rejects a response that finishes after its route request was cancelled', async () => {
+    const controller = new AbortController()
+    let finish!: (value: unknown) => void
+    vi.stubGlobal('fetch', async () => ({ ok: true, status: 200,
+      headers: new Headers({ 'Content-Type': 'application/json' }),
+      json: () => new Promise(resolve => { finish = resolve }),
+    }))
+    const request = getCall('CALL-0001', controller.signal)
+    await Promise.resolve()
+    controller.abort()
+    finish({ utterances: [], moments: [], version: 1 })
+    await expect(request).rejects.toMatchObject({ name: 'AbortError' })
+  })
+
+  it('preserves the conflict code so the review UI can keep the local draft', async () => {
+    vi.stubGlobal('fetch', async () => new Response(JSON.stringify({ error: 'Saved elsewhere', code: 'version_conflict' }), {
+      status: 409, headers: { 'Content-Type': 'application/json' },
+    }))
+    await expect(saveReview('CALL-0001', { baseVersion: 1, utterances: {}, moments: {} }))
+      .rejects.toMatchObject({ status: 409, code: 'version_conflict' })
+  })
+
+  it.each([
+    ['CASE-000017', 'CASE-000017'],
+    ['CASE-1000000', 'CASE-1000000'],
+    ['CASE-000017/contacts', undefined],
+    [17, undefined],
+  ])('only exposes a valid case ID for conflict recovery (%s)', async (caseId, expected) => {
+    vi.stubGlobal('fetch', async () => Response.json(
+      { error: 'Already created', code: 'creation_request_conflict', caseId }, { status: 409 },
+    ))
+    await expect(apiJson('/api/cases')).rejects.toMatchObject({
+      status: 409, code: 'creation_request_conflict', caseId: expected,
+    })
+  })
+
+  it('shows missing or invalid scores as unavailable instead of a misleading percentage', () => {
+    expect(percent(0.82)).toBe('82%')
+    expect(percent(null)).toBe('—')
+    expect(percent(Number.NaN)).toBe('—')
+    expect(percent(82)).toBe('—')
+  })
+
+  it('surfaces row-level import validation details so the user can fix the file', async () => {
+    vi.stubGlobal('fetch', async () => new Response(JSON.stringify({
+      error: 'Tệp chứa dữ liệu không hợp lệ.',
+      details: ['Dòng 3: end phải lớn hơn start.', 'Dòng 5: speaker không hợp lệ.'],
+    }), { status: 400, headers: { 'Content-Type': 'application/json' } }))
+    const failure = await importAnalysis(new FormData()).catch(error => error as Error)
+    if (!(failure instanceof Error)) throw new Error('Expected an import validation error')
+    expect(failure.message).toContain('Tệp chứa dữ liệu không hợp lệ.')
+    expect(failure.message).toContain('Dòng 3: end phải lớn hơn start.')
+    expect(failure.message).toContain('Dòng 5: speaker không hợp lệ.')
+  })
+
+  it('bounds displayed API details and excludes objects or empty entries', async () => {
+    vi.stubGlobal('fetch', async () => new Response(JSON.stringify({
+      error: 'Invalid import',
+      details: [{ secret: 'not a user-facing string' }, ' ', 'First useful detail', 'x'.repeat(5000), 'Third detail', 'Fourth detail'],
+    }), { status: 400, headers: { 'Content-Type': 'application/json' } }))
+    const failure = await importAnalysis(new FormData()).catch(error => error as Error)
+    if (!(failure instanceof Error)) throw new Error('Expected an import validation error')
+    expect(failure.message).toContain('First useful detail')
+    expect(failure.message).toContain('Third detail')
+    expect(failure.message).not.toContain('Fourth detail')
+    expect(failure.message).not.toContain('secret')
+    expect(failure.message.length).toBeLessThan(850)
   })
 
 })

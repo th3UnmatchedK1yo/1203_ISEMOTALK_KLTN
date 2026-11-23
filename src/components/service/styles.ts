@@ -1,0 +1,5 @@
+export const field = 'mt-1.5 min-h-11 w-full min-w-0 rounded-md border border-slate-400 bg-white px-3 py-2 text-base text-slate-950 disabled:bg-slate-100'
+export const button = 'inline-flex min-h-11 items-center justify-center gap-2 rounded-md border border-slate-400 bg-white px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50'
+export const primary = 'inline-flex min-h-11 items-center justify-center gap-2 rounded-md bg-[#0E5665] px-4 py-2 text-sm font-semibold text-white hover:bg-[#0B4554] disabled:cursor-not-allowed disabled:opacity-50'
+export const label = 'block min-w-0 text-sm font-semibold text-slate-800'
+export const panel = 'min-w-0 rounded-lg border border-[#b7cbd5] bg-white p-5'

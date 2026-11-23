@@ -10,6 +10,7 @@ export class ImportError extends Error {
 
 const MAX_UTTERANCES = 5000
 const MAX_REPORTED_ERRORS = 8
+export const MAX_IMPORT_BYTES = 10 * 1024 * 1024
 
 const EMOTION_ALIASES: Record<string, Emotion> = {
   neutral: 'neutral', neu: 'neutral', calm: 'neutral', 'bình thường': 'neutral', 'binh thuong': 'neutral', trung: 'neutral', 'trung tính': 'neutral',
@@ -27,13 +28,13 @@ export function parseEmotion(v: unknown): Emotion | null {
   if (v == null || v === '') return null
   const key = String(v).trim().toLowerCase()
   if ((EMOTIONS as readonly string[]).includes(key)) return key as Emotion
-  return EMOTION_ALIASES[key] ?? null
+  return Object.hasOwn(EMOTION_ALIASES, key) ? EMOTION_ALIASES[key] : null
 }
 
 export function parseSpeaker(v: unknown): Speaker {
   if (v == null || v === '') return 'unknown'
   const key = String(v).trim().toLowerCase()
-  return SPEAKER_ALIASES[key] ?? 'unknown'
+  return Object.hasOwn(SPEAKER_ALIASES, key) ? SPEAKER_ALIASES[key] : 'unknown'
 }
 
 /** Accepts seconds (12.5), mm:ss(.ms) or hh:mm:ss(.ms). Returns null when invalid. */
@@ -42,17 +43,22 @@ export function parseTime(v: unknown): number | null {
   if (v == null) return null
   const s = String(v).trim().replace(',', '.')
   if (s === '') return null
-  if (/^\d+(\.\d+)?$/.test(s)) return Number(s)
+  if (/^\d+(\.\d+)?$/.test(s)) return Number.isFinite(Number(s)) ? Number(s) : null
   const m = s.match(/^(?:(\d+):)?(\d{1,2}):(\d{1,2}(?:\.\d+)?)$/)
-  if (!m) return null
-  return Number(m[1] ?? 0) * 3600 + Number(m[2]) * 60 + Number(m[3])
+  if (!m || Number(m[3]) >= 60 || (m[1] !== undefined && Number(m[2]) >= 60)) return null
+  const seconds = Number(m[1] ?? 0) * 3600 + Number(m[2]) * 60 + Number(m[3])
+  return Number.isFinite(seconds) ? seconds : null
 }
 
 function parseConfidence(v: unknown): number | null {
   if (v == null || v === '') return null
-  const n = typeof v === 'number' ? v : Number(String(v).replace('%', '').replace(',', '.'))
+  const raw = String(v).trim()
+  const percent = raw.endsWith('%')
+  const digits = (percent ? raw.slice(0, -1) : raw).trim()
+  if (!digits) return null
+  const n = typeof v === 'number' ? v : Number(digits.replace(',', '.'))
   if (!Number.isFinite(n) || n < 0) return null
-  const c = n > 1 ? n / 100 : n
+  const c = percent || n > 1 ? n / 100 : n
   return c > 1 ? null : c
 }
 
@@ -63,9 +69,9 @@ function makePred(emotionRaw: unknown, confRaw: unknown, label: string, row: num
     errors.push(`Dòng ${row}: cảm xúc "${String(emotionRaw)}" (${label}) không hợp lệ. Dùng: neutral, happy, sad, angry.`)
     return null
   }
-  const confidence = confRaw == null || confRaw === '' ? 1 : parseConfidence(confRaw)
+  const confidence = parseConfidence(confRaw)
   if (confidence == null) {
-    errors.push(`Dòng ${row}: độ tin cậy "${String(confRaw)}" (${label}) không hợp lệ (0–1 hoặc 0–100).`)
+    errors.push(`Dòng ${row}: cần độ tin cậy hợp lệ (${label}, 0–1 hoặc 0–100). Không tự gán độ tin cậy khi tệp thiếu điểm số.`)
     return null
   }
   return { emotion, confidence }
@@ -78,17 +84,27 @@ const pick = (o: Raw, ...keys: string[]): unknown => {
   return undefined
 }
 
-function normalizeRows(rows: Raw[], requireFused: boolean): NewUtterance[] {
+function normalizeRows(rows: unknown[], requireFused: boolean): NewUtterance[] {
+  if (rows.length > MAX_UTTERANCES) throw new ImportError(`Tệp có quá nhiều câu nói (tối đa ${MAX_UTTERANCES}).`)
   const errors: string[] = []
   const out: NewUtterance[] = []
-  rows.forEach((r, i) => {
+  rows.forEach((raw, i) => {
     const row = i + 1
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return void errors.push(`Dòng ${row}: cần một đối tượng câu nói.`)
+    const r = raw as Raw
     const start = parseTime(pick(r, 'start', 'start_time', 'startTime', 'begin'))
     const end = parseTime(pick(r, 'end', 'end_time', 'endTime', 'stop'))
-    const text = String(pick(r, 'text', 'transcript', 'content', 'utterance') ?? '').trim()
+    const value = pick(r, 'text', 'transcript', 'content', 'utterance')
+    const text = typeof value === 'string' ? value.trim() : ''
     if (start == null || end == null) return void errors.push(`Dòng ${row}: thiếu hoặc sai định dạng thời gian bắt đầu/kết thúc.`)
     if (start < 0 || end <= start) return void errors.push(`Dòng ${row}: thời gian không hợp lệ (cần 0 ≤ bắt đầu < kết thúc).`)
     if (!text) return void errors.push(`Dòng ${row}: nội dung câu nói trống.`)
+    if (text.length > 4000) return void errors.push(`Dòng ${row}: nội dung quá dài (tối đa 4000 ký tự).`)
+
+    if (!requireFused) {
+      out.push({ speaker: parseSpeaker(pick(r, 'speaker', 'role', 'channel')), text, start, end, acoustic: null, lexical: null, fused: null })
+      return
+    }
 
     const nested = (k: string) => (typeof r[k] === 'object' && r[k] !== null ? (r[k] as Raw) : null)
     const ac = nested('acoustic')
@@ -128,6 +144,7 @@ export interface ParsedFile {
  * and false for "import transcript" (predictions, if present, are ignored later).
  */
 export function parseUtteranceFile(buf: Buffer, filename: string, requireFused: boolean): ParsedFile {
+  if (buf.byteLength > MAX_IMPORT_BYTES) throw new ImportError('Tệp dữ liệu quá lớn (tối đa 10 MB).')
   const text = buf.toString('utf8').replace(/^\uFEFF/, '')
   const lower = filename.toLowerCase()
   if (lower.endsWith('.csv')) {
@@ -146,6 +163,7 @@ export function parseUtteranceFile(buf: Buffer, filename: string, requireFused: 
     } catch {
       throw new ImportError('Tệp JSON không hợp lệ (không phân tích được cú pháp).')
     }
+    if (!data || typeof data !== 'object') throw new ImportError('Tệp JSON cần một đối tượng hoặc mảng câu nói.')
     const obj = (Array.isArray(data) ? { utterances: data } : data) as Raw
     const list = (obj.utterances ?? obj.segments) as unknown
     if (!Array.isArray(list)) throw new ImportError('Tệp JSON cần có mảng "utterances".')

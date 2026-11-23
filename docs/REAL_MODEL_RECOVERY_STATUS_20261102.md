@@ -1,5 +1,7 @@
 # ISEmoTalk: real-model recovery status, 2026-11-02
 
+> Historical session note, superseded by the [2026-11-22 inference/research audit](audits/inference-research-20261122.md). Direct inspection of the uploaded main experiment archive now confirms all nine historical H5 heads and matching metadata hashes. The earlier missing-archive inference below does not mean the head weights are unavailable. Exact backbones, feature equivalence and a real serving package remain separate gates.
+
 ## What has been verified
 
 The user's local system reports:

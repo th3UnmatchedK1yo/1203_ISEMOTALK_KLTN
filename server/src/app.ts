@@ -4,15 +4,20 @@ import fs from 'node:fs'
 import path from 'node:path'
 import multer from 'multer'
 import { ZodError, z } from 'zod'
+import { assertCallAudioOwnership, cleanupPendingAudio, UnsafeAudioPathError } from './audio-storage'
 import type { Config } from './config'
 import type { DB } from './db'
 import type { StageEntry } from './domain'
-import { ImportError, parseUtteranceFile } from './importers'
+import { ImportError, MAX_IMPORT_BYTES, parseUtteranceFile } from './importers'
 import { InferenceError, type InferenceClient } from './inference/client'
 import { Pipeline, planStages } from './pipeline'
 import * as repo from './repo'
 import { buildAnalytics, exportAnalyticsCsv, exportReviewsCsv } from './reports'
 import { HttpError, ReviewBody, applyReview } from './review'
+import { attachWorkflowRoutes, getWorkflow } from './workflow'
+
+import { attachServiceRoutes } from './service-routes'
+import { recordCaseRecordingDeletion } from './service-operations'
 
 const AUDIO_EXT: Record<string, string> = { '.wav': 'audio/wav', '.mp3': 'audio/mpeg', '.m4a': 'audio/mp4' }
 const DATA_EXT = new Set(['.json', '.csv'])
@@ -41,12 +46,35 @@ function parseCallDate(v: string | undefined): string {
   return d.toISOString()
 }
 
+function positiveInteger(v: unknown, fallback: number): number {
+  if (v === undefined) return fallback
+  if (typeof v !== 'string' || !/^\d+$/.test(v) || !Number.isSafeInteger(Number(v)) || Number(v) < 1 || Number(v) > 1_000_000)
+    throw new HttpError(400, 'Số trang và kích thước trang phải là số nguyên dương hợp lệ.')
+  return Number(v)
+}
+
 export function createApp({ db, config, client, pipeline }: AppDeps) {
   const app = express()
   const tmpDir = path.join(config.uploadsDir, '.tmp')
   fs.mkdirSync(tmpDir, { recursive: true })
+  cleanupPendingAudio(db, config.uploadsDir)
 
-  app.use(cors())
+  const allowedOrigin = (origin: string): boolean => {
+    if (config.allowedOrigins.includes(origin)) return true
+    try {
+      const url = new URL(origin)
+      return url.origin === origin && url.protocol === 'http:' && (url.hostname === 'localhost' || url.hostname === '127.0.0.1')
+    } catch { return false }
+  }
+  // Reject the request itself: omitting CORS headers alone does not prevent a
+  // malicious page from submitting a form to an unauthenticated local API.
+  app.use((req, _res, next) => {
+    const origin = req.headers.origin
+    if ((origin && !allowedOrigin(origin)) || (!origin && req.headers['sec-fetch-site'] === 'cross-site'))
+      return next(new HttpError(403, 'Nguồn trang web không được phép truy cập API cục bộ.'))
+    next()
+  })
+  app.use(cors({ origin: (origin, cb) => cb(null, !origin || allowedOrigin(origin)) }))
   app.use(express.json({ limit: '5mb' }))
 
   const upload = multer({
@@ -54,7 +82,7 @@ export function createApp({ db, config, client, pipeline }: AppDeps) {
       destination: tmpDir,
       filename: (_req, file, cb) => cb(null, `${Date.now()}-${Math.random().toString(36).slice(2, 8)}${path.extname(file.originalname).toLowerCase()}`),
     }),
-    limits: { fileSize: config.maxUploadBytes, files: 2 },
+    limits: { fileSize: config.maxUploadBytes, files: 2, fields: 8, parts: 10, fieldSize: 16 * 1024 },
     fileFilter: (_req, file, cb) => {
       const ext = path.extname(file.originalname).toLowerCase()
       const ok = file.fieldname === 'audio' ? ext in AUDIO_EXT : DATA_EXT.has(ext)
@@ -62,21 +90,26 @@ export function createApp({ db, config, client, pipeline }: AppDeps) {
       cb(new HttpError(400, file.fieldname === 'audio' ? 'Chỉ hỗ trợ âm thanh WAV, MP3 hoặc M4A.' : 'Chỉ hỗ trợ tệp .json hoặc .csv.'))
     },
   })
-  const fields = upload.fields([
-    { name: 'audio', maxCount: 1 },
-    { name: 'transcript', maxCount: 1 },
-    { name: 'results', maxCount: 1 },
-  ])
+  const uploadFields = upload.fields([{ name: 'audio', maxCount: 1 }, { name: 'transcript', maxCount: 1 }])
+  const importFields = upload.fields([{ name: 'audio', maxCount: 1 }, { name: 'results', maxCount: 1 }])
 
   const filesOf = (req: Request) => (req.files ?? {}) as Record<string, Express.Multer.File[]>
   const cleanup = (req: Request) => Object.values(filesOf(req)).flat().forEach((f) => fs.rmSync(f.path, { force: true }))
+  const parseFile = (file: Express.Multer.File, results: boolean) => {
+    if (file.size > MAX_IMPORT_BYTES) throw new HttpError(413, 'Tệp dữ liệu quá lớn (tối đa 10 MB).')
+    return parseUtteranceFile(fs.readFileSync(file.path), file.originalname, results)
+  }
 
   function storeAudio(callId: string, file: Express.Multer.File) {
+    if (file.size === 0) throw new HttpError(400, 'Tệp âm thanh trống.')
     const ext = path.extname(file.originalname).toLowerCase()
     const rel = path.join(callId, `audio${ext}`)
-    fs.mkdirSync(path.join(config.uploadsDir, callId), { recursive: true })
-    fs.renameSync(file.path, path.join(config.uploadsDir, rel))
-    return { rel, mime: AUDIO_EXT[ext], name: file.originalname }
+    const dir = path.join(config.uploadsDir, callId)
+    // A new ID must own a new directory; never overwrite an existing recording.
+    fs.mkdirSync(dir)
+    try { fs.renameSync(file.path, path.join(config.uploadsDir, rel)) }
+    catch (e) { fs.rmSync(dir, { recursive: true, force: true }); throw e }
+    return { rel, dir, mime: AUDIO_EXT[ext], name: file.originalname }
   }
 
   // ---- System ------------------------------------------------------------
@@ -102,8 +135,8 @@ export function createApp({ db, config, client, pipeline }: AppDeps) {
         attention: q.attention === '1',
         sort: str(q.sort),
         dir: q.dir === 'asc' ? 'asc' : 'desc',
-        page: Number(q.page) || 1,
-        pageSize: Number(q.pageSize) || 15,
+        page: positiveInteger(q.page, 1),
+        pageSize: positiveInteger(q.pageSize, 15),
       }),
     )
   })
@@ -115,79 +148,98 @@ export function createApp({ db, config, client, pipeline }: AppDeps) {
   })
 
   // ---- Calls: create ------------------------------------------------------
-  app.post('/api/calls/upload', fields, (req, res) => {
+  app.post('/api/calls/upload', uploadFields, (req, res) => {
+    let stored: ReturnType<typeof storeAudio> | null = null
     try {
       const f = filesOf(req)
       const audio = f.audio?.[0]
       if (!audio) throw new HttpError(400, 'Cần chọn tệp ghi âm (WAV, MP3 hoặc M4A).')
       const meta = MetaFields.parse(req.body)
       const transcript = f.transcript?.[0]
-      const parsed = transcript ? parseUtteranceFile(fs.readFileSync(transcript.path), transcript.originalname, false) : null
+      const parsed = transcript ? parseFile(transcript, false) : null
+      const callDate = parseCallDate(meta.callDate)
+      const title = z.string().max(200).parse(str(meta.title) ?? path.basename(audio.originalname, path.extname(audio.originalname)))
 
       const id = repo.nextCallId(db)
       const source = parsed ? 'transcript_import' : 'upload'
-      const stored = storeAudio(id, audio)
-      repo.insertCall(db, {
-        id,
-        title: str(meta.title) ?? path.basename(audio.originalname, path.extname(audio.originalname)),
-        agentName: str(meta.agentName) ?? '',
-        customerName: str(meta.customerName) ?? '',
-        callDate: parseCallDate(meta.callDate),
-        source,
-        agentChannel: Number(meta.agentChannel ?? 0),
-        audioFile: stored.rel,
-        audioName: stored.name,
-        audioMime: stored.mime,
-        stageLog: planStages(source, true),
-        speakerSource: parsed ? (parsed.utterances.every((u) => u.speaker !== 'unknown') ? 'provided' : null) : null,
-      })
-      if (parsed) {
-        // Predictions inside a transcript file are deliberately dropped: the model must produce them.
-        repo.replaceUtterances(db, id, parsed.utterances.map((u) => ({ speaker: u.speaker, text: u.text, start: u.start, end: u.end })))
-      }
-      if (transcript) fs.rmSync(transcript.path, { force: true })
+      stored = storeAudio(id, audio)
+      const audioInfo = stored
+      db.transaction(() => {
+        repo.insertCall(db, {
+          id,
+          title,
+          agentName: str(meta.agentName) ?? '',
+          customerName: str(meta.customerName) ?? '',
+          callDate,
+          source,
+          agentChannel: Number(meta.agentChannel ?? 0),
+          audioFile: audioInfo.rel,
+          audioName: audioInfo.name,
+          audioMime: audioInfo.mime,
+          stageLog: planStages(source, true),
+          speakerSource: parsed ? (parsed.utterances.every((u) => u.speaker !== 'unknown') ? 'provided' : null) : null,
+        })
+        if (parsed) {
+          // Predictions inside a transcript file are deliberately dropped: the model must produce them.
+          repo.replaceUtterances(db, id, parsed.utterances.map((u) => ({ speaker: u.speaker, text: u.text, start: u.start, end: u.end })))
+        }
+      })()
       pipeline.enqueue(id)
       res.status(202).json({ id })
     } catch (e) {
-      cleanup(req)
+      if (stored) fs.rmSync(stored.dir, { recursive: true, force: true })
       throw e
+    } finally {
+      cleanup(req)
     }
   })
 
-  app.post('/api/calls/import', fields, (req, res) => {
+  app.post('/api/calls/import', importFields, (req, res) => {
+    let stored: ReturnType<typeof storeAudio> | null = null
     try {
       const f = filesOf(req)
       const results = f.results?.[0]
       if (!results) throw new HttpError(400, 'Cần chọn tệp kết quả (.json hoặc .csv).')
       const meta = MetaFields.parse(req.body)
-      const parsed = parseUtteranceFile(fs.readFileSync(results.path), results.originalname, true)
+      const parsed = parseFile(results, true)
       const audio = f.audio?.[0]
-
-      const id = repo.nextCallId(db)
-      const stored = audio ? storeAudio(id, audio) : null
-      repo.insertCall(db, {
-        id,
+      const combined = MetaFields.parse({
         title: str(meta.title) ?? parsed.meta.title ?? path.basename(results.originalname, path.extname(results.originalname)),
         agentName: str(meta.agentName) ?? parsed.meta.agentName ?? '',
         customerName: str(meta.customerName) ?? parsed.meta.customerName ?? '',
-        callDate: parseCallDate(str(meta.callDate) ?? parsed.meta.callDate),
-        source: 'results_import',
-        agentChannel: 0,
-        audioFile: stored?.rel ?? null,
-        audioName: stored?.name ?? null,
-        audioMime: stored?.mime ?? null,
-        provenance: 'imported',
-        speakerSource: parsed.utterances.every((u) => u.speaker !== 'unknown') ? 'provided' : null,
-        stageLog: planStages('results_import', !!stored),
+        callDate: str(meta.callDate) ?? parsed.meta.callDate,
       })
-      repo.replaceUtterances(db, id, parsed.utterances)
-      repo.updateCall(db, id, { duration: parsed.utterances.reduce((m, u) => Math.max(m, u.end), 0) })
-      fs.rmSync(results.path, { force: true })
+      const callDate = parseCallDate(combined.callDate)
+
+      const id = repo.nextCallId(db)
+      stored = audio ? storeAudio(id, audio) : null
+      const audioInfo = stored
+      db.transaction(() => {
+        repo.insertCall(db, {
+          id,
+          title: combined.title!,
+          agentName: combined.agentName!,
+          customerName: combined.customerName!,
+          callDate,
+          source: 'results_import',
+          agentChannel: Number(meta.agentChannel ?? 0),
+          audioFile: audioInfo?.rel ?? null,
+          audioName: audioInfo?.name ?? null,
+          audioMime: audioInfo?.mime ?? null,
+          provenance: 'imported',
+          speakerSource: parsed.utterances.every((u) => u.speaker !== 'unknown') ? 'provided' : null,
+          stageLog: planStages('results_import', !!audioInfo),
+        })
+        repo.replaceUtterances(db, id, parsed.utterances)
+        repo.updateCall(db, id, { duration: parsed.utterances.reduce((m, u) => Math.max(m, u.end), 0) })
+      })()
       pipeline.enqueue(id)
       res.status(202).json({ id })
     } catch (e) {
-      cleanup(req)
+      if (stored) fs.rmSync(stored.dir, { recursive: true, force: true })
       throw e
+    } finally {
+      cleanup(req)
     }
   })
 
@@ -196,7 +248,8 @@ export function createApp({ db, config, client, pipeline }: AppDeps) {
     const r = repo.getCallRow(db, req.params.id)
     if (!r?.audio_file) throw new HttpError(404, 'Cuộc gọi này không có tệp âm thanh.')
     const abs = path.resolve(config.uploadsDir, r.audio_file)
-    if (!abs.startsWith(path.resolve(config.uploadsDir)) || !fs.existsSync(abs)) throw new HttpError(404, 'Không tìm thấy tệp âm thanh.')
+    const rel = path.relative(path.resolve(config.uploadsDir), abs)
+    if (rel === '..' || rel.startsWith(`..${path.sep}`) || path.isAbsolute(rel) || !fs.existsSync(abs)) throw new HttpError(404, 'Không tìm thấy tệp âm thanh.')
     res.setHeader('Content-Type', r.audio_mime ?? 'application/octet-stream')
     res.sendFile(abs, { acceptRanges: true })
   })
@@ -216,9 +269,24 @@ export function createApp({ db, config, client, pipeline }: AppDeps) {
   })
 
   app.delete('/api/calls/:id', (req, res) => {
-    const removed = repo.deleteCall(db, req.params.id)
-    if (!removed) throw new HttpError(404, 'Không tìm thấy cuộc gọi.')
-    if (removed.audioFile) fs.rmSync(path.join(config.uploadsDir, path.dirname(removed.audioFile)), { recursive: true, force: true })
+    const id = req.params.id
+    const current = repo.getCallRow(db, id)
+    if (!current) throw new HttpError(404, 'Không tìm thấy cuộc gọi.')
+    if (current.audio_file) {
+      try { assertCallAudioOwnership(config.uploadsDir, id, current.audio_file) }
+      catch (error) {
+        if (!(error instanceof UnsafeAudioPathError)) throw error
+        throw new HttpError(409, 'Đường dẫn bản ghi không thuộc cuộc gọi này. Cần kiểm tra dữ liệu trước khi xóa.', { code: 'unsafe_audio_path' })
+      }
+    }
+    db.transaction(() => {
+      recordCaseRecordingDeletion(db, id)
+      const removed = repo.deleteCall(db, id)
+      if (!removed) throw new HttpError(404, 'Không tìm thấy cuộc gọi.')
+      if (removed.audioFile) db.prepare('INSERT INTO audio_cleanup_jobs(call_id, created_at) VALUES (?,?)').run(id, new Date().toISOString())
+    }).immediate()
+    pipeline.cancel(id)
+    cleanupPendingAudio(db, config.uploadsDir, id)
     res.status(204).end()
   })
 
@@ -243,16 +311,17 @@ export function createApp({ db, config, client, pipeline }: AppDeps) {
     const c = repo.getCallDetail(db, req.params.id)
     if (!c) throw new HttpError(404, 'Không tìm thấy cuộc gọi.')
     res.setHeader('Content-Disposition', `attachment; filename="${c.id}.json"`)
+    const { utterances, moments, stageLog, peaks: _peaks, audioUrl: _audioUrl, ...call } = c
+    const momentReviews = db.prepare('SELECT moment_id, relevance, note, evidence_key FROM moment_reviews WHERE call_id=? ORDER BY moment_id').all(c.id) as Array<{ moment_id: string; relevance: number | null; note: string; evidence_key: string | null }>
     res.json({
-      call: { title: c.title, agentName: c.agentName, customerName: c.customerName, callDate: c.callDate, provenance: c.provenance },
-      utterances: c.utterances.map((u) => ({
-        speaker: u.speaker, start: u.start, end: u.end, text: u.text,
-        acoustic: u.acoustic, lexical: u.lexical, fused: u.fused,
-        review: u.review, flagged: u.flagged,
-      })),
+      schemaVersion: 2, exportedAt: new Date().toISOString(), call, stageLog, utterances, moments,
+      momentReviews: momentReviews.map((m) => ({ momentId: m.moment_id, relevance: m.relevance === null ? null : !!m.relevance, note: m.note, evidenceKey: m.evidence_key })),
+      workflow: getWorkflow(db, c.id, { fullHistory: true }),
     })
   })
 
+  attachServiceRoutes(app, db)
+  attachWorkflowRoutes(app, db)
   app.use('/api', (_req, _res, next) => next(new HttpError(404, 'Đường dẫn API không tồn tại.')))
 
   // ---- Errors --------------------------------------------------------------

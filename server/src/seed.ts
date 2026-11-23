@@ -5,6 +5,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import type { Config } from './config'
 import type { DB } from './db'
+import { recordCaseRecordingDeletion } from './service-operations'
 import type { Emotion, Prediction, Speaker, StageEntry } from './domain'
 import * as repo from './repo'
 import type { NewUtterance } from './repo'
@@ -134,7 +135,14 @@ const DONE: StageEntry[] = [
 
 export function seedDemo(db: DB, config: Config, { reset = false } = {}): { created: number } {
   if (reset) {
-    db.prepare("DELETE FROM calls WHERE provenance = 'mock' AND source = 'results_import'").run()
+    db.transaction(() => {
+      const rows = db.prepare("SELECT id FROM calls WHERE provenance='mock' AND source='results_import' ORDER BY id").all() as Array<{ id: string }>
+      const remove = db.prepare('DELETE FROM calls WHERE id=?')
+      for (const { id } of rows) {
+        recordCaseRecordingDeletion(db, id)
+        remove.run(id)
+      }
+    }).immediate()
   } else if ((db.prepare("SELECT COUNT(*) AS n FROM calls WHERE provenance = 'mock'").get() as { n: number }).n > 0) {
     return { created: 0 }
   }

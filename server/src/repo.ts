@@ -17,6 +17,7 @@ import {
   computeAgreement,
   derive,
   detectMoments,
+  momentEvidenceKey,
 } from './domain'
 
 // ---------------------------------------------------------------------------
@@ -51,6 +52,7 @@ export interface CallListItem {
 export interface MomentDto extends Moment {
   relevance: boolean | null
   note: string
+  reviewOutdated?: boolean
 }
 
 export interface CallDetail extends CallListItem {
@@ -111,6 +113,9 @@ export function mapUtterance(r: Row): Utterance {
     flagged: !!r.flagged,
     textEdited: r.orig_text != null && r.orig_text !== r.text,
     speakerEdited: r.orig_speaker != null && r.orig_speaker !== r.speaker,
+    originalText: r.orig_text ?? r.text,
+    originalSpeaker: (r.orig_speaker ?? r.speaker) as Speaker,
+    predictionInputChanged: !!r.fu_emotion && ((r.orig_text != null && r.orig_text !== r.text) || (r.orig_speaker != null && r.orig_speaker !== r.speaker)),
   }
 }
 
@@ -180,13 +185,13 @@ export function listCalls(db: DB, q: ListQuery) {
   const where: string[] = []
   const args: unknown[] = []
   if (q.search?.trim()) {
-    const like = `%${q.search.trim().replace(/[%_]/g, (m) => `\\${m}`)}%`
+    const like = `%${q.search.trim().replace(/[\\%_]/g, (m) => `\\${m}`)}%`
     where.push(
       "(c.id LIKE ? ESCAPE '\\' OR c.title LIKE ? ESCAPE '\\' OR c.agent_name LIKE ? ESCAPE '\\' OR c.customer_name LIKE ? ESCAPE '\\')",
     )
     args.push(like, like, like, like)
   }
-  if (q.priority) (where.push('c.priority = ?'), args.push(q.priority))
+  if (q.priority) (where.push('c.priority = ? AND c.dominant_emotion IS NOT NULL'), args.push(q.priority))
   if (q.review) (where.push('c.review_status = ?'), args.push(q.review))
   if (q.status) (where.push('c.status = ?'), args.push(q.status))
   if (q.provenance) (where.push('c.provenance = ?'), args.push(q.provenance))
@@ -194,7 +199,7 @@ export function listCalls(db: DB, q: ListQuery) {
   if (q.attention) where.push("c.status = 'ready' AND c.priority = 'high' AND c.review_status != 'reviewed'")
   const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : ''
 
-  const sortExpr = SORTS[q.sort ?? 'date'] ?? SORTS.date
+  const sortExpr = q.sort && Object.hasOwn(SORTS, q.sort) ? SORTS[q.sort] : SORTS.date
   const dir = q.dir === 'asc' ? 'ASC' : 'DESC'
   const pageSize = Math.min(Math.max(q.pageSize ?? 15, 1), 100)
   const page = Math.max(q.page ?? 1, 1)
@@ -245,7 +250,8 @@ export function getCallDetail(db: DB, id: string): CallDetail | null {
   )
   const moments: MomentDto[] = detectMoments(utterances).map((m) => {
     const rv = reviews.get(m.id)
-    return { ...m, relevance: rv?.relevance == null ? null : !!rv.relevance, note: rv?.note ?? '' }
+    const outdated = rv?.evidence_key != null && rv.evidence_key !== momentEvidenceKey(m)
+    return { ...m, relevance: outdated || rv?.relevance == null ? null : !!rv.relevance, note: outdated ? '' : rv?.note ?? '', reviewOutdated: outdated }
   })
   return {
     ...mapListItem(r),
@@ -274,9 +280,11 @@ export function getCallDetail(db: DB, id: string): CallDetail | null {
 
 export function nextCallId(db: DB): string {
   const row = db
-    .prepare("SELECT MAX(CAST(SUBSTR(id, 6) AS INTEGER)) AS n FROM calls WHERE id GLOB 'CALL-[0-9]*'")
+    .prepare(`UPDATE id_counters SET value = MAX(value,
+      (SELECT COALESCE(MAX(CAST(SUBSTR(id, 6) AS INTEGER)), 0) FROM calls WHERE id GLOB 'CALL-[0-9]*')) + 1
+      WHERE name = 'calls' RETURNING value AS n`)
     .get() as Row
-  return `CALL-${String((row.n ?? 0) + 1).padStart(4, '0')}`
+  return `CALL-${String(row.n).padStart(4, '0')}`
 }
 
 export interface NewCall {

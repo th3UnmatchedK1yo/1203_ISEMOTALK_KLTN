@@ -9,6 +9,7 @@ export interface Config {
   maxUploadBytes: number
   minDurationSec: number
   maxDurationSec: number
+  allowedOrigins: string[]
 }
 
 export function loadConfig(overrides: Partial<Config> = {}): Config {
@@ -22,6 +23,7 @@ export function loadConfig(overrides: Partial<Config> = {}): Config {
     maxUploadBytes: Number(process.env.MAX_UPLOAD_MB ?? 300) * 1024 * 1024,
     minDurationSec: 1,
     maxDurationSec: 3 * 60 * 60,
+    allowedOrigins: (process.env.ISEMO_ALLOWED_ORIGINS ?? '').split(',').map((s) => s.trim()).filter(Boolean),
     ...overrides,
   }
 }
