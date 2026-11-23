@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { ArrowRight, CircleAlert, CircleCheck, Info } from 'lucide-react'
+import { ArrowRight, CircleAlert, Info } from 'lucide-react'
 import { apiJson, getSystemStatus } from '@/api/isemotalk'
 
 // A second, independent QA model: predicts synthetic-dataset attention need.
@@ -94,6 +94,7 @@ export function CallQaTriage({ callId, version, autoEligible = true }: { callId:
   const prediction = data?.result
   const worker = data?.worker
   const windowed = prediction?.model.includes('/window-max-v2') === true
+  const screeningIndex = prediction ? prediction.score.toFixed(4) : null
   const stale = !!data?.outdated || !!prediction?.truncated
   const alert = !!prediction && (prediction.label === 'needs_attention' || stale)
   return <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm" aria-labelledby="qa-model-title">
@@ -114,10 +115,10 @@ export function CallQaTriage({ callId, version, autoEligible = true }: { callId:
     </p>}
     {loading && <p role="status" className="mt-4 text-sm text-slate-600">Đang tải kết quả AI…</p>}
     {error && <p role="alert" className="mt-3 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">{error}</p>}
-    {prediction && <div className={'mt-4 border-l-4 px-4 py-3 ' + (alert ? 'border-amber-500 bg-amber-50/60' : 'border-teal-600 bg-teal-50/60')}>
+    {prediction && <div className={'mt-4 border-l-[3px] px-4 py-3 ' + (alert ? 'border-amber-500 bg-amber-50/50' : 'border-slate-300 bg-slate-50')}>
       <div className="flex items-start gap-2">
-        {alert ? <CircleAlert size={20} className="mt-0.5 shrink-0 text-amber-800" aria-hidden="true"/> :
-          <CircleCheck size={20} className="mt-0.5 shrink-0 text-teal-800" aria-hidden="true"/>}
+        {alert ? <CircleAlert size={19} className="mt-0.5 shrink-0 text-amber-800" aria-hidden="true"/> :
+          <Info size={19} className="mt-0.5 shrink-0 text-slate-500" aria-hidden="true"/>}
         <div>
           <p className="font-bold leading-6 text-slate-900">
             {data?.outdated ? 'Kết quả cũ · cần phân tích lại'
@@ -125,12 +126,28 @@ export function CallQaTriage({ callId, version, autoEligible = true }: { callId:
               : prediction.label === 'needs_attention' ? 'Gợi ý: ưu tiên QA kiểm tra' : 'XLM-R không gợi ý ưu tiên QA (chưa kết luận cuộc gọi đạt chuẩn)'}
           </p>
           <p className="mt-1 text-sm leading-6 text-slate-700">
-            XLM-R text-only · chỉ số sàng lọc{windowed ? ' cao nhất trong các cửa sổ' : ''}: <strong>{prediction.score.toFixed(3)} / 1</strong>.
-            Ngưỡng phân loại nội bộ 0,500. Đây không phải điểm chất lượng dịch vụ, xác suất nhân viên sai, mức hài lòng hay kết luận cuộc gọi đã giải quyết xong.
+            Chỉ số sàng lọc: <strong className="tabular-nums">{screeningIndex} / 1</strong>. Ngưỡng phân loại <strong>0,5000</strong>.
+            {prediction.score >= 0.5 ? ' Model gợi ý đưa cuộc gọi vào nhóm cần QA nghe trước.' : ' Model không ưu tiên cuộc này theo ngưỡng thử nghiệm.'}
           </p>
         </div>
       </div>
     </div>}
+    {prediction && <section className="mt-4 border-y border-slate-200 py-4 text-sm leading-6 text-slate-700" aria-label="Cách tính và giới hạn chỉ số XLM-R">
+      <h3 className="font-bold text-slate-900">Chỉ số này từ đâu ra, để làm gì?</h3>
+      <ol className="mt-2 list-inside list-decimal space-y-1.5">
+        <li>ASR tạo <strong>văn bản</strong> từ file ghi âm. XLM-R không nghe âm thanh và <strong>không chấm cảm xúc</strong>.</li>
+        <li>Văn bản được chia thành {windowed ? 'nhiều cửa sổ token có phần chồng lên nhau' : 'đầu vào token giới hạn của model'}. Mỗi phần được model cho một giá trị từ 0 đến 1 đối với nhãn <em>cần chú ý</em>.</li>
+        <li>{windowed ? 'Hệ thống lấy giá trị lớn nhất trong các cửa sổ' : 'Hệ thống sử dụng điểm đầu ra của model'}: <strong className="tabular-nums">{screeningIndex}</strong>. So với ngưỡng 0,5000 để <strong>xếp thứ tự nghe trước</strong>, không đánh giá nhân viên đạt hay không.</li>
+      </ol>
+      <p className="mt-3 border-l-2 border-slate-300 pl-3">
+        <strong>Vì sao dùng?</strong> Khi có nhiều cuộc gọi, đây là một tín hiệu thử nghiệm để chọn cuộc nghe trước thay vì đọc từng transcript.
+        Nó được học từ nhãn kịch bản OneVoice tổng hợp; chưa xác minh trên cuộc gọi tổng đài người thật.
+      </p>
+      <p className="mt-2 text-slate-600">
+        <strong>Điều model chưa giải thích được:</strong> nguyên nhân cụ thể khách bức xúc, nhân viên có tuân thủ quy trình hay cuộc gọi đã giải quyết xong.
+        Chỉ số này chưa được hiệu chuẩn thành xác suất rủi ro của cả cuộc gọi và <strong>không phải điểm QA hay điểm SER</strong>.
+      </p>
+    </section>}
     {prediction && (data?.outdated || prediction.truncated) && <p role="alert" className="mt-3 text-sm leading-6 font-medium text-amber-900">
       {data?.outdated ? 'Transcript đã đổi hoặc kết quả phiên cũ chỉ đọc phần đầu. Không sử dụng điểm này để kết luận; cần phân tích lại.'
         : windowed ? 'Vượt giới hạn 48 cửa sổ: có đoạn chưa được quét. QA cần nghe toàn bộ.'
@@ -155,7 +172,7 @@ export function CallQaTriage({ callId, version, autoEligible = true }: { callId:
       <details className="group text-xs text-slate-600">
         <summary className="inline-flex cursor-pointer items-center gap-1.5 font-medium hover:text-slate-900"><Info size={14} aria-hidden="true"/> Phương pháp & giới hạn</summary>
         <div className="mt-2 max-w-md space-y-2 text-xs leading-5">
-          <p>Model học từ OneVoice TTS tổng hợp, chưa được kiểm chứng trên cuộc gọi CSKH người thật.</p>
+          <p>Model học từ OneVoice TTS tổng hợp, chưa được kiểm chứng trên cuộc gọi CSKH người thật. Không có lý do theo đoạn hoặc trích dẫn AI nào được tạo ra bởi mô hình này.</p>
           {windowed && <p>Transcript dài được quét theo nhiều cửa sổ token. Điểm cao nhất là heuristic chưa hiệu chuẩn thành xác suất cho toàn cuộc gọi.</p>}
           {prediction && <p className="break-all">Model: {prediction.model} · {prediction.createdAt}</p>}
         </div>
