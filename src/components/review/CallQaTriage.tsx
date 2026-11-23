@@ -17,6 +17,7 @@ export interface QaTriageResponse {
   }
   outdated: boolean
   note?: string
+  worker?: { state: 'idle' | 'queued' | 'running' | 'retrying'; detail?: string }
 }
 export function CallQaTriage({ callId, version, autoEligible = true }: { callId: string; version: number; autoEligible?: boolean }) {
   const [data, setData] = useState<QaTriageResponse | null>(null)
@@ -25,12 +26,14 @@ export function CallQaTriage({ callId, version, autoEligible = true }: { callId:
   const [error, setError] = useState('')
   const [modelAvailable, setModelAvailable] = useState<boolean | null>(null)
   const [automatic, setAutomatic] = useState(false)
+  const [pollCount, setPollCount] = useState(0)
 
   useEffect(() => {
     const controller = new AbortController()
     let timer: ReturnType<typeof setInterval> | null = null
     setLoading(true)
     setData(null)
+    setPollCount(0)
     setError('')
     const refresh = async () => {
       try {
@@ -39,6 +42,7 @@ export function CallQaTriage({ callId, version, autoEligible = true }: { callId:
         })
         if (controller.signal.aborted) return
         setData(next)
+        if (!next.result) setPollCount(count => count + 1)
         setLoading(false)
         if (next.result && !next.outdated && timer) {
           clearInterval(timer)
@@ -88,6 +92,7 @@ export function CallQaTriage({ callId, version, autoEligible = true }: { callId:
   }
 
   const prediction = data?.result
+  const worker = data?.worker
   const windowed = prediction?.model.includes('/window-max-v2') === true
   const stale = !!data?.outdated || !!prediction?.truncated
   const alert = !!prediction && (prediction.label === 'needs_attention' || stale)
@@ -98,7 +103,7 @@ export function CallQaTriage({ callId, version, autoEligible = true }: { callId:
         <h2 id="qa-model-title" className="mt-1 text-lg font-bold text-[#12394d]">Cuộc gọi có cần xem kỹ?</h2>
         <p className="mt-1 text-sm leading-6 text-slate-600">XLM-R sàng lọc theo transcript. QA quyết định sau khi nghe.</p>
       </div>
-      {modelAvailable === true && (data?.outdated || !automatic) &&
+      {modelAvailable === true && (data?.outdated || !automatic || worker?.state === 'retrying' || (!prediction && pollCount >= 7)) &&
         <button type="button" onClick={() => void run()} disabled={busy || loading}
           className="inline-flex min-h-10 items-center rounded-lg border border-teal-700 bg-white px-3 py-2 text-sm font-semibold text-teal-900 hover:bg-teal-50 disabled:opacity-50">
           {busy ? 'Đang phân tích…' : 'Chạy lại AI'}
@@ -133,9 +138,15 @@ export function CallQaTriage({ callId, version, autoEligible = true }: { callId:
     </p>}
     {!loading && !prediction && !error && <p role="status" className="mt-4 text-sm leading-6 text-slate-700">
       {!autoEligible ? 'Đây không phải dữ liệu CSKH thuộc phạm vi chấm QA tự động.'
-        : automatic ? 'AI đang tự phân tích transcript. Kết quả sẽ xuất hiện ở đây.'
+        : worker?.state === 'running' ? 'XLM-R đang suy luận trên GPU; chưa có điểm để hiển thị.'
+        : worker?.state === 'queued' ? 'Cuộc gọi đã vào hàng đợi XLM-R, sẽ chạy sau tác vụ hiện tại.'
+        : worker?.state === 'retrying' ? 'XLM-R gặp lỗi; worker sẽ thử lại ở lượt quét tiếp theo.'
+        : automatic ? 'Chưa có kết quả XLM-R; đang kiểm tra hàng đợi tự động. Nếu chờ lâu, xem trạng thái model hoặc bấm Chạy lại AI.'
         : modelAvailable === true ? 'Model đã sẵn sàng nhưng xử lý tự động chưa bật. Có thể chạy thủ công.'
         : 'Chưa có kết quả AI; QA vẫn có thể nghe và ghi nhận thủ công.'}
+    </p>}
+    {!prediction && worker?.detail && <p role="alert" className="mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm leading-6 text-amber-950">
+      <strong>Lý do chưa có kết quả AI:</strong> {worker.detail}
     </p>}
     <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-3">
       <a href="#call-review" className="inline-flex min-h-9 items-center gap-2 text-sm font-bold text-teal-800 hover:underline">
