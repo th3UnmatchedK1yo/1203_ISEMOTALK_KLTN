@@ -81,6 +81,8 @@ export interface InferenceClient {
 const Evidence = z.object({
   adapter: z.string().min(1).max(200), model: z.string().max(2048).optional(),
   device: z.string().max(200).optional(), mock: z.boolean(), verified: z.boolean().optional(),
+  timingMode: z.enum(['word_aligned', 'audio_window']).optional(),
+  timingWarning: z.string().max(240).optional(),
 })
 const SpeakerValue = z.enum(['agent', 'customer', 'unknown'])
 const PredictionValue = z.object({ emotion: z.enum(EMOTIONS), confidence: z.number().min(0).max(1) })
