@@ -20,6 +20,7 @@ import { attachWorkflowRoutes, getWorkflow } from './workflow'
 import { attachServiceRoutes } from './service-routes'
 import { recordCaseRecordingDeletion } from './service-operations'
 import { attachQaTriageRoutes } from './qa-routes'
+import type { AutoQa } from './auto-qa'
 
 const AUDIO_EXT: Record<string, string> = { '.wav': 'audio/wav', '.mp3': 'audio/mpeg', '.m4a': 'audio/mp4' }
 const DATA_EXT = new Set(['.json', '.csv'])
@@ -29,6 +30,7 @@ export interface AppDeps {
   config: Config
   client: InferenceClient
   pipeline: Pipeline
+  autoQa?: AutoQa | null
 }
 
 const str = (v: unknown): string | undefined => (typeof v === 'string' && v.trim() !== '' ? v.trim() : undefined)
@@ -55,7 +57,7 @@ function positiveInteger(v: unknown, fallback: number): number {
   return Number(v)
 }
 
-export function createApp({ db, config, client, pipeline }: AppDeps) {
+export function createApp({ db, config, client, pipeline, autoQa }: AppDeps) {
   const app = express()
   const tmpDir = path.join(config.uploadsDir, '.tmp')
   fs.mkdirSync(tmpDir, { recursive: true })
@@ -443,7 +445,7 @@ export function createApp({ db, config, client, pipeline }: AppDeps) {
 
   attachServiceRoutes(app, db)
   attachWorkflowRoutes(app, db)
-  attachQaTriageRoutes(app, db, config)
+  attachQaTriageRoutes(app, db, config, autoQa)
   app.use('/api', (_req, _res, next) => next(new HttpError(404, 'Đường dẫn API không tồn tại.')))
 
   // ---- Errors --------------------------------------------------------------
