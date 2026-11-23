@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import express from 'express'
+import { createHash } from 'node:crypto'
 import request from 'supertest'
 import { openDb } from '../src/db'
 import { loadConfig } from '../src/config'
@@ -77,6 +78,29 @@ describe('QA predictions are evidence, not reviewer actions', () => {
       .run(id, hash, 'a'.repeat(64), 'xlm-roberta-qa@legacy-prefix', 'routine', 0.049, 'synthetic_onevoice', 1, new Date().toISOString())
     expect((await request(app).get('/api/calls/' + id + '/qa-triage')).body.outdated).toBe(true)
     expect(repo.listCalls(db, {}).items[0].qaTriage?.outdated).toBe(true)
+  })
+
+  it('orders the queue by QA attention and keeps speech benchmarks out of CSKH counts', () => {
+    const { db } = setup()
+    const insert = (id: string, title: string) => {
+      repo.insertCall(db, { id, title, agentName: '', customerName: '',
+        callDate: new Date().toISOString(), source: 'results_import', agentChannel: 0,
+        stageLog: [], provenance: 'imported' })
+      repo.replaceUtterances(db, id, [{start:0,end:3,text:'Xin hỗ trợ.',speaker:'customer'}])
+      repo.updateCall(db, id, {status:'ready'})
+    }
+    insert('CALL-000002', 'TTS TỔNG HỢP · OneVoice · 01')
+    insert('CALL-000003', 'HỘI THOẠI ĐIỆN THOẠI THẬT · DataHive · 01')
+    const text = repo.getUtterances(db,'CALL-000001').map(u=>u.speaker+': '+u.text).join('\\n')
+    // All predictions must carry the transcript input fingerprint.
+    const crypto = (value: string) => createHash('sha256').update(value).digest('hex')
+    db.prepare('INSERT INTO qa_triage_results (call_id,input_sha256,model_sha256,model_name,label,score,dataset_source,truncated,created_at) VALUES (?,?,?,?,?,?,?,?,?)')
+      .run('CALL-000001', crypto(text), 'a'.repeat(64), 'xlm-roberta-qa@v2/window-max-v2',
+        'needs_attention', .88, 'synthetic_onevoice', 0, new Date().toISOString())
+    const ordered=repo.listCalls(db,{sort:'qa_attention',datasetScope:'business'})
+    expect(ordered.items.map(item=>item.id)).toEqual(['CALL-000001','CALL-000002'])
+    expect(ordered.counts).toMatchObject({total:2, qaAttention:1, qaPending:1})
+    expect(repo.listCalls(db,{datasetScope:'speech_only'}).items.map(item=>item.id)).toEqual(['CALL-000003'])
   })
 
   it('refuses unavailable model without storing fake QA evidence', async () => {
