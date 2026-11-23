@@ -232,6 +232,18 @@ function CallReviewSession({ callId }: { callId: string }) {
         <button type="button" disabled={!canSave} onClick={() => void save()} className={primaryButton}><Save size={18}/>{saving ? 'Đang lưu…' : 'Lưu đánh giá'}</button>
       </div>
     </header>
+    {call.provenance === 'imported' && (call.title.startsWith('TTS TỔNG HỢP') || call.title.startsWith('GIỌNG THẬT')) &&
+      <div className="rounded-lg border border-sky-200 bg-sky-50 p-4 text-sm leading-6 text-sky-950" role="note">
+        <strong>Đang nghe bản ghi WAV gốc từ dataset, không phải âm thanh do web tạo.</strong>
+        <p className="mt-1">{call.title.startsWith('TTS TỔNG HỢP')
+          ? 'OneVoice có lời thoại tổng đài được đọc bằng giọng TTS tổng hợp, không phải cuộc gọi khách hàng ngoài đời.'
+          : 'FOSD/FLEURS là tiếng nói ghi âm từ người thật, nhưng không phải cuộc gọi chăm sóc khách hàng.'}
+          {' '}Transcript được lấy từ nguồn dữ liệu, đang hiển thị theo toàn bộ thời lượng; chưa có timestamp tách lượt nói, ASR hay SER thật.
+          Không có nhãn cảm xúc vì hệ thống chưa chạy mô hình trên file này.</p>
+        <details className="mt-2"><summary className="cursor-pointer font-semibold">Nguồn, giấy phép và SHA256 của bản ghi</summary>
+          <p className="mt-2 break-all text-xs">{call.stageLog.find(step => step.stage === 'validate')?.detail}</p>
+        </details>
+      </div>}
     {call.provenance === 'mock' && <p className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-950">
       {call.source === 'results_import'
         ? 'Dữ liệu minh họa: âm thanh tổng hợp, transcript và nhãn cảm xúc mô phỏng. Dùng để trình bày luồng đánh giá, không phải kết quả nghiên cứu.'
