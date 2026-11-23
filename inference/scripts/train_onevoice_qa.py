@@ -99,6 +99,7 @@ def main():
     import torch
     from torch.utils.data import TensorDataset, DataLoader
     from transformers import AutoTokenizer, AutoModelForSequenceClassification
+    from huggingface_hub import HfApi, snapshot_download
 
     if not torch.cuda.is_available():
         raise RuntimeError("CUDA REQUIRED: do not silently train or fine-tune on CPU.")
@@ -125,9 +126,13 @@ def main():
     if (dest / "model.safetensors").exists() or (dest / "training_result.json").exists():
         raise FileExistsError("Completed model/output exists; use a new versioned output directory.")
 
-    tokenizer = AutoTokenizer.from_pretrained(args.model)
+    pretrained_sha = HfApi().model_info(args.model).sha
+    if not isinstance(pretrained_sha, str) or len(pretrained_sha) != 40:
+        raise ValueError("Cannot resolve an immutable pretrained model revision.")
+    pretrained = snapshot_download(repo_id=args.model, revision=pretrained_sha)
+    tokenizer = AutoTokenizer.from_pretrained(pretrained, local_files_only=True)
     model = AutoModelForSequenceClassification.from_pretrained(
-        args.model, num_labels=2, id2label={0: LABEL_NAMES[0], 1: LABEL_NAMES[1]},
+        pretrained, num_labels=2, id2label={0: LABEL_NAMES[0], 1: LABEL_NAMES[1]},
         label2id={LABEL_NAMES[0]: 0, LABEL_NAMES[1]: 1},
     ).to(device)
     model.train()
@@ -204,6 +209,7 @@ def main():
     }
     result = {
         "task": "call_level_needs_attention", "model": args.model,
+        "pretrained_commit": pretrained_sha,
         "dataset": manifest["dataset"], "dataset_commit": manifest["commit"],
         "dataset_records_sha256": manifest["records_sha256"],
         "synthetic": True, "license": manifest["license"],
