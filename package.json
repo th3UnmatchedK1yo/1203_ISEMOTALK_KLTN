@@ -26,7 +26,9 @@
     "remote:check": "node scripts/check-remote-models.mjs",
     "remote:web": "node scripts/start-remote-web.mjs",
     "remote:smoke": "node scripts/remote-real-smoke.mjs",
-    "remote:qa-smoke": "node scripts/remote-qa-smoke.mjs"
+    "remote:qa-smoke": "node scripts/remote-qa-smoke.mjs",
+    "remote:api-preview": "node scripts/start-remote-api-preview.mjs",
+    "remote:web:preview": "node scripts/start-remote-web.mjs --preview"
   },
   "dependencies": {
     "@fontsource-variable/inter": "^5.3.0",
