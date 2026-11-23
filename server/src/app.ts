@@ -309,7 +309,7 @@ export function createApp({ db, config, client, pipeline }: AppDeps) {
     if (process.env.ISEMO_SER === 'none') {
       if (ser.adapter !== 'not_configured' || ser.ready || ser.mock)
         throw new HttpError(503, 'Cấu hình bỏ qua SER giữa hai dịch vụ không khớp.')
-    } else if (!ser.ready || ser.mock) {
+    } else if (!ser.ready || ser.mock || ser.verified !== true) {
       throw new HttpError(503, 'SER chưa được xác minh; chỉ có thể chạy khi cấu hình chế độ QA/ASR không có SER.')
     }
 
