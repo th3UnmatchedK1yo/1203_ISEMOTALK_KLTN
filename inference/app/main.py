@@ -84,7 +84,9 @@ def create_app(settings: Optional[Settings] = None, service: Optional[InferenceS
 
     @app.get("/v1/health")
     def health():
-        return svc.health()
+        result = svc.health()
+        result["qa"] = qa_model.status()
+        return result
 
     @app.get("/v1/qa/health")
     def qa_health():
