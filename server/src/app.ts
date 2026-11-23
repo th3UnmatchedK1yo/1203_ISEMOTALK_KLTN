@@ -299,14 +299,14 @@ export function createApp({ db, config, client, pipeline, autoQa }: AppDeps) {
     }
   })
 
-  // Create a NEW derived call from the untouched imported dataset recording.
-  // Never overwrite source/reference transcripts with generated ASR text.
+  // Create a NEW derived call from an unchanged imported or uploaded WAV.
+  // Never overwrite the original transcript, QA reviews, case history or audio.
   app.post('/api/calls/:id/reprocess', async (req, res) => {
     if (previewOnly) throw new HttpError(503, 'API preview không chạy model.')
     const original = repo.getCallRow(db, req.params.id)
     if (!original) throw new HttpError(404, 'Không tìm thấy cuộc gọi nguồn.')
-    if (original.status !== 'ready' || original.provenance !== 'imported' || !original.audio_file)
-      throw new HttpError(409, 'Chỉ phân tích lại được bản ghi có audio đã nhập và hoàn tất; không ghi đè kết quả nguồn.')
+    if (original.status !== 'ready' || !['imported', 'real'].includes(original.provenance || '') || !original.audio_file)
+      throw new HttpError(409, 'Chỉ phân tích lại được bản ghi đã hoàn tất, có audio thật và nguồn hợp lệ; không ghi đè hồ sơ cũ.')
     if (original.title.startsWith('HỘI THOẠI ĐIỆN THOẠI THẬT · DataHive')) {
       throw new HttpError(422,
         'DataHive không phải cuộc gọi CSKH. Không tự gán hai người nói vào vai nhân viên và khách hàng; chỉ sử dụng để nghe và kiểm tra ASR riêng.')
