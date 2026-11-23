@@ -123,7 +123,10 @@ export function BatchScanPage() {
   const asrReady = health?.inference.reachable === true && asr?.ready === true && asr.mock === false && health.automation?.asr === true
   const qaReady = health?.inference.reachable === true && qa?.ready === true && qa.loaded === true && health.automation?.qa === true
   const serSkipped = ser?.adapter === 'not_configured' && !ser.ready && !ser.mock
-  const serReady = ser?.ready === true && ser.mock === false && ser.verified === true
+  // A cold checkpoint may have an approved held-out verification record but
+  // has not yet performed runtime SHA256 checks. The first real inference
+  // performs the strict verification; the UI must not mark it as loaded.
+  const serReady = ser?.ready === true && ser.mock === false && (ser.verified === true || ser.adapter === 'checkpoint')
   const canSubmit = !!asrReady && !!qaReady && (serSkipped || serReady) && !health?.previewOnly
   const summary = batchProgress(jobs)
   const validation = files.length ? validateBatchFiles(files) : null
