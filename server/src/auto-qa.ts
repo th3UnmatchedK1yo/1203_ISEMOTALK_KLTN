@@ -60,8 +60,8 @@ export class AutoQa {
         signal: AbortSignal.any([signal, AbortSignal.timeout(5000)]),
       })
       if (!response.ok) return false
-      const value = await response.json() as {ready?:boolean}
-      return value.ready === true
+      const value = await response.json() as {ready?:boolean; loaded?:boolean}
+      return value.ready === true && value.loaded === true
     } catch { return false }
   }
 
