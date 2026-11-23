@@ -4,7 +4,6 @@ import unittest
 import numpy as np
 
 from app.adapters.asr_phowhisper import PhoWhisperAsr
-from app.adapters.base import ModelNotReady
 from app.asr_segments import timestamped_asr_spans
 
 
@@ -15,6 +14,8 @@ class FakePipe:
 
     def __call__(self, audio, **kwargs):
         self.kwargs = kwargs
+        if kwargs.get("return_timestamps") is False:
+            return {"text": " Xin chào từ audio window"}
         return {"chunks": self.chunks}
 
 
@@ -64,11 +65,27 @@ class TestWordAlignedSegments(unittest.TestCase):
         self.assertEqual(pipe.kwargs["generate_kwargs"]["language"], "vi")
         self.assertIs(pipe.kwargs["generate_kwargs"]["condition_on_prev_tokens"], False)
 
-    def test_adapter_reports_missing_alignment_instead_of_faking_chat(self):
+    def test_adapter_falls_back_to_real_audio_windows_when_word_alignment_fails(self):
         asr = PhoWhisperAsr("vinai/PhoWhisper-base")
         asr._pipe = FakePipe([{"text": " Lỗi timestamp", "timestamp": None}])
-        with self.assertRaisesRegex(ModelNotReady, "word alignment failed"):
-            asr.transcribe(np.zeros(32000, dtype=np.float32), 16000, 2.0)
+        results = asr.transcribe(np.zeros(32000, dtype=np.float32), 16000, 2.0)
+        self.assertEqual([x.text for x in results], ["Xin chào từ audio window"])
+        self.assertEqual([(x.start, x.end) for x in results], [(0.0, 2.0)])
+        self.assertEqual(asr.timing_mode, "audio_window")
+        self.assertIn("word alignment", asr.alignment_warning)
+
+    def test_fallback_on_nonchronological_words_splits_into_real_audio_windows(self):
+        pipe = FakePipe([
+            {"text": " Lỗi", "timestamp": (4.0, 4.4)},
+            {"text": " lùi", "timestamp": (2.0, 2.6)},
+        ])
+        asr = PhoWhisperAsr("vinai/PhoWhisper-base")
+        asr._pipe = pipe
+        out = asr.transcribe(np.zeros(19 * 16000, dtype=np.float32), 16000, 19.0)
+        self.assertEqual(len(out), 2)
+        self.assertEqual([(seg.start, seg.end) for seg in out], [(0.0, 12.0), (12.0, 19.0)])
+        self.assertEqual(asr.timing_mode, "audio_window")
+        self.assertIsNone(out[0].speaker)
 
 
 if __name__ == "__main__":
