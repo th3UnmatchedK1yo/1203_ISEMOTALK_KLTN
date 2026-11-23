@@ -1,7 +1,7 @@
 // Windows: ONE double-click entrypoint for a genuine ISEmoTalk QA workspace.
 // Uses an SSH tunnel; runs API + Python together on FTISU in isolated ports.
 // No mock inference, no overwriting the original dataset/DB, no user CMD chain.
-import { spawn } from 'node:child_process'
+import { spawn, execFileSync } from 'node:child_process'
 import { closeSync, existsSync, mkdirSync, openSync, readFileSync } from 'node:fs'
 import { sshRuntimeArgs } from './oneclick-ssh.mjs'
 import { dirname, join, resolve } from 'node:path'
@@ -9,6 +9,10 @@ import { fileURLToPath } from 'node:url'
 
 if (process.platform !== 'win32') throw Error('Use ISEmoTalk.cmd on Windows only.')
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
+const expectedCommit = execFileSync('git', ['rev-parse', 'HEAD'], {
+  cwd: root, encoding: 'utf8', timeout: 5000,
+}).trim()
+if (!/^[a-f0-9]{40}$/.test(expectedCommit)) throw Error('Cannot verify local ISEmoTalk source commit.')
 const logs = join(root, '.isemotalk-launcher')
 mkdirSync(logs, {recursive: true})
 const apiPort = 13002 // Windows loopback tunnel
@@ -70,7 +74,7 @@ function valid(h) {
   const c = h?.inference?.components
   // A loaded QA checkpoint is NOT proof that the API background worker is on.
   // Refuse a mismatched session instead of promising automatic screening.
-  return h?.api === 'ok' && h.previewOnly !== true && h.automation?.qa === true && h.inference?.reachable &&
+  return h?.api === 'ok' && h.runtimeCommit === expectedCommit && h.previewOnly !== true && h.automation?.qa === true && h.inference?.reachable &&
     h.inference?.qa?.ready === true && h.inference.qa.loaded === true && c?.ser?.adapter === 'not_configured' &&
     c.ser.mock === false && c.ser.ready === false &&
     c?.asr?.mock === false && (c.asr.ready || c.asr.adapter === 'not_configured')
@@ -93,6 +97,10 @@ async function main() {
   // A key from ssh-agent works without prompting; otherwise Windows OpenSSH
   // can ask for the user's normal FTISU account password in THIS console.
   let live = await health()
+  if (live && live.runtimeCommit !== expectedCommit) {
+    throw Error('API FTISU đang chạy code cũ (' + (live.runtimeCommit || 'chưa có mã phiên bản') +
+      '). Dừng ĐÚNG phiên ISEmoTalk cũ trên FTISU, rồi chạy lại CMD. Không tự dừng tác vụ GPU khác.')
+  }
   if (live && !valid(live)) {
     throw Error('Cổng 13002 đang có API không khớp với phiên QA thật. Không tự dừng tiến trình khác.')
   }
