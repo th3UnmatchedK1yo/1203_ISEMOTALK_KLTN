@@ -233,15 +233,24 @@ export function listCalls(db: DB, q: ListQuery) {
     .prepare(`${LIST_SELECT} ${whereSql} ORDER BY ${sortExpr} ${dir}, c.call_date DESC, c.id DESC LIMIT ? OFFSET ?`)
     .all(...args, pageSize, (page - 1) * pageSize) as Row[]
 
+  // Counters follow the same queue filters. AI QA is distinct from
+  // emotion-derived priority, so users can tell which model flagged the call.
   const counts = db
     .prepare(
       `SELECT COUNT(*) AS total,
-        SUM(CASE WHEN status='ready' AND priority='high' AND review_status!='reviewed' THEN 1 ELSE 0 END) AS attention,
-        SUM(CASE WHEN status IN ('queued','processing') THEN 1 ELSE 0 END) AS processing,
-        SUM(CASE WHEN status='failed' THEN 1 ELSE 0 END) AS failed
-       FROM calls`,
+        SUM(CASE WHEN c.status='ready' AND c.priority='high' AND c.review_status!='reviewed' THEN 1 ELSE 0 END) AS attention,
+        SUM(CASE WHEN c.status IN ('queued','processing') THEN 1 ELSE 0 END) AS processing,
+        SUM(CASE WHEN c.status='failed' THEN 1 ELSE 0 END) AS failed,
+        SUM(CASE WHEN c.status='ready' AND c.review_status!='reviewed' AND EXISTS (
+          SELECT 1 FROM qa_triage_results q WHERE q.call_id=c.id
+          AND (q.label='needs_attention' OR q.truncated=1)
+        ) THEN 1 ELSE 0 END) AS qa_attention,
+        SUM(CASE WHEN c.status='ready' AND c.review_status!='reviewed'
+          AND NOT EXISTS (SELECT 1 FROM qa_triage_results q WHERE q.call_id=c.id)
+        THEN 1 ELSE 0 END) AS qa_pending
+       FROM calls c ${whereSql}`,
     )
-    .get() as Row
+    .get(...args) as Row
 
   return {
     items: rows.map((row) => {
@@ -267,6 +276,8 @@ export function listCalls(db: DB, q: ListQuery) {
       attention: counts.attention ?? 0,
       processing: counts.processing ?? 0,
       failed: counts.failed ?? 0,
+      qaAttention: counts.qa_attention ?? 0,
+      qaPending: counts.qa_pending ?? 0,
     },
   }
 }
