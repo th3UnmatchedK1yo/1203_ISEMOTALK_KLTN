@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { ArrowRight, AudioLines, BarChart3, BookOpen, BriefcaseBusiness, CircleHelp, FileAudio, ListChecks, ScanSearch, UploadCloud } from 'lucide-react'
+import { ArrowRight, BarChart3, BookOpen, BriefcaseBusiness, CircleHelp, FileAudio, ScanSearch, UploadCloud } from 'lucide-react'
 
 const steps = [
   {
