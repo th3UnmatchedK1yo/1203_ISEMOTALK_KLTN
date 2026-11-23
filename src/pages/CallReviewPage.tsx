@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft, Check, Save, AlertTriangle, RefreshCw, Download } from 'lucide-react'
 import {
-  ApiError, clock, emotionLabels, getCall, percent, provenanceLabel, resolveApiUrl, saveReview,
+  ApiError, apiJson, clock, emotionLabels, getCall, getSystemStatus, percent, provenanceLabel, resolveApiUrl, saveReview,
   retryProcessing, speakerLabels, stageLabels, type CallDetail, type Emotion, type Moment, type ReviewPatch,
 } from '@/api/isemotalk'
 import { startPolling } from '@/lib/polling'
@@ -32,6 +32,9 @@ export function CallReviewPage() {
 }
 
 function CallReviewSession({ callId }: { callId: string }) {
+  const navigate = useNavigate()
+  const [realAsrAvailable, setRealAsrAvailable] = useState(false)
+  const [reanalyzing, setReanalyzing] = useState(false)
   const [call, setCall] = useState<CallDetail | null>(null)
   const [form, setForm] = useState<ReviewForm | null>(null)
   const [loading, setLoading] = useState(true)
@@ -87,6 +90,35 @@ function CallReviewSession({ callId }: { callId: string }) {
       intervalMs: 2500,
     })
   }, [callId, reload])
+
+  useEffect(() => {
+    const controller = new AbortController()
+    setRealAsrAvailable(false)
+    void getSystemStatus(controller.signal)
+      .then(status => {
+        if (!controller.signal.aborted)
+          setRealAsrAvailable(status.inference.reachable === true &&
+            status.inference.components?.asr?.ready === true &&
+            status.inference.components.asr.mock === false)
+      })
+      .catch(() => { if (!controller.signal.aborted) setRealAsrAvailable(false) })
+    return () => controller.abort()
+  }, [callId])
+
+  const analyzeSourceAudio = async () => {
+    if (!call || reanalyzing || !realAsrAvailable || call.provenance !== 'imported' || !call.hasAudio) return
+    setReanalyzing(true)
+    setError('')
+    try {
+      const next = await apiJson<{id: string}>('/api/calls/' + encodeURIComponent(call.id) + '/reprocess', {
+        method: 'POST',
+      })
+      navigate('/calls/' + encodeURIComponent(next.id))
+    } catch (e) {
+      setError((e as Error).message)
+      setReanalyzing(false)
+    }
+  }
 
   const payload = useMemo(() => call && form ? buildReviewPayload(call, form) : null, [call, form])
   const dirty = !!payload && hasReviewChanges(payload)
@@ -232,6 +264,18 @@ function CallReviewSession({ callId }: { callId: string }) {
         <button type="button" disabled={!canSave} onClick={() => void save()} className={primaryButton}><Save size={18}/>{saving ? 'Đang lưu…' : 'Lưu đánh giá'}</button>
       </div>
     </header>
+    {call.provenance === 'imported' && call.hasAudio &&
+      <div className="rounded-lg border border-teal-200 bg-teal-50 p-4 text-sm leading-6 text-teal-950">
+        <strong>Phân tích lại ghi âm bằng model thật</strong>
+        <p className="mt-1">Tạo một hồ sơ mới từ chính file WAV này. ASR sẽ nghe và tạo transcript mới; transcript nguồn và bản ghi gốc vẫn giữ nguyên để đối chiếu. QA XLM-R được chạy riêng sau khi ASR hoàn tất. Nếu F4 chưa được xác minh, bước SER sẽ ghi rõ là bỏ qua.</p>
+        <button type="button" className={primaryButton + ' mt-3'}
+          disabled={!realAsrAvailable || reanalyzing || saving || dirty}
+          onClick={() => void analyzeSourceAudio()}>
+          <RefreshCw size={16}/>{reanalyzing ? 'Đang tạo tác vụ ASR…' : 'Phân tích WAV bằng ASR thật'}
+        </button>
+        {!realAsrAvailable && <p className="mt-2 text-amber-900">ASR hiện chưa sẵn sàng. Mày vẫn có thể chạy QA model thật trên transcript nguồn nếu dịch vụ QA đã được bật.</p>}
+        {dirty && <p className="mt-2 text-amber-900">Hãy lưu hoặc bỏ bản nháp review trước khi tạo hồ sơ phân tích mới.</p>}
+      </div>}
     {call.provenance === 'imported' &&
       (call.title.startsWith('TTS TỔNG HỢP') || call.title.startsWith('GIỌNG THẬT') || call.title.startsWith('HỘI THOẠI ĐIỆN THOẠI THẬT')) &&
       <div className="rounded-lg border border-sky-200 bg-sky-50 p-4 text-sm leading-6 text-sky-950" role="note">
