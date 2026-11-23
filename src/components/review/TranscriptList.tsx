@@ -10,6 +10,7 @@ interface Props {
   onSelect: (id: string, time: number) => void
   sourceDialogue?: boolean
   transcriptFromAudio?: boolean
+  timingMode?: 'word_aligned' | 'audio_window'
 }
 
 const TranscriptRow = memo(function TranscriptRow({ utterance: u, patch, selected, active, onSelect }: {
@@ -39,7 +40,7 @@ const TranscriptRow = memo(function TranscriptRow({ utterance: u, patch, selecte
     </button>
   </div>
 })
-export const TranscriptList = memo(function TranscriptList({ utterances, patches, selectedId, activeId, onSelect, sourceDialogue = false, transcriptFromAudio = false }: Props) {
+export const TranscriptList = memo(function TranscriptList({ utterances, patches, selectedId, activeId, onSelect, sourceDialogue = false, transcriptFromAudio = false, timingMode }: Props) {
   const source = sourceDialogue && utterances.length === 1 ? utterances[0] : null
   const turns = source ? sourceDialogueTurns(patches[source.id]?.text ?? source.text) : []
   return <section className="min-w-0 overflow-hidden rounded-xl border border-[#c4d4dc] bg-white shadow-sm" aria-labelledby="transcript-title">
@@ -52,7 +53,7 @@ export const TranscriptList = memo(function TranscriptList({ utterances, patches
       <p className="mt-1 text-sm text-slate-700">
         {source && turns.length > 1
           ? 'Lời thoại và vai trò agent/customer lấy từ kịch bản OneVoice, không phải diarization. Nguồn chỉ có transcript toàn clip, chưa có timestamp cho từng lượt.'
-          : transcriptFromAudio ? 'Đây là các đoạn dựa trên timestamp ASR, không đồng nghĩa lượt nói. Nếu chưa tách được giọng, hệ thống để nhãn người nói là chưa xác định.' : 'Chọn đoạn để nghe lại, xem bằng chứng và ghi nhận đánh giá.'}
+          : transcriptFromAudio ? (timingMode === 'audio_window' ? 'PhoWhisper gặp lỗi timestamp từng từ và đã tự chạy lại trên các khoảng âm thanh. Mốc thời gian dưới đây là KHOẢNG AUDIO, không phải thời điểm chính xác từng câu nói hay lượt người nói.' : 'Đây là các đoạn dựa trên timestamp ASR, không đồng nghĩa lượt nói. Nếu chưa tách được giọng, hệ thống để nhãn người nói là chưa xác định.') : 'Chọn đoạn để nghe lại, xem bằng chứng và ghi nhận đánh giá.'}
       </p>
     </div>
     {source && turns.length > 1 ? <div className="custom-scrollbar max-h-[75vh] space-y-3 overflow-y-auto bg-[#f8fbfb] p-4">
