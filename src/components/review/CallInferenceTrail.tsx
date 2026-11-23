@@ -21,19 +21,19 @@ export function CallInferenceTrail({ call }: { call: CallDetail }) {
     : serPredictions ? 'Có nhãn nhập / chưa chứng minh SER chạy'
     : emotion?.state === 'running' ? 'Đang suy luận'
     : 'Chưa có dự đoán cảm xúc'
-  const stepClasses = 'min-w-0 rounded-lg border border-slate-200 bg-slate-50 px-3 py-3'
-  return <section className="rounded-xl border border-teal-200 bg-white p-4 shadow-sm sm:p-5"
+  const stepClasses = 'min-w-0 border-l-2 border-slate-200 px-3 py-1'
+  return <section className="rounded-lg border border-slate-200 bg-white p-4 sm:p-5"
     aria-label="Nguồn của từng kết quả trong cuộc gọi" data-testid="inference-trail">
     <div className="flex flex-wrap items-start justify-between gap-3">
       <div>
-        <h2 className="font-bold text-[#12394d]">AI đã làm gì với cuộc gọi này?</h2>
+        <h2 className="font-bold text-[#12394d]">AI đã xử lý đến bước nào?</h2>
         <p className="mt-1 text-xs leading-5 text-slate-600">Tách rõ dữ liệu nguồn, nhận dạng tiếng nói, sàng lọc QA và nhận diện cảm xúc.</p>
       </div>
       <Link to="/research" className="inline-flex items-center gap-1 text-xs font-semibold text-teal-800 hover:underline">
-        Mô hình nào làm việc gì? <ArrowRight size={14} aria-hidden="true"/>
+        Xem giới hạn model <ArrowRight size={14} aria-hidden="true"/>
       </Link>
     </div>
-    <div className="mt-4 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+    <div className="mt-4 grid gap-x-4 gap-y-3 border-t border-slate-100 pt-3 sm:grid-cols-2 xl:grid-cols-4">
       <div className={stepClasses}>
         <span className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-600"><FileAudio size={15} aria-hidden="true"/> Âm thanh</span>
         <strong className="mt-1.5 block text-sm text-slate-900">{call.hasAudio ? 'Đã lưu file ghi âm' : 'Chưa có audio'}</strong>
