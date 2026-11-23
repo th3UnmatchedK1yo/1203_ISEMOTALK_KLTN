@@ -17,8 +17,11 @@ const dataDir = resolve(process.env.ISEMO_DATA_DIR || join(home, 'services/isemo
 const qaModelDir = resolve(process.env.ISEMO_QA_MODEL_DIR || join(home, 'services/isemotalk-private/models/qa-xlm-r-seed2026-v1'))
 const python = resolve(process.env.ISEMO_PYTHON || join(root, 'inference/.venv/bin/python'))
 const port = Number(process.env.PORT || '3101')
-if (!Number.isInteger(port) || port < 1024 || port > 65535 || port === 8001 || port === 3001)
-  throw Error('PORT must be a free unprivileged API port (default 3101).')
+const inferencePort = Number(process.env.ISEMO_INFERENCE_PORT || '8001')
+if (!Number.isInteger(inferencePort) || inferencePort < 1024 || inferencePort > 65535 ||
+    !Number.isInteger(port) || port < 1024 || port > 65535 ||
+    port === inferencePort || port === 3001)
+  throw Error('Invalid or conflicting API/Python ports; both must be loopback-only and distinct.')
 const asrRequested = process.argv.slice(2).includes('--asr')
 const autoAsr = process.argv.slice(2).includes('--auto-asr')
 if (process.argv.slice(2).some(arg => !['--asr', '--auto-asr'].includes(arg)) || (asrRequested && autoAsr))
@@ -65,7 +68,7 @@ const env = {
   ...process.env,
   NODE_ENV: 'production',
   PORT: String(port),
-  INFERENCE_URL: 'http://127.0.0.1:8001',
+  INFERENCE_URL: 'http://127.0.0.1:' + inferencePort,
   ISEMO_MODE: 'real',
   ISEMO_AUTO_SEED: '0',
   ISEMO_QA_AUTOMATION: '1',
@@ -87,11 +90,11 @@ const env = {
   ISEMO_MIDTERM_DEMO: '0',
 }
 console.log('[real-qa] Express/SQLite: http://127.0.0.1:' + port + ' on ' + dataDir)
-console.log('[real-qa] Python: http://127.0.0.1:8001; XLM-R QA trained checkpoint=' + qaModelDir)
+console.log('[real-qa] Python: http://127.0.0.1:' + inferencePort + '; XLM-R QA trained checkpoint=' + qaModelDir)
 console.log('[real-qa] ASR=' + (asrEnabled ? 'pinned, genuine PhoWhisper-base CUDA' : 'explicitly unavailable (use source transcript)'))
 console.log('[real-qa] SER=explicitly unavailable, no invented emotion/fusion. Real F4 requires separate verification.')
 const commands = [
-  { name: 'inference', command: 'node scripts/run-python.mjs -m uvicorn app.main:app --host 127.0.0.1 --port 8001 --workers 1', env },
+  { name: 'inference', command: 'node scripts/run-python.mjs -m uvicorn app.main:app --host 127.0.0.1 --port ' + inferencePort + ' --workers 1', env },
   { name: 'api', command: 'node --import tsx server/src/index.ts', env },
 ]
 try {
