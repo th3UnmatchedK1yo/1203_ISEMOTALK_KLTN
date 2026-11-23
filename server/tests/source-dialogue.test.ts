@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { sourceDialogueTurns } from '../src/lib/source-dialogue'
+import { sourceDialogueTurns } from '../../src/lib/source-dialogue'
 
 describe('OneVoice transcript display, without fabricated timestamps', () => {
   it('formats literal backslash-n agent/customer turns', () => {
