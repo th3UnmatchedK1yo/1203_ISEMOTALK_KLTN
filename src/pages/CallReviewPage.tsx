@@ -14,6 +14,7 @@ import { CallRecording, type SeekRequest } from '@/components/review/CallRecordi
 import { TranscriptList } from '@/components/review/TranscriptList'
 import { CallWorkflowPanel } from '@/components/review/CallWorkflowPanel'
 import { CallCaseLink } from '@/components/review/CallCaseLink'
+import { CallQaTriage } from '@/components/review/CallQaTriage'
 
 const allEmotions: Emotion[] = ['neutral', 'happy', 'sad', 'angry']
 const momentLabels: Record<string, string> = {
@@ -280,6 +281,7 @@ function CallReviewSession({ callId }: { callId: string }) {
     </p>}
     <CallRecording callId={call.id} audioUrl={call.audioUrl} duration={call.duration} utterances={call.utterances}
       seekRequest={seekRequest} onActiveChange={setActiveId} onSelect={selectUtterance}/>
+    {call.status === 'ready' && <CallQaTriage callId={call.id} version={call.version}/>}
     <div className="grid grid-cols-1 items-start gap-5 xl:grid-cols-[minmax(0,1.45fr)_minmax(360px,1fr)]">
       <TranscriptList utterances={call.utterances} patches={form?.utterances ?? {}} selectedId={selectedId} activeId={activeId} onSelect={selectUtterance}/>
       <div className="min-w-0 space-y-5">
