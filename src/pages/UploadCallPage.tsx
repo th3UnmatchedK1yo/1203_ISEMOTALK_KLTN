@@ -154,6 +154,18 @@ export function UploadCallPage() {
             <details className="mt-2 text-slate-700"><summary className="cursor-pointer">Chi tiết cấu hình</summary><p className="mt-2 break-words leading-6">{ser?.detail ?? 'Không có thông tin'}</p></details>
           </div>
         </div> : <p className="text-sm text-slate-700">{inference?.error || 'Khởi động dịch vụ xử lý để phân tích bản ghi âm.'}</p>}
+        <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm leading-6 text-slate-800">
+          <strong>Quy trình AI tự động hiện tại</strong>
+          <p className="mt-2">ASR: {health.automation?.asr && realAsr ? 'Tự chạy khi tải audio và không có transcript nguồn' :
+            realAsr ? 'Model có sẵn nhưng chưa bật tự xử lý' : 'Chưa chạy (cần transcript nguồn để phân tích QA)'}</p>
+          <p>SER fusion: {health.automation?.ser && realSer && ser?.verified ? 'Tự chạy khi audio và lượt lời hợp lệ' :
+            'Chưa có checkpoint phục vụ được xác minh; không dự đoán cảm xúc giả'}</p>
+          <p>QA XLM-R: {health.automation?.qa && inference?.qa?.ready && inference.qa.loaded
+            ? 'Tự chạy sau khi transcript sẵn sàng, không cần bấm từng cuộc'
+            : inference?.qa?.ready ? 'Có checkpoint nhưng chưa nạp hoặc chưa bật tự chạy'
+            : 'Chưa sẵn sàng'}</p>
+          <p className="mt-2 text-slate-600">Đây là trạng thái backend đang phục vụ thật, không phải lựa chọn trang trí. Khi model lỗi, hệ thống ghi rõ thiếu bước nào; QA vẫn là người quyết định có tạo vụ việc.</p>
+        </div>
         {noSerByDesign && <p className="text-sm leading-6 text-amber-900">Đang sử dụng QA thật theo transcript; bước SER chưa chạy và sẽ được ghi “Bỏ qua”, không có dự đoán cảm xúc hay fusion. {realAsr ? 'Có thể tải WAV để chạy PhoWhisper thật.' : 'Muốn chạy ASR từ audio, cần bật PhoWhisper; hiện chỉ có thể cung cấp transcript kèm timestamp.'}</p>}
         {reachable && (!realAsr || !realSer) && !noSerByDesign && <p className="text-sm leading-6 text-amber-900">Chưa có đủ cả hai bước ASR + SER bằng mô hình thật. Không được trình bày dự đoán mô phỏng là kết quả nghiên cứu.</p>}
         {realSer && <p className="text-sm leading-6 text-slate-600">Xác minh gói mô hình không phải đánh giá độ chính xác trên cuộc gọi thực tế.</p>}
