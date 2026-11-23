@@ -80,10 +80,13 @@ export function createApp({ db, config, client, pipeline }: AppDeps) {
   // While the shared GPU is training, the API-only frontend preview must be
   // read-only regarding model jobs. In particular no uploaded call should be
   // queued/fail just because Python inference is intentionally offline.
-  if (process.env.ISEMO_API_PREVIEW_ONLY === '1') {
+  const previewOnly = process.env.ISEMO_API_PREVIEW_ONLY === '1'
+  if (previewOnly) {
     app.use((req, res, next) => {
+      // A results-only import can be finalized using local SQLite operations,
+      // without Python. Audio imports still require the unavailable probe.
       const modelAction = req.method === 'POST' &&
-        (/^\/api\/calls\/(upload|import)$/.test(req.path) ||
+        (/^\/api\/calls\/upload$/.test(req.path) ||
           /^\/api\/calls\/[^/]+\/(retry|qa-triage)$/.test(req.path))
       if (modelAction) return res.status(503).json({
         error: 'Chế độ xem trước giao diện: GPU đang training, chưa cho gửi tác vụ model. Dữ liệu đánh giá cũ được giữ nguyên.',
@@ -219,6 +222,13 @@ export function createApp({ db, config, client, pipeline }: AppDeps) {
       const meta = MetaFields.parse(req.body)
       const parsed = parseFile(results, true)
       const audio = f.audio?.[0]
+      if (previewOnly && audio) {
+        throw new HttpError(503,
+          'Chế độ xem trước chỉ nhận JSON/CSV không kèm audio. Ghi âm cần dịch vụ kiểm tra âm thanh khi GPU sẵn sàng.',
+          { code: 'inference_paused_for_training' })
+      }
+      // Results-only import has a skipped validation/transcription/emotion plan.
+      // Its single pending finalize stage does not call Python or the GPU.
       const combined = MetaFields.parse({
         title: str(meta.title) ?? parsed.meta.title ?? path.basename(results.originalname, path.extname(results.originalname)),
         agentName: str(meta.agentName) ?? parsed.meta.agentName ?? '',
