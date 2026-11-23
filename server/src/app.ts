@@ -293,6 +293,10 @@ export function createApp({ db, config, client, pipeline }: AppDeps) {
     if (!original) throw new HttpError(404, 'Không tìm thấy cuộc gọi nguồn.')
     if (original.status !== 'ready' || original.provenance !== 'imported' || !original.audio_file)
       throw new HttpError(409, 'Chỉ phân tích lại được bản ghi có audio đã nhập và hoàn tất; không ghi đè kết quả nguồn.')
+    if (original.title.startsWith('HỘI THOẠI ĐIỆN THOẠI THẬT · DataHive')) {
+      throw new HttpError(422,
+        'DataHive không phải cuộc gọi CSKH. Không tự gán hai người nói vào vai nhân viên và khách hàng; chỉ sử dụng để nghe và kiểm tra ASR riêng.')
+    }
     // Real ASR must be present; a mock or merely configured adapter cannot
     // produce evidence for a genuine inference demonstration.
     let status
