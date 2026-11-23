@@ -22,5 +22,7 @@ for (const [name,url] of endpoints) {
     }
   }catch(e){failed=true;console.error(name+' unavailable:',e.message)}
 }
+console.log('  QA model: '+(h.qa?.adapter || '(unavailable)')+', ready='+Boolean(h.qa?.ready)+', domain='+(h.qa?.domain || 'unknown'))
+    if(!h.qa?.ready){console.error('  ERROR: synthetic trained QA classifier missing; do not claim QA model deployment.');failed=true}
 console.log('This health check cannot establish held-out accuracy or cross-domain validity.')
 if(failed)process.exitCode=1
