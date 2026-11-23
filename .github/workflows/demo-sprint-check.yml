@@ -40,6 +40,8 @@ jobs:
         run: npm ci --no-audit --no-fund
       - name: Check Windows startup, database and file cleanup without model downloads
         run: npm test -- server/tests/demo-startup.test.ts server/tests/local-readiness.test.ts server/tests/python-runtime.test.ts server/tests/node-repair.test.ts server/tests/db-integrity.test.ts server/tests/db-workflow-history.test.ts server/tests/db-check.test.ts server/tests/audio-cleanup.test.ts server/tests/service-operations.test.ts
+      - name: Check one-click SSH command contract on Windows
+        run: node --test scripts/oneclick-ssh.test.mjs
       - name: Parse and run bounded Windows model inventory without downloads
         shell: powershell
         run: |
@@ -75,6 +77,8 @@ jobs:
           node --check scripts/start-remote-speech-demo.mjs
           node --check scripts/start-remote-qa-runtime.mjs
           node --check scripts/open-isemotalk.mjs
+          node --check scripts/oneclick-ssh.mjs
+          node --test scripts/oneclick-ssh.test.mjs
           node --check scripts/check-remote-qa.mjs
           node --check scripts/choose-midterm-call.mjs
       - name: Validate Linux GPU setup script without running installs
