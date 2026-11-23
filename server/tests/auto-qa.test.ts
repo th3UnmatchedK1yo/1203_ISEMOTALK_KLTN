@@ -23,7 +23,7 @@ describe('Automatic real QA pipeline', () => {
         'agent: Em nghe\\ncustomer: Tôi cần hoàn tiền')
     add(db,'CALL-0102','HỘI THOẠI ĐIỆN THOẠI THẬT · DataHive · 01','Tôi muốn nói chuyện')
     const fake=vi.fn(async (url:string) => {
-      if(url.endsWith('/v1/qa/health')) return new Response(JSON.stringify({ready:true}),{status:200})
+      if(url.endsWith('/v1/qa/health')) return new Response(JSON.stringify({ready:true, loaded:true}),{status:200})
       if(url.endsWith('/v1/qa/triage')) return new Response(JSON.stringify({
         label:'needs_attention',score:.82,model:'xlm-roberta-qa@test',
         modelSha256:'a'.repeat(64),dataset:'synthetic_onevoice',
