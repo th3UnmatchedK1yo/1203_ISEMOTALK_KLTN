@@ -44,7 +44,8 @@ def timestamped_asr_spans(chunks: Iterable[dict[str, Any]], duration: float) -> 
     if not math.isfinite(duration) or duration <= 0:
         raise ValueError("Invalid recording duration.")
     words: list[tuple[float, float, str]] = []
-    for ch in chunks:
+    raw_chunks = list(chunks)
+    for idx, ch in enumerate(raw_chunks):
         raw = str(ch.get("text") or "")
         if not raw.strip():
             continue
@@ -52,6 +53,10 @@ def timestamped_asr_spans(chunks: Iterable[dict[str, Any]], duration: float) -> 
         if not isinstance(ts, (tuple, list)) or len(ts) != 2 or ts[0] is None:
             raise ValueError("Whisper word chunk is missing a start timestamp.")
         start = float(ts[0])
+        # Whisper may leave only the final word end open. Do not give a
+        # middle word a fictional timestamp stretching to the clip end.
+        if ts[1] is None and idx != len(raw_chunks) - 1:
+            raise ValueError("Whisper word alignment missing an intermediate end timestamp.")
         end = float(ts[1]) if ts[1] is not None else duration
         if not (math.isfinite(start) and math.isfinite(end)) or start < 0 or start >= duration or end <= start:
             raise ValueError("Whisper returned invalid word timestamp.")
