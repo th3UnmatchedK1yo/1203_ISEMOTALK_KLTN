@@ -170,6 +170,9 @@ export function UploadCallPage() {
         </button>
       </div>
 
+      {!reachable && mode === 'results' && !healthError && <p role="status" className="mt-4 rounded-md border border-teal-200 bg-teal-50 p-3 text-sm leading-6 text-teal-950">
+        Có thể nhập kết quả JSON/CSV <strong>không kèm audio</strong> khi FTISU đang chạy API-only preview. Dữ liệu được ghi nhận là nguồn nhập, không phải kết quả model vừa suy luận. Việc xử lý ghi âm cần đợi dịch vụ AI.
+      </p>}
       <form onSubmit={e=>void submit(e)} className="mt-5 space-y-4">
         <fieldset disabled={uploading} className="min-w-0 space-y-4 disabled:opacity-70">
         <legend className="sr-only">Thông tin và tệp của cuộc gọi</legend>
@@ -195,8 +198,9 @@ export function UploadCallPage() {
             <input type="file" accept=".json,.csv" required onChange={e=>setResults(e.target.files?.[0]??null)} className="mt-2 block w-full rounded-md border p-2 text-sm"/>
             <span className="mt-1 block text-sm font-normal text-slate-700">Mỗi câu: start, end, text, speaker, fused_emotion và fused_confidence (hoặc đối tượng fused). Chỉ nhập dự đoán đã được tạo trước đó; không tự suy luận.</span>
           </label>
-          <label className="block text-sm font-medium">File audio đi kèm (tùy chọn)
-            <input type="file" accept=".wav,.mp3,.m4a,audio/wav,audio/mpeg,audio/mp4" onChange={e=>setAudio(e.target.files?.[0]??null)} className="mt-2 block w-full rounded-md border p-2 text-sm"/>
+          <label className="block text-sm font-medium">File audio đi kèm (tùy chọn; chỉ khi inference hoạt động)
+            <input type="file" accept=".wav,.mp3,.m4a,audio/wav,audio/mpeg,audio/mp4" disabled={!reachable} onChange={e=>setAudio(e.target.files?.[0]??null)} className="mt-2 block w-full rounded-md border p-2 text-sm disabled:cursor-not-allowed disabled:bg-slate-100"/>
+            {!reachable && <span className="mt-1 block text-sm font-normal text-amber-900">Hiện chỉ nhập kết quả không kèm audio. Không có audio để phát lại trong phiên preview.</span>}
           </label>
         </>}</div>
         </fieldset>
