@@ -61,6 +61,7 @@ export function UploadCallPage() {
   const ser = inference?.components?.ser
   const realAsr = reachable && asr?.ready && !asr.mock
   const realSer = reachable && ser?.ready && !ser.mock
+  const noSerByDesign = reachable && ser?.adapter === 'not_configured' && !ser.ready && !ser.mock && inference?.qa?.ready === true
   const inputClass = 'mt-2 h-12 w-full rounded-lg border border-[#b5c9d2] bg-white px-3 text-sm focus:border-slate-600 focus:outline-none'
 
   async function submit(e: FormEvent<HTMLFormElement>) {
@@ -93,8 +94,8 @@ export function UploadCallPage() {
       setError('Chuyển giọng nói thành văn bản chưa sẵn sàng. Bạn có thể đính kèm transcript có mốc thời gian hoặc kiểm tra cấu hình ASR.')
       return
     }
-    if (mode === 'recording' && !ser?.ready) {
-      setError('SER chưa sẵn sàng. Hãy cấu hình checkpoint đã được xác minh hoặc chọn chế độ mock có ghi nhãn để kiểm tra workflow.')
+    if (mode === 'recording' && !ser?.ready && !noSerByDesign) {
+      setError('SER chưa sẵn sàng. Chỉ cho phép bỏ qua khi đang dùng chế độ QA thật có đánh dấu SER chưa cấu hình.')
       return
     }
 
@@ -153,7 +154,8 @@ export function UploadCallPage() {
             <details className="mt-2 text-slate-700"><summary className="cursor-pointer">Chi tiết cấu hình</summary><p className="mt-2 break-words leading-6">{ser?.detail ?? 'Không có thông tin'}</p></details>
           </div>
         </div> : <p className="text-sm text-slate-700">{inference?.error || 'Khởi động dịch vụ xử lý để phân tích bản ghi âm.'}</p>}
-        {reachable && (!realAsr || !realSer) && <p className="text-sm leading-6 text-amber-900">Chưa có đủ cả hai bước ASR + SER bằng mô hình thật. Bước mô phỏng được ghi rõ trong kết quả.</p>}
+        {noSerByDesign && <p className="text-sm leading-6 text-amber-900">Đang sử dụng QA thật theo transcript; bước SER chưa chạy và sẽ được ghi “Bỏ qua”, không có dự đoán cảm xúc hay fusion. {realAsr ? 'Có thể tải WAV để chạy PhoWhisper thật.' : 'Muốn chạy ASR từ audio, cần bật PhoWhisper; hiện chỉ có thể cung cấp transcript kèm timestamp.'}</p>}
+        {reachable && (!realAsr || !realSer) && !noSerByDesign && <p className="text-sm leading-6 text-amber-900">Chưa có đủ cả hai bước ASR + SER bằng mô hình thật. Không được trình bày dự đoán mô phỏng là kết quả nghiên cứu.</p>}
         {realSer && <p className="text-sm leading-6 text-slate-600">Xác minh gói mô hình không phải đánh giá độ chính xác trên cuộc gọi thực tế.</p>}
       </div>}
     </section>
@@ -162,7 +164,7 @@ export function UploadCallPage() {
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2" role="group" aria-label="Cách thêm cuộc gọi">
         <button type="button" disabled={uploading} aria-pressed={mode==='recording'} onClick={()=>changeMode('recording')} className={'flex items-start gap-2 rounded-md border p-4 text-left disabled:opacity-50 '+(mode==='recording'?'border-teal-700 bg-teal-50':'hover:bg-teal-50/70')}>
           <FileAudio className="mt-0.5 shrink-0" size={19}/>
-          <span><strong className="block text-sm">Tải bản ghi âm</strong><span className="mt-1 block text-sm text-slate-700">Audio + ASR + SER, hoặc audio kèm transcript</span></span>
+          <span><strong className="block text-sm">Tải bản ghi âm</strong><span className="mt-1 block text-sm text-slate-700">Ghi âm → ASR thật → QA; SER chỉ chạy nếu đã xác minh</span></span>
         </button>
         <button type="button" disabled={uploading} aria-pressed={mode==='results'} onClick={()=>changeMode('results')} className={'flex items-start gap-2 rounded-md border p-4 text-left disabled:opacity-50 '+(mode==='results'?'border-teal-700 bg-teal-50':'hover:bg-teal-50/70')}>
           <FileText className="mt-0.5 shrink-0" size={19}/>
