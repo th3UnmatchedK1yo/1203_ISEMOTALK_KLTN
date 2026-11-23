@@ -12,15 +12,15 @@ export function ResearchPage() {
     <header className="border-b border-[#b7cbd5] pb-7">
       <p className="mb-3 inline-flex items-center gap-2 text-sm font-semibold text-[#0E5665]"><BookOpen size={18} aria-hidden="true"/> Nghiên cứu & phạm vi ứng dụng</p>
       <h1 className="max-w-4xl text-3xl font-semibold leading-tight tracking-tight text-[#102D43]">Từ nhận diện cảm xúc đến bằng chứng để QA xem xét.</h1>
-      <p className="mt-4 max-w-4xl text-lg leading-relaxed">Trang này giải thích các mô hình nghiên cứu và giới hạn ứng dụng. <strong>Đây không phải màn hình chạy AI.</strong> Để sử dụng hệ thống, đi theo các bước nghiệp vụ bên dưới.</p>
-      <Link to="/calls" className="mt-5 inline-flex items-center gap-2 font-semibold text-[#0E5665] underline underline-offset-4">Trở lại hàng đợi QA <ArrowRight size={18} aria-hidden="true"/></Link>
+      <p className="mt-4 max-w-4xl text-lg leading-relaxed">Đây là tài liệu giải thích mô hình, phương pháp và giới hạn nghiên cứu; <strong>không phải nơi chạy AI hoặc chấm điểm</strong>. Người QA nên bắt đầu từ mục Hướng dẫn.</p>
+      <Link to="/guide" className="mt-5 inline-flex items-center gap-2 font-semibold text-[#0E5665] underline underline-offset-4">Xem hướng dẫn sử dụng <ArrowRight size={18} aria-hidden="true"/></Link>
     </header>
 
     <section aria-labelledby="research-navigation" className="rounded-xl border border-teal-200 bg-white p-5">
       <h2 id="research-navigation" className="text-lg font-bold text-[#102D43]">Muốn làm việc gì thì vào tab nào?</h2>
       <div className="mt-3 grid gap-3 sm:grid-cols-2">
         {([
-          {to:'/calls/new',title:'Tải lên',text:'Nạp file ghi âm để chạy ASR khi model sẵn sàng; hoặc nhập kết quả đã có', icon:UploadCloud},
+          {to:'/scan',title:'Chạy AI',text:'Nạp ghi âm mới để ASR và XLM-R xử lý tự động khi model sẵn sàng', icon:UploadCloud},
           {to:'/calls',title:'Cuộc gọi',text:'Xem AI sàng lọc, mở audio, transcript và lưu kết luận QA',icon:ListChecks},
           {to:'/analytics',title:'Phân tích',text:'Đếm hồ sơ đã được XLM-R quét, cảnh báo và công việc QA còn tồn',icon:BarChart3},
           {to:'/cases',title:'Vụ việc',text:'Giao người xử lý, đặt hạn, ghi kết quả gọi lại và đóng khi hoàn tất',icon:BriefcaseBusiness},
@@ -80,7 +80,7 @@ export function ResearchPage() {
     </section>
 
     <footer className="border-t border-[#b7cbd5] pt-4 text-sm leading-relaxed text-slate-700">
-      <p>XLM-R QA phân loại <strong>mức cần QA chú ý từ transcript</strong>, còn SER fusion F4 thuộc nhánh nghiên cứu cảm xúc âm thanh–văn bản. Cả hai không đồng nghĩa đã chứng minh độ chính xác trên cuộc gọi CSKH thật. Trạng thái model thực nằm ở Tải lên và nguồn xử lý của từng cuộc gọi.</p>
+      <p>XLM-R QA phân loại <strong>mức cần QA chú ý từ transcript</strong>, còn SER fusion F4 thuộc nhánh nghiên cứu cảm xúc âm thanh–văn bản. Cả hai không đồng nghĩa đã chứng minh độ chính xác trên cuộc gọi CSKH thật. Trạng thái model thực nằm ở Chạy AI và nguồn xử lý của từng cuộc gọi.</p>
     </footer>
   </article>
 }
