@@ -1,6 +1,7 @@
-import { useState, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { Headphones, BarChart3, Menu, X, ListChecks, UploadCloud, BookOpen, BriefcaseBusiness } from 'lucide-react'
+import { getSystemStatus } from '@/api/isemotalk'
 
 interface AppShellProps { children: ReactNode }
 
@@ -15,6 +16,21 @@ const navItems = [
 export function AppShell({ children }: AppShellProps) {
   const location = useLocation()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [serviceNotice, setServiceNotice] = useState<string | null>(null)
+  useEffect(() => {
+    const controller = new AbortController()
+    getSystemStatus(controller.signal)
+      .then(status => {
+        if (controller.signal.aborted) return
+        if (!status.inference.reachable) {
+          setServiceNotice('Chế độ giao diện/QA: API đã kết nối, nhưng dịch vụ AI chưa hoạt động. Không gửi audio để phân tích cho đến khi model chạy thật trên GPU.')
+        } else if (status.inference.components?.asr?.mock || status.inference.components?.ser?.mock) {
+          setServiceNotice('Dịch vụ đang dùng mô hình mô phỏng. Không sử dụng kết quả này làm số liệu nghiên cứu.')
+        } else setServiceNotice(null)
+      })
+      .catch(() => { if (!controller.signal.aborted) setServiceNotice('Không kết nối được API của hệ thống. Kiểm tra VS Code Port Forwarding và server FTISU.') })
+    return () => controller.abort()
+  }, [])
   const active = (path: string) =>
     path === '/calls'
       ? location.pathname === '/calls' || location.pathname === '/'
@@ -68,6 +84,9 @@ export function AppShell({ children }: AppShellProps) {
         {navItems.map(item => navLink(item.path, item.label, item.icon, true))}
       </nav>}
     </header>
+    {serviceNotice && <div role="status" className="mx-auto mt-4 max-w-[1680px] rounded-lg border border-amber-300 bg-amber-50 px-5 py-3 text-sm font-medium text-amber-950 md:mx-8" data-testid="gpu-preview-notice">
+      {serviceNotice}
+    </div>}
     <main className="mx-auto w-full max-w-[1680px] px-5 pb-12 pt-7 md:px-8 xl:px-10">
       {children}
     </main>
