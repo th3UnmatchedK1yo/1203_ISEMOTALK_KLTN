@@ -172,7 +172,7 @@ export function BatchScanPage() {
     if (job.qaWorker === 'queued') return 'Trong hàng đợi XLM-R'
     if (job.qaWorker === 'retrying') return 'XLM-R gặp lỗi · đang chờ thử lại'
     if (job.qaLabel === 'needs_attention') return 'AI gợi ý QA xem kỹ'
-    if (job.qaLabel === 'routine') return 'Không có cảnh báo mạnh'
+    if (job.qaLabel === 'routine') return 'XLM-R không ưu tiên kiểm tra'
     return 'Audio đã xử lý · đang chờ XLM-R'
   }
 
@@ -213,7 +213,7 @@ export function BatchScanPage() {
         </div>)}
       </div>}
       {!canSubmit && health && <p role="alert" className="mt-4 rounded-lg bg-amber-50 p-3 text-sm leading-6 text-amber-950">Chưa thể bắt đầu lô ghi âm mới: cần ASR thật, XLM-R đã nạp và worker tự động. Nếu FTISU chỉ đang chạy QA theo transcript nguồn, hãy kiểm tra model PhoWhisper. Trang này không giả lập đầu ra AI.</p>}
-      {canSubmit && <p className="mt-4 text-sm text-teal-900">GPU và hàng đợi QA báo sẵn sàng. File chỉ được đánh dấu hoàn thành sau khi backend thực sự trả kết quả. SER có thể được bỏ qua có ghi nhận nếu chưa triển khai.</p>}
+      {canSubmit && <p className="mt-4 text-sm text-teal-900">GPU và hàng đợi QA báo sẵn sàng. ASR đang dùng: <strong>{asr?.detail?.split(' (')[0] ?? asr?.adapter}</strong>. File chỉ được đánh dấu hoàn thành sau khi backend thực sự trả kết quả. SER có thể được bỏ qua có ghi nhận nếu chưa triển khai.</p>}
     </section>
 
     <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -263,7 +263,7 @@ export function BatchScanPage() {
             <p className="mt-1 text-xs text-slate-700">{job.id ? job.id + ' · ' : ''}{statusText(job)}{job.progress != null && job.status === 'processing' ? ' · ' + job.progress + '%' : ''}</p>
             {job.error && <p className="mt-1 text-xs text-red-800">{job.error}</p>}
             {job.qaError && !job.qaLabel && <p className="mt-1 text-xs text-amber-900">XLM-R: {job.qaError}</p>}
-            {job.qaLabel && !job.qaOutdated && <p className="mt-1 text-xs font-semibold text-teal-900">Điểm cảnh báo XLM-R: {((job.qaScore ?? 0)*100).toFixed(1)}%</p>}
+            {job.qaLabel && !job.qaOutdated && <p className="mt-1 text-xs font-semibold text-teal-900">Chỉ số sàng lọc XLM-R: {(job.qaScore ?? 0).toFixed(3)} / 1 (chưa hiệu chuẩn; không phải điểm chất lượng)</p>}
           </div>
           {job.id && <Link to={'/calls/' + encodeURIComponent(job.id)} className="rounded-lg border border-teal-300 px-3 py-2 text-sm font-semibold text-teal-900 hover:bg-teal-50">Xem hồ sơ</Link>}
         </div>)}
