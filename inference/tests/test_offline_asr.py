@@ -42,6 +42,20 @@ class TestOfflineASR(unittest.TestCase):
         with self.assertRaisesRegex(ModelNotReady, "ISEMO_ASR_MODEL"):
             _resolve_cached_model("not-a-model")
 
+    def test_phowhisper_pin_has_explicit_model_identity(self):
+        from app.adapters.asr_phowhisper import PhoWhisperAsr
+        model = PhoWhisperAsr("vinai/PhoWhisper-medium", "auto", "abc123def")
+        self.assertEqual(model.model_identity, "vinai/PhoWhisper-medium@abc123def")
+
+    def test_settings_reads_phowhisper_revision(self):
+        with patch.dict("os.environ", {
+            "ISEMO_MODE": "real",
+            "ISEMO_ASR": "phowhisper",
+            "ISEMO_ASR_REVISION": "sha-pin-for-test",
+        }):
+            settings = Settings.load()
+        self.assertEqual(settings.asr_revision, "sha-pin-for-test")
+
     def test_auto_device_is_cpu_not_cuda(self):
         self.assertEqual(FasterWhisperAsr("small", "auto").device, "cpu")
 

@@ -2,6 +2,7 @@ import { stringify } from 'csv-stringify/sync'
 import type { DB } from './db'
 import { EMOTIONS, MOMENT_TYPES, type Emotion, type MomentType, detectMoments, finalEmotion, momentEvidenceKey } from './domain'
 import * as repo from './repo'
+import { buildQaInput } from './qa-input'
 
 type Row = Record<string, any>
 
@@ -58,6 +59,13 @@ export function buildAnalytics(db: DB, f: AnalyticsFilter) {
   let totalUtterances = 0
   let totalSeconds = 0
   const coverage = { customerUtterances: 0, customerWithEmotion: 0, unknownSpeakerUtterances: 0, unpredictedUtterances: 0, callsWithCustomerEmotion: 0 }
+  // A separate count for the TEXT QA classifier. SER emotion metrics below
+  // must never be presented as XLM-R screening results.
+  const qaTriage = { eligible: 0, scored: 0, needsAttention: 0, routine: 0, waiting: 0, needsRerun: 0 }
+  const qaByCall = new Map(
+    (db.prepare('SELECT call_id, input_sha256, model_name, label, truncated FROM qa_triage_results').all() as Row[])
+      .map(row => [row.call_id as string, row]),
+  )
 
   const getUtts = db.prepare('SELECT * FROM utterances WHERE call_id = ? ORDER BY idx')
   const getMomentReviews = db.prepare('SELECT moment_id, relevance, evidence_key FROM moment_reviews WHERE call_id = ?')
@@ -65,6 +73,23 @@ export function buildAnalytics(db: DB, f: AnalyticsFilter) {
     totalSeconds += c.duration ?? 0
     const utts = (getUtts.all(c.id) as Row[]).map(repo.mapUtterance)
     totalUtterances += utts.length
+    const qaInput = buildQaInput(utts)
+    const eligibleForQa = (c.provenance === 'real' ||
+      (c.provenance === 'imported' && String(c.title).startsWith('TTS TỔNG HỢP · OneVoice'))) &&
+      qaInput.text.length > 0 && qaInput.text.length <= 100000
+    if (eligibleForQa) {
+      qaTriage.eligible++
+      const saved = qaByCall.get(c.id)
+      if (!saved) qaTriage.waiting++
+      else if (saved.input_sha256 !== qaInput.hash ||
+        (saved.truncated && !String(saved.model_name).includes('/window-max-v2'))) {
+        qaTriage.needsRerun++
+      } else {
+        qaTriage.scored++
+        if (saved.label === 'needs_attention' || saved.truncated) qaTriage.needsAttention++
+        else qaTriage.routine++
+      }
+    }
     if (utts.some((u) => u.speaker === 'customer' && finalEmotion(u))) coverage.callsWithCustomerEmotion++
     for (const u of utts) {
       const fe = finalEmotion(u)
@@ -140,6 +165,7 @@ export function buildAnalytics(db: DB, f: AnalyticsFilter) {
     totals: { calls: calls.length, utterances: totalUtterances, durationSeconds: totalSeconds },
     status: statusCounts,
     provenance,
+    qaTriage,
     review: {
       ...review,
       completionRate: ready.length ? review.reviewed / ready.length : 0,

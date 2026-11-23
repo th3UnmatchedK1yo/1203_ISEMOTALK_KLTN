@@ -67,6 +67,7 @@ export interface CallItem {
   utteranceCount: number
   reviewedCount: number
   updatedAt: string
+  qaTriage?: { label: 'routine' | 'needs_attention'; score: number; outdated: boolean; truncated: boolean } | null
 }
 
 export type StageKey = 'validate' | 'transcribe' | 'diarize' | 'emotion' | 'finalize'
@@ -78,7 +79,7 @@ export interface StageEntry {
   detail?: string
   durationMs?: number
   provenance?: Provenance
-  evidence?: { adapter: string; model?: string; device?: string; mock: boolean; verified?: boolean }
+  evidence?: { adapter: string; model?: string; device?: string; mock: boolean; verified?: boolean; timingMode?: 'word_aligned' | 'audio_window'; timingWarning?: string; speakerTurns?: Array<{ start: number; end: number; speakerId: 'A' | 'B' }> }
 }
 
 export interface ComponentHealth {
@@ -99,9 +100,14 @@ export interface InferenceHealth {
     diarization: ComponentHealth
     ser: ComponentHealth
   }
+  qa?: { ready: boolean; loaded?: boolean; adapter?: string; detail?: string; domain?: string }
 }
 export interface SystemStatus {
   api: 'ok'
+  previewOnly?: boolean
+  demoData?: boolean
+  speechDemo?: boolean
+  automation?: { qa: boolean; asr: boolean; ser: boolean }
   inference: { reachable: boolean; error?: string } & Partial<InferenceHealth>
 }
 
@@ -127,13 +133,14 @@ export interface CallList {
   total: number
   page: number
   pageSize: number
-  counts: { total: number; attention: number; processing: number; failed: number }
+  counts: { total: number; attention: number; processing: number; failed: number; qaAttention?: number; qaPending?: number }
 }
 
 export interface Analytics {
   totals: { calls: number; utterances: number; durationSeconds: number }
   status: { ready: number; processing: number; failed: number }
   provenance: { mock: number; real: number; imported: number; unknown: number }
+  qaTriage?: { eligible: number; scored: number; needsAttention: number; routine: number; waiting: number; needsRerun: number }
   review: { unreviewed: number; in_progress: number; reviewed: number; completionRate: number }
   priority: { high: number; medium: number; low: number; unknown?: number }
   customerEmotion: Record<Emotion, number>
@@ -250,7 +257,7 @@ export async function apiJson<T>(url: string, options: RequestInit = {}): Promis
 }
 
 export function getCalls(
-  filters: { search?: string; review?: string; priority?: string; provenance?: string; status?: string; page?: number; pageSize?: number },
+  filters: { search?: string; review?: string; priority?: string; provenance?: string; status?: string; datasetScope?: 'business'|'speech_only'|'all'; sort?: 'qa_attention'|'date'; page?: number; pageSize?: number },
   signal?: AbortSignal,
 ): Promise<CallList> {
   const params = new URLSearchParams()
@@ -259,7 +266,8 @@ export function getCalls(
   if (filters.priority) params.set('priority', filters.priority)
   if (filters.provenance) params.set('provenance', filters.provenance)
   if (filters.status) params.set('status', filters.status)
-  params.set('sort', 'date')
+  if (filters.datasetScope) params.set('datasetScope', filters.datasetScope)
+  params.set('sort', filters.sort === 'qa_attention' ? 'qa_attention' : 'date')
   params.set('dir', 'desc')
   params.set('page', String(filters.page ?? 1))
   params.set('pageSize', String(filters.pageSize ?? 15))

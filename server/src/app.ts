@@ -1,6 +1,7 @@
 import cors from 'cors'
 import express, { type NextFunction, type Request, type Response } from 'express'
 import fs from 'node:fs'
+import { createHash } from 'node:crypto'
 import path from 'node:path'
 import multer from 'multer'
 import { ZodError, z } from 'zod'
@@ -18,6 +19,9 @@ import { attachWorkflowRoutes, getWorkflow } from './workflow'
 
 import { attachServiceRoutes } from './service-routes'
 import { recordCaseRecordingDeletion } from './service-operations'
+import { attachQaTriageRoutes } from './qa-routes'
+import { attachInsightRoutes } from './insights'
+import type { AutoQa } from './auto-qa'
 
 const AUDIO_EXT: Record<string, string> = { '.wav': 'audio/wav', '.mp3': 'audio/mpeg', '.m4a': 'audio/mp4' }
 const DATA_EXT = new Set(['.json', '.csv'])
@@ -27,6 +31,7 @@ export interface AppDeps {
   config: Config
   client: InferenceClient
   pipeline: Pipeline
+  autoQa?: AutoQa | null
 }
 
 const str = (v: unknown): string | undefined => (typeof v === 'string' && v.trim() !== '' ? v.trim() : undefined)
@@ -53,7 +58,7 @@ function positiveInteger(v: unknown, fallback: number): number {
   return Number(v)
 }
 
-export function createApp({ db, config, client, pipeline }: AppDeps) {
+export function createApp({ db, config, client, pipeline, autoQa }: AppDeps) {
   const app = express()
   const tmpDir = path.join(config.uploadsDir, '.tmp')
   fs.mkdirSync(tmpDir, { recursive: true })
@@ -76,6 +81,24 @@ export function createApp({ db, config, client, pipeline }: AppDeps) {
   })
   app.use(cors({ origin: (origin, cb) => cb(null, !origin || allowedOrigin(origin)) }))
   app.use(express.json({ limit: '5mb' }))
+  // While the shared GPU is training, the API-only frontend preview must be
+  // read-only regarding model jobs. In particular no uploaded call should be
+  // queued/fail just because Python inference is intentionally offline.
+  const previewOnly = process.env.ISEMO_API_PREVIEW_ONLY === '1'
+  if (previewOnly) {
+    app.use((req, res, next) => {
+      // A results-only import can be finalized using local SQLite operations,
+      // without Python. Audio imports still require the unavailable probe.
+      const modelAction = req.method === 'POST' &&
+        (/^\/api\/calls\/upload$/.test(req.path) ||
+          /^\/api\/calls\/[^/]+\/(retry|qa-triage|reprocess|insights)$/.test(req.path))
+      if (modelAction) return res.status(503).json({
+        error: 'Chế độ xem trước giao diện: GPU đang training, chưa cho gửi tác vụ model. Dữ liệu đánh giá cũ được giữ nguyên.',
+        code: 'inference_paused_for_training',
+      })
+      next()
+    })
+  }
 
   const upload = multer({
     storage: multer.diskStorage({
@@ -114,10 +137,36 @@ export function createApp({ db, config, client, pipeline }: AppDeps) {
 
   // ---- System ------------------------------------------------------------
   app.get('/api/system/status', async (_req, res) => {
+    // These flags describe what the backend will automatically ATTEMPT,
+    // not successful predictions. Runtime health exposes model readiness.
+    const runtimeCommit = /^[a-f0-9]{40}$/.test(process.env.ISEMO_RUNTIME_COMMIT || '') ? process.env.ISEMO_RUNTIME_COMMIT : null
+    const automation = {
+      qa: !previewOnly && process.env.ISEMO_QA_AUTOMATION === '1' && !!process.env.ISEMO_QA_MODEL_DIR,
+      asr: !previewOnly && !['none', 'mock', ''].includes(process.env.ISEMO_ASR ?? ''),
+      ser: !previewOnly && process.env.ISEMO_SER === 'checkpoint',
+    }
+    // During training, report a fast, explicit preview status without polling
+    // an intentionally offline Python service or implying that it should start.
+    if (previewOnly) return res.json({
+      api: 'ok', runtimeCommit,
+      previewOnly: true,
+      automation,
+      demoData: process.env.ISEMO_MIDTERM_DEMO === '1',
+      speechDemo: process.env.ISEMO_SPEECH_DEMO === '1',
+      inference: { reachable: false, error: 'Chế độ API-only preview: dịch vụ AI chưa khởi động; chỉ phục vụ dữ liệu và giao diện, không chạy ASR/SER/QA.' },
+    })
     try {
-      res.json({ api: 'ok', inference: { reachable: true, ...(await client.health()) } })
+      res.json({ api: 'ok', runtimeCommit, previewOnly: false,
+        automation,
+        speechDemo: process.env.ISEMO_SPEECH_DEMO === '1',
+        demoData: process.env.ISEMO_MIDTERM_DEMO === '1',
+        inference: { reachable: true, ...(await client.health()) } })
     } catch (e) {
-      res.json({ api: 'ok', inference: { reachable: false, error: (e as Error).message } })
+      res.json({ api: 'ok', runtimeCommit, previewOnly: false,
+        automation,
+        speechDemo: process.env.ISEMO_SPEECH_DEMO === '1',
+        demoData: process.env.ISEMO_MIDTERM_DEMO === '1',
+        inference: { reachable: false, error: (e as Error).message } })
     }
   })
 
@@ -132,6 +181,7 @@ export function createApp({ db, config, client, pipeline }: AppDeps) {
         status: str(q.status),
         provenance: str(q.provenance),
         source: str(q.source),
+        datasetScope: q.datasetScope === 'business' || q.datasetScope === 'speech_only' ? q.datasetScope : 'all',
         attention: q.attention === '1',
         sort: str(q.sort),
         dir: q.dir === 'asc' ? 'asc' : 'desc',
@@ -203,6 +253,13 @@ export function createApp({ db, config, client, pipeline }: AppDeps) {
       const meta = MetaFields.parse(req.body)
       const parsed = parseFile(results, true)
       const audio = f.audio?.[0]
+      if (previewOnly && audio) {
+        throw new HttpError(503,
+          'Chế độ xem trước chỉ nhận JSON/CSV không kèm audio. Ghi âm cần dịch vụ kiểm tra âm thanh khi GPU sẵn sàng.',
+          { code: 'inference_paused_for_training' })
+      }
+      // Results-only import has a skipped validation/transcription/emotion plan.
+      // Its single pending finalize stage does not call Python or the GPU.
       const combined = MetaFields.parse({
         title: str(meta.title) ?? parsed.meta.title ?? path.basename(results.originalname, path.extname(results.originalname)),
         agentName: str(meta.agentName) ?? parsed.meta.agentName ?? '',
@@ -241,6 +298,74 @@ export function createApp({ db, config, client, pipeline }: AppDeps) {
     } finally {
       cleanup(req)
     }
+  })
+
+  // Create a NEW derived call from an unchanged imported or uploaded WAV.
+  // Never overwrite the original transcript, QA reviews, case history or audio.
+  app.post('/api/calls/:id/reprocess', async (req, res) => {
+    if (previewOnly) throw new HttpError(503, 'API preview không chạy model.')
+    const original = repo.getCallRow(db, req.params.id)
+    if (!original) throw new HttpError(404, 'Không tìm thấy cuộc gọi nguồn.')
+    if (original.status !== 'ready' || !['imported', 'real'].includes(original.provenance || '') || !original.audio_file)
+      throw new HttpError(409, 'Chỉ phân tích lại được bản ghi đã hoàn tất, có audio thật và nguồn hợp lệ; không ghi đè hồ sơ cũ.')
+    if (original.title.startsWith('HỘI THOẠI ĐIỆN THOẠI THẬT · DataHive')) {
+      throw new HttpError(422,
+        'DataHive không phải cuộc gọi CSKH. Không tự gán hai người nói vào vai nhân viên và khách hàng; chỉ sử dụng để nghe và kiểm tra ASR riêng.')
+    }
+    // Real ASR must be present; a mock or merely configured adapter cannot
+    // produce evidence for a genuine inference demonstration.
+    let status
+    try { status = await client.health() }
+    catch { throw new HttpError(503, 'Không xác nhận được ASR thật trên GPU. Hãy kiểm tra Python inference.') }
+    const asr = status.components.asr
+    if (!asr.ready || asr.mock || asr.adapter === 'not_configured' || !status.ffmpeg)
+      throw new HttpError(503, 'ASR chưa chạy thật hoặc ffmpeg không sẵn sàng. Không tạo hàng đợi không thể xử lý.')
+    const ser = status.components.ser
+    if (process.env.ISEMO_SER === 'none') {
+      if (ser.adapter !== 'not_configured' || ser.ready || ser.mock)
+        throw new HttpError(503, 'Cấu hình bỏ qua SER giữa hai dịch vụ không khớp.')
+    } else if (!ser.ready || ser.mock || ser.verified !== true) {
+      throw new HttpError(503, 'SER chưa được xác minh; chỉ có thể chạy khi cấu hình chế độ QA/ASR không có SER.')
+    }
+
+    try { assertCallAudioOwnership(config.uploadsDir, original.id, original.audio_file) }
+    catch { throw new HttpError(409, 'Đường dẫn bản ghi không được xác minh thuộc cuộc gọi nguồn.') }
+    const source = path.resolve(config.uploadsDir, original.audio_file)
+    if (!fs.existsSync(source) || !fs.statSync(source).isFile())
+      throw new HttpError(404, 'Tệp ghi âm nguồn không còn tồn tại.')
+    const ext = path.extname(source).toLowerCase()
+    if (!(ext in AUDIO_EXT)) throw new HttpError(400, 'Định dạng tệp ghi âm nguồn không hỗ trợ.')
+    const id = repo.nextCallId(db)
+    const dir = path.join(config.uploadsDir, id)
+    const targetRel = path.join(id, 'audio' + ext)
+    fs.mkdirSync(dir)
+    try {
+      const dest = path.join(config.uploadsDir, targetRel)
+      fs.copyFileSync(source, dest, fs.constants.COPYFILE_EXCL)
+      const digest = (file: string) => createHash('sha256').update(fs.readFileSync(file)).digest('hex')
+      const hash = digest(source)
+      if (hash !== digest(dest)) throw new Error('Audio hash changed during copy')
+      db.transaction(() => {
+        repo.insertCall(db, {
+          id, title: ('ASR thật · ' + original.title).slice(0, 200),
+          agentName: original.agent_name || '', customerName: original.customer_name || '',
+          callDate: new Date().toISOString(), source: 'upload',
+          agentChannel: original.agent_channel || 0,
+          audioFile: targetRel, audioName: original.audio_name || path.basename(source),
+          audioMime: original.audio_mime || AUDIO_EXT[ext], stageLog: planStages('upload', true),
+          speakerSource: null,
+        })
+        repo.updateCall(db, id, {
+          overallNote: 'Bản phân tích mới từ ' + original.id +
+            '. File audio sao chép nguyên byte (SHA256 ' + hash + '). Transcript sẽ do ASR thật tạo, không sử dụng transcript nguồn. Kết quả SER chỉ có nếu checkpoint đã được xác minh.',
+        })
+      })()
+    } catch (error) {
+      fs.rmSync(dir, { recursive: true, force: true })
+      throw error
+    }
+    pipeline.enqueue(id)
+    res.status(202).json({ id, sourceCallId: original.id })
   })
 
   // ---- Calls: audio, review, retry, delete -------------------------------
@@ -322,6 +447,8 @@ export function createApp({ db, config, client, pipeline }: AppDeps) {
 
   attachServiceRoutes(app, db)
   attachWorkflowRoutes(app, db)
+  attachQaTriageRoutes(app, db, config, autoQa)
+  attachInsightRoutes(app, db)
   app.use('/api', (_req, _res, next) => next(new HttpError(404, 'Đường dẫn API không tồn tại.')))
 
   // ---- Errors --------------------------------------------------------------

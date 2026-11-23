@@ -30,6 +30,9 @@ export interface InferenceEvidence {
   device?: string
   mock: boolean
   verified?: boolean
+  timingMode?: 'word_aligned' | 'audio_window'
+  timingWarning?: string
+  speakerTurns?: Array<{ start: number; end: number; speakerId: 'A' | 'B' }>
 }
 export interface StageEntry {
   stage: StageKey

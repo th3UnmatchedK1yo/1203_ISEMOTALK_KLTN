@@ -36,7 +36,8 @@ export const CallRecording = memo(function CallRecording({ callId, audioUrl, dur
   const [currentTime, setCurrentTime] = useState(0)
   const [audioError, setAudioError] = useState('')
   const totalTime = useMemo(() => utterances.reduce((end, u) => Math.max(end, u.end), Math.max(duration, 1)), [utterances, duration])
-  const tracks = useMemo(() => speakers.map(speaker => ({ speaker, utterances: utterances.filter(u => u.speaker === speaker) }))
+  const hasEmotion = utterances.some(u => u.fused !== null)
+  const tracks = useMemo(() => speakers.map(speaker => ({ speaker, utterances: utterances.filter(u => u.speaker === speaker && !!u.fused) }))
     .filter(track => track.utterances.length > 0), [utterances])
 
   const updateTime = useCallback((time: number) => {
@@ -69,7 +70,10 @@ export const CallRecording = memo(function CallRecording({ callId, audioUrl, dur
 
   return <section className="rounded-xl border border-[#c4d4dc] bg-white p-5 shadow-sm" aria-labelledby="recording-title">
     <div className="mb-4 flex flex-wrap items-baseline justify-between gap-2">
-      <h2 id="recording-title" className="text-lg font-semibold text-[#12394d]">Âm thanh & dòng thời gian</h2>
+      <div>
+        <p className="text-xs font-bold uppercase tracking-[0.12em] text-teal-700">BƯỚC 1 · NGHE & ĐỌC</p>
+        <h2 id="recording-title" className="mt-1 text-lg font-bold text-[#12394d]">{hasEmotion ? 'Nghe và đối chiếu cảm xúc' : 'Bản ghi âm cuộc gọi'}</h2>
+      </div>
       <span className="text-sm tabular-nums text-slate-700">{clock(currentTime)} / {clock(totalTime)}</span>
     </div>
     {audioUrl ? <audio key={callId} ref={audioRef} controls preload="metadata" src={resolveApiUrl(audioUrl)} className="w-full"
@@ -82,18 +86,22 @@ export const CallRecording = memo(function CallRecording({ callId, audioUrl, dur
     {audioError && <div role="alert" className="mt-3 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-900">
       {audioError} <button type="button" className="ml-2 font-semibold underline" onClick={() => { setAudioError(''); audioRef.current?.load() }}>Thử lại</button>
     </div>}
-    <div className="mt-4 space-y-2" aria-label="Dự đoán cảm xúc theo người nói">
-      {tracks.map(track => <div key={track.speaker} className="grid grid-cols-[7.5rem_minmax(0,1fr)] items-center gap-3">
-        <span className="text-sm font-medium text-slate-700">{speakerLabels[track.speaker]}</span>
-        <div className="relative h-9 overflow-hidden rounded-md border border-slate-200 bg-slate-100">
-          <EmotionSegments utterances={track.utterances} duration={totalTime} onSelect={onSelect}/>
-          <span aria-hidden="true" className="pointer-events-none absolute inset-y-0 w-0.5 bg-slate-950" style={{ left: `${Math.min(99.9, currentTime / totalTime * 100)}%` }}/>
-        </div>
-      </div>)}
-    </div>
-    <div className="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-sm text-slate-700">{emotions.map(emotion => <span key={emotion} className="inline-flex items-center gap-2">
-      <span aria-hidden="true" className="h-2.5 w-2.5 rounded-sm" style={{ background: emotionColors[emotion] }}/>{emotionLabels[emotion]}
-    </span>)}</div>
-    <p className="mt-3 text-sm text-slate-600">Chọn một câu hoặc đoạn màu để chuyển đến thời điểm đó. Nhấn phát để nghe. Màu thể hiện dự đoán gốc của mô hình.</p>
+    {hasEmotion ? <>
+      <div className="mt-4 space-y-2" aria-label="Dự đoán cảm xúc theo người nói">
+        {tracks.map(track => <div key={track.speaker} className="grid grid-cols-[7.5rem_minmax(0,1fr)] items-center gap-3">
+          <span className="text-sm font-medium text-slate-700">{speakerLabels[track.speaker]}</span>
+          <div className="relative h-9 overflow-hidden rounded-md border border-slate-200 bg-slate-100">
+            <EmotionSegments utterances={track.utterances} duration={totalTime} onSelect={onSelect}/>
+            <span aria-hidden="true" className="pointer-events-none absolute inset-y-0 w-0.5 bg-slate-950" style={{ left: `${Math.min(99.9, currentTime / totalTime * 100)}%` }}/>
+          </div>
+        </div>)}
+      </div>
+      <div className="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-sm text-slate-700">{emotions.map(emotion => <span key={emotion} className="inline-flex items-center gap-2">
+        <span aria-hidden="true" className="h-2.5 w-2.5 rounded-sm" style={{ background: emotionColors[emotion] }}/>{emotionLabels[emotion]}
+      </span>)}</div>
+      <p className="mt-3 text-sm text-slate-600">Chọn đoạn màu để nghe lại thời điểm đã được căn chỉnh. Các màu là dự đoán của model, không phải kết luận QA.</p>
+    </> : <p className="mt-3 text-xs leading-5 text-slate-600">
+      Chưa có kết quả SER được xác minh, nên không hiển thị timeline cảm xúc. Có thể tiếp tục nghe và đánh giá theo nội dung cuộc gọi.
+    </p>}
   </section>
 })

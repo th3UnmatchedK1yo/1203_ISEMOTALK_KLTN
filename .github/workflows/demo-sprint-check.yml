@@ -9,6 +9,7 @@ on:
       - feat/offline-faster-whisper-asr-20261102
       - fix/qa-workflow-audit-20261114
       - feat/thesis-demo-hardening-20261122
+      - feat/remote-gpu-full-pipeline-20261123
   pull_request:
     branches:
       - main
@@ -17,6 +18,7 @@ on:
       - feat/readability-theme-20261102
       - feat/offline-faster-whisper-asr-20261102
       - fix/qa-workflow-audit-20261114
+      - feat/thesis-demo-hardening-20261122
   workflow_dispatch:
 
 permissions:
@@ -38,6 +40,8 @@ jobs:
         run: npm ci --no-audit --no-fund
       - name: Check Windows startup, database and file cleanup without model downloads
         run: npm test -- server/tests/demo-startup.test.ts server/tests/local-readiness.test.ts server/tests/python-runtime.test.ts server/tests/node-repair.test.ts server/tests/db-integrity.test.ts server/tests/db-workflow-history.test.ts server/tests/db-check.test.ts server/tests/audio-cleanup.test.ts server/tests/service-operations.test.ts
+      - name: Check one-click SSH command contract on Windows
+        run: node --test scripts/oneclick-ssh.test.mjs
       - name: Parse and run bounded Windows model inventory without downloads
         shell: powershell
         run: |
@@ -59,6 +63,28 @@ jobs:
           cache: npm
       - name: Install dependencies
         run: npm ci --no-audit --no-fund
+      - name: Validate remote launcher syntax
+        run: |
+          node --check scripts/start-remote-web.mjs
+          node --check scripts/check-remote-models.mjs
+          node --check scripts/check-remote-server.mjs
+          node --check scripts/start-remote-server.mjs
+          node --check scripts/remote-real-smoke.mjs
+          node --check scripts/remote-qa-smoke.mjs
+          node --check scripts/start-remote-api-preview.mjs
+          node --check scripts/check-remote-mvp.mjs
+          node --check scripts/start-remote-midterm-demo.mjs
+          node --check scripts/start-remote-speech-demo.mjs
+          node --check scripts/start-remote-qa-runtime.mjs
+          node --check scripts/open-isemotalk.mjs
+          node --check scripts/oneclick-ssh.mjs
+          node --test scripts/oneclick-ssh.test.mjs
+          node --check scripts/check-remote-qa.mjs
+          node --check scripts/choose-midterm-call.mjs
+      - name: Validate Linux GPU setup script without running installs
+        run: |
+          bash -n scripts/bootstrap-gpu-host.sh scripts/stage-gpu-models.sh scripts/train-callcenter-qa.sh scripts/launch-parallel-datasets.sh scripts/run-qa-replications.sh scripts/monitor-parallel.sh
+          python -m py_compile inference/scripts/download_onevoice.py inference/scripts/train_onevoice_qa.py inference/app/qa_triage.py inference/scripts/download_asr_benchmarks.py inference/scripts/eval_onevoice_baselines.py
       - name: Build frontend
         run: npm run build
       - name: Typecheck backend
@@ -98,6 +124,10 @@ jobs:
           $tokens = $null
           $errors = $null
           [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path 'scripts/enable-offline-asr.ps1').Path, [ref]$tokens, [ref]$errors) | Out-Null
+          if ($errors.Count -gt 0) { throw ($errors | Out-String) }
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path 'scripts/start-vscode-preview.ps1').Path, [ref]$tokens, [ref]$errors) | Out-Null
           if ($errors.Count -gt 0) {
             $errors | ForEach-Object { Write-Error $_.ToString() }
             exit 1

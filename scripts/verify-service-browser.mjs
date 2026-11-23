@@ -114,6 +114,83 @@ try{
  await page.screenshot({path:mobile,fullPage:true});evidence.screenshots.push(mobile)
  evidence.checks.push('Desktop1440 and mobile390 detail layout; no page-level horizontal overflow')
 
+ // Visual QA for the call-review workspace. The source is a CI-only fixture,
+ // never real customer audio or evidence of model accuracy.
+ const qaForm = new FormData()
+ qaForm.append('results', new Blob([JSON.stringify({
+   call: {title:'TTS TỔNG HỢP · OneVoice · CI UI FIXTURE'},
+   utterances:[{
+     speaker:'unknown',start:0,end:20,
+     // Results-import requires fused predictions; this is CI-only fake
+     // evidence used to exercise the UI, never a published AI result.
+     fused: {emotion:'neutral',confidence:0.6},
+     text:'agent: Chào chị, em có thể hỗ trợ gì?\\ncustomer: Tôi không vào được tài khoản, xin kiểm tra giúp.\\nagent: Em sẽ kiểm tra và liên hệ lại.'
+   }],
+ })], {type:'application/json'}), 'onevoice-ui-fixture.json')
+ const qaUpload = await fetch(api+'/api/calls/import',{method:'POST',body:qaForm})
+ assert.equal(qaUpload.status,202)
+ const {id: qaCallId}=await qaUpload.json()
+ let qaReady=false
+ for(let i=0;i<80;i++){
+   const detail=await(await fetch(api+'/api/calls/'+qaCallId)).json()
+   if(detail.status==='ready'){qaReady=true;break}
+   await new Promise(resolve=>setTimeout(resolve,100))
+ }
+ assert(qaReady,'CI-only QA source import did not finalize')
+ await page.setViewportSize({width:1440,height:900})
+ await page.goto(base+'/calls')
+ await page.getByRole('heading',{name:'Hàng đợi đánh giá QA'}).waitFor()
+ await page.getByRole('link',{name:'Xem AI đã quét bao nhiêu'}).waitFor()
+ await page.locator('a[href="/calls/'+qaCallId+'"]:visible').first().waitFor()
+ assert(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth),'Calls queue overflows desktop')
+ await page.screenshot({path:path.join(outputDir,'calls-queue-desktop.png'),fullPage:true})
+ await page.setViewportSize({width:390,height:844})
+ await page.getByRole('link',{name:'Mở và đánh giá'}).first().waitFor()
+ assert(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth),'Calls queue overflows mobile 390')
+ await page.screenshot({path:path.join(outputDir,'calls-queue-mobile.png'),fullPage:true})
+ evidence.checks.push('Calls queue: responsive 1440/390, filters and QA ranking visible without document overflow')
+ evidence.screenshots.push(path.join(outputDir,'calls-queue-desktop.png'),path.join(outputDir,'calls-queue-mobile.png'))
+ await page.setViewportSize({width:1440,height:900})
+ await page.goto(base+'/analytics')
+ await page.getByRole('heading',{name:'XLM-R đã sàng lọc bao nhiêu cuộc gọi?'}).waitFor()
+ await page.getByText(/hồ sơ đủ điều kiện đã có kết quả/).waitFor()
+ evidence.checks.push('Analytics exposes XLM-R QA coverage separately from SER; no fabricated 10000-call claims')
+ await page.screenshot({path:path.join(outputDir,'qa-analytics-desktop.png'),fullPage:true})
+ evidence.screenshots.push(path.join(outputDir,'qa-analytics-desktop.png'))
+ await page.getByRole('navigation',{name:'Điều hướng chính'}).getByRole('link',{name:'Hướng dẫn'}).click()
+ await page.getByRole('heading',{name:'ISEmoTalk giúp ai, làm việc gì?'}).waitFor()
+ await page.getByText('Nhập dữ liệu nâng cao',{exact:true}).first().waitFor()
+ await page.screenshot({path:path.join(outputDir,'qa-guide-desktop.png'),fullPage:true})
+ evidence.checks.push('Task-oriented help explains scan, QA, case workflow and technical import distinction')
+ evidence.screenshots.push(path.join(outputDir,'qa-guide-desktop.png'))
+ await page.goto(base+'/calls/'+qaCallId)
+ await page.getByRole('navigation',{name:'Các bước xem xét cuộc gọi'}).waitFor()
+ await page.getByRole('heading',{name:/Hội thoại nguồn/}).waitFor()
+ await page.getByRole('heading',{name:'Kết luận của người QA'}).waitFor()
+ await page.getByRole('heading',{name:'Cuộc gọi có cần xem kỹ?'}).waitFor()
+ await page.getByTestId('inference-trail').getByText('Transcript có sẵn / nhập từ nguồn').waitFor()
+ await page.getByTestId('inference-trail').getByText('Có nhãn nhập / chưa chứng minh SER chạy').waitFor()
+ assert.equal(await page.getByText('21 lượt lời kịch bản').count(),0)
+ assert(await page.getByText('Nhân viên (nhãn kịch bản)',{exact:true}).count()>0)
+ assert(await page.getByText('Khách hàng (nhãn kịch bản)',{exact:true}).count()>0)
+ assert(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth),'Call review overflows desktop')
+ await page.screenshot({path:path.join(outputDir,'call-review-desktop.png'),fullPage:true})
+ await page.setViewportSize({width:390,height:844})
+ assert(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth),'Call review overflows mobile 390')
+ await page.screenshot({path:path.join(outputDir,'call-review-mobile.png'),fullPage:true})
+ await page.getByRole('navigation',{name:'Các bước xem xét cuộc gọi'}).getByRole('link',{name:/Kết luận QA/}).click()
+ assert.equal(new URL(page.url()).hash,'#call-review')
+ await page.getByLabel('Nhận xét của QA').fill('Khách chưa đăng nhập được; QA cần xác minh hướng hỗ trợ.')
+ await page.getByRole('checkbox',{name:/Đã kiểm tra và hoàn tất đánh giá QA/}).check()
+ await page.getByRole('button',{name:'Lưu đánh giá QA'}).click()
+ await page.getByText('Đã lưu đánh giá.',{exact:false}).first().waitFor()
+ evidence.checks.push('Call review: source-vs-ASR/SER provenance, chat turns, guidance anchors, QA save, desktop/mobile 390')
+ await page.goto(base+'/research')
+ await page.getByRole('heading',{name:'Muốn làm việc gì thì vào tab nào?'}).waitFor()
+ await page.getByText(/không phải nơi chạy AI hoặc chấm điểm/).first().waitFor()
+ evidence.checks.push('Model & Limits page routes users into real upload, calls, analytics and cases')
+ evidence.screenshots.push(path.join(outputDir,'call-review-desktop.png'),path.join(outputDir,'call-review-mobile.png'))
+
  // Actual browser history must protect input even when sessionStorage is unavailable.
  const noStorage=await browser.newContext({viewport:{width:1366,height:900}})
  await noStorage.addInitScript(()=>{Storage.prototype.setItem=function(){throw new DOMException('Blocked for test','SecurityError')}})

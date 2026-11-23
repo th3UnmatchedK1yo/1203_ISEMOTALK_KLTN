@@ -1,6 +1,7 @@
 """FastAPI inference service for ISEmoTalk. Local-only: bind to 127.0.0.1."""
 from __future__ import annotations
 
+import os
 from typing import Literal, Optional
 
 from fastapi import FastAPI, HTTPException, Request
@@ -13,6 +14,7 @@ from .adapters import build_asr, build_diarizer, build_ser
 from .adapters.base import ModelNotReady
 from .config import Settings
 from .service import InferenceService, PathNotAllowed
+from .qa_triage import QATriageModel
 
 
 class PathBody(BaseModel):
@@ -45,6 +47,10 @@ class UtteranceIn(SegmentIn):
     speaker: Literal["agent", "customer", "unknown"] = "unknown"
 
 
+class QaTriageBody(BaseModel):
+    text: str = Field(min_length=1, max_length=100000)
+
+
 class EmotionBody(PathBody):
     utterances: list[UtteranceIn] = Field(min_length=1, max_length=5000)
     agent_channel: int = Field(0, ge=0, le=1)
@@ -55,6 +61,21 @@ def create_app(settings: Optional[Settings] = None, service: Optional[InferenceS
     svc = service or InferenceService(settings, build_asr(settings), build_diarizer(settings), build_ser(settings))
     app = FastAPI(title="ISEmoTalk inference", version="0.1.0")
     app.state.service = svc
+    qa_model = QATriageModel()
+    app.state.qa_triage = qa_model
+
+    @app.on_event("startup")
+    def verify_trained_qa_on_startup():
+        # Only genuine deployments opt into this gate. Having a file on disk
+        # is not enough: prove the CUDA checkpoint loads and yields a model
+        # prediction before the Node API tells the user it is available.
+        if os.getenv("ISEMO_QA_EAGER_VERIFY", "0") == "1":
+            result = qa_model.predict(
+                "agent: Xin chào, em có thể hỗ trợ gì?\\n"
+                "customer: Tôi cần được kiểm tra lại tài khoản."
+            )
+            if result.get("source") != "model" or not result.get("modelSha256"):
+                raise RuntimeError("QA warmup returned invalid model provenance.")
 
     @app.exception_handler(RequestValidationError)
     async def _invalid_request(_: Request, e: RequestValidationError):
@@ -77,7 +98,20 @@ def create_app(settings: Optional[Settings] = None, service: Optional[InferenceS
 
     @app.get("/v1/health")
     def health():
-        return svc.health()
+        result = svc.health()
+        result["qa"] = qa_model.status()
+        return result
+
+    @app.get("/v1/qa/health")
+    def qa_health():
+        return qa_model.status()
+
+    @app.post("/v1/qa/triage")
+    def qa_triage(body: QaTriageBody):
+        try:
+            return qa_model.predict(body.text)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     @app.post("/v1/warmup")
     def warmup():

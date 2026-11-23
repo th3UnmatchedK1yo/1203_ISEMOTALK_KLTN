@@ -1,4 +1,5 @@
 import type { DB } from './db'
+import { buildQaInput } from './qa-input'
 import {
   type Agreement,
   type CallDerived,
@@ -47,6 +48,12 @@ export interface CallListItem {
   utteranceCount: number
   reviewedCount: number
   updatedAt: string
+  qaTriage?: {
+    label: 'routine' | 'needs_attention'
+    score: number
+    outdated: boolean
+    truncated: boolean
+  } | null
 }
 
 export interface MomentDto extends Moment {
@@ -163,6 +170,7 @@ export interface ListQuery {
   status?: string
   provenance?: string
   source?: string
+  datasetScope?: 'business' | 'speech_only' | 'all'
   attention?: boolean
   sort?: string
   dir?: 'asc' | 'desc'
@@ -171,6 +179,17 @@ export interface ListQuery {
 }
 
 const SORTS: Record<string, string> = {
+  // Advisory QA queue: unreviewed calls with warning/incomplete model input
+  // precede not-yet-scored calls, then routine suggestions. Human-reviewed
+  // calls come last. Never auto-close or assert business correctness.
+  qa_attention: `CASE
+    WHEN c.review_status = 'reviewed' THEN 0
+    WHEN EXISTS (
+      SELECT 1 FROM qa_triage_results q
+      WHERE q.call_id=c.id AND (q.label='needs_attention' OR q.truncated=1)
+    ) THEN 3
+    WHEN NOT EXISTS (SELECT 1 FROM qa_triage_results q WHERE q.call_id=c.id) THEN 2
+    ELSE 1 END`,
   date: 'c.call_date',
   title: 'c.title COLLATE NOCASE',
   duration: 'c.duration',
@@ -196,6 +215,11 @@ export function listCalls(db: DB, q: ListQuery) {
   if (q.status) (where.push('c.status = ?'), args.push(q.status))
   if (q.provenance) (where.push('c.provenance = ?'), args.push(q.provenance))
   if (q.source) (where.push('c.source = ?'), args.push(q.source))
+  // The speech benchmarks/ordinary DataHive conversations are NOT CSKH
+  // cases. They remain accessible under the explicit research-data filter.
+  const otherSpeech = "(c.provenance = 'imported' AND (c.title LIKE 'GIỌNG THẬT · %' OR c.title LIKE 'HỘI THOẠI ĐIỆN THOẠI THẬT · DataHive%'))"
+  if (q.datasetScope === 'business') where.push('NOT ' + otherSpeech)
+  if (q.datasetScope === 'speech_only') where.push(otherSpeech)
   if (q.attention) where.push("c.status = 'ready' AND c.priority = 'high' AND c.review_status != 'reviewed'")
   const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : ''
 
@@ -209,18 +233,41 @@ export function listCalls(db: DB, q: ListQuery) {
     .prepare(`${LIST_SELECT} ${whereSql} ORDER BY ${sortExpr} ${dir}, c.call_date DESC, c.id DESC LIMIT ? OFFSET ?`)
     .all(...args, pageSize, (page - 1) * pageSize) as Row[]
 
+  // Counters follow the same queue filters. AI QA is distinct from
+  // emotion-derived priority, so users can tell which model flagged the call.
   const counts = db
     .prepare(
       `SELECT COUNT(*) AS total,
-        SUM(CASE WHEN status='ready' AND priority='high' AND review_status!='reviewed' THEN 1 ELSE 0 END) AS attention,
-        SUM(CASE WHEN status IN ('queued','processing') THEN 1 ELSE 0 END) AS processing,
-        SUM(CASE WHEN status='failed' THEN 1 ELSE 0 END) AS failed
-       FROM calls`,
+        SUM(CASE WHEN c.status='ready' AND c.priority='high' AND c.review_status!='reviewed' THEN 1 ELSE 0 END) AS attention,
+        SUM(CASE WHEN c.status IN ('queued','processing') THEN 1 ELSE 0 END) AS processing,
+        SUM(CASE WHEN c.status='failed' THEN 1 ELSE 0 END) AS failed,
+        SUM(CASE WHEN c.status='ready' AND c.review_status!='reviewed' AND EXISTS (
+          SELECT 1 FROM qa_triage_results q WHERE q.call_id=c.id
+          AND (q.label='needs_attention' OR q.truncated=1)
+        ) THEN 1 ELSE 0 END) AS qa_attention,
+        SUM(CASE WHEN c.status='ready' AND c.review_status!='reviewed'
+          AND NOT EXISTS (SELECT 1 FROM qa_triage_results q WHERE q.call_id=c.id)
+        THEN 1 ELSE 0 END) AS qa_pending
+       FROM calls c ${whereSql}`,
     )
-    .get() as Row
+    .get(...args) as Row
 
   return {
-    items: rows.map(mapListItem),
+    items: rows.map((row) => {
+      const item = mapListItem(row)
+      const stored = db.prepare(
+        'SELECT label, score, input_sha256, model_name, truncated FROM qa_triage_results WHERE call_id=?',
+      ).get(row.id) as { label: 'routine' | 'needs_attention'; score: number; input_sha256: string; model_name: string; truncated: number } | undefined
+      if (stored) {
+        const current = buildQaInput(getUtterances(db, row.id))
+        item.qaTriage = {
+          label: stored.label, score: stored.score,
+          outdated: current.hash !== stored.input_sha256 || (!!stored.truncated && !stored.model_name.includes('/window-max-v2')),
+          truncated: !!stored.truncated,
+        }
+      }
+      return item
+    }),
     total,
     page,
     pageSize,
@@ -229,6 +276,8 @@ export function listCalls(db: DB, q: ListQuery) {
       attention: counts.attention ?? 0,
       processing: counts.processing ?? 0,
       failed: counts.failed ?? 0,
+      qaAttention: counts.qa_attention ?? 0,
+      qaPending: counts.qa_pending ?? 0,
     },
   }
 }
@@ -253,8 +302,20 @@ export function getCallDetail(db: DB, id: string): CallDetail | null {
     const outdated = rv?.evidence_key != null && rv.evidence_key !== momentEvidenceKey(m)
     return { ...m, relevance: outdated || rv?.relevance == null ? null : !!rv.relevance, note: outdated ? '' : rv?.note ?? '', reviewOutdated: outdated }
   })
+  // The batch scan polls GET /api/calls/:id for actual persisted QA scores.
+  // The list endpoint already includes this field; detail must agree with it.
+  const qaRow = db.prepare(
+    'SELECT label, score, input_sha256, model_name, truncated FROM qa_triage_results WHERE call_id=?',
+  ).get(id) as { label: 'routine' | 'needs_attention'; score: number; input_sha256: string; model_name: string; truncated: number } | undefined
+  const qaTriage: CallListItem['qaTriage'] = qaRow ? {
+    label: qaRow.label, score: qaRow.score,
+    outdated: buildQaInput(utterances).hash !== qaRow.input_sha256 ||
+      (!!qaRow.truncated && !qaRow.model_name.includes('/window-max-v2')),
+    truncated: !!qaRow.truncated,
+  } : null
   return {
     ...mapListItem(r),
+    qaTriage,
     agentChannel: r.agent_channel,
     channels: r.channels ?? null,
     speakerSource: r.speaker_source ?? null,

@@ -33,9 +33,9 @@ def _env(name: str, default: str = "") -> str:
 class Settings:
     # mock | real. "real" selects phowhisper + stereo + checkpoint unless a component is overridden.
     mode: str
-    asr: str  # mock | phowhisper | faster_whisper
+    asr: str  # mock | phowhisper | faster_whisper | none
     diarization: str  # mock | none | pyannote
-    ser: str  # mock | checkpoint
+    ser: str  # mock | checkpoint | none
     # Only audio under this directory may be read (the Express backend's upload folder).
     uploads_dir: Path
     asr_model: str
@@ -48,6 +48,7 @@ class Settings:
     max_duration_sec: float = 3 * 60 * 60
     max_decoded_bytes: int = 256 * 1024 * 1024
     asr_cpu_threads: int = 4
+    asr_revision: str = ''  # optional immutable model revision for reproducible ASR
 
     @staticmethod
     def load() -> "Settings":
@@ -71,4 +72,5 @@ class Settings:
             max_duration_sec=float(_env("MAX_DURATION_SEC", "10800")),
             max_decoded_bytes=int(_env("MAX_DECODED_MB", "256")) * 1024 * 1024,
             asr_cpu_threads=int(_env("ASR_CPU_THREADS", "4")),
+            asr_revision=_env("ASR_REVISION"),
         )

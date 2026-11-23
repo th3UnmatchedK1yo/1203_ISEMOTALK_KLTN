@@ -87,6 +87,12 @@ class InferenceService:
         model = getattr(adapter, "model_identity", None) or getattr(adapter, "model_id", None) or getattr(adapter, "factory", None)
         if model:
             evidence["model"] = str(model)
+        timing = getattr(adapter, "timing_mode", None)
+        if timing in ("word_aligned", "audio_window"):
+            evidence["timingMode"] = timing
+        warning = getattr(adapter, "alignment_warning", "")
+        if warning:
+            evidence["timingWarning"] = str(warning)[:240]
         device = getattr(adapter, "device", None)
         if device:
             evidence["device"] = str(device)
@@ -145,7 +151,10 @@ class InferenceService:
         speakers = self.diarizer.diarize(loaded.mono, self.s.sample_rate, segments)
         if speakers is None:
             return {"speakers": [], "method": "none", "detail": self.diarizer.status().detail, "evidence": self._evidence(self.diarizer)}
-        return {"speakers": speakers, "method": "mock" if self.diarizer.mock else "model", "evidence": self._evidence(self.diarizer)}
+        # Anonymous cluster timestamps are evidence, never inferred roles.
+        turns = list(getattr(self.diarizer, "speaker_turns", []))
+        return {"speakers": speakers, "method": "mock" if self.diarizer.mock else "model",
+                "turns": turns, "evidence": self._evidence(self.diarizer)}
 
     def emotion(self, raw: str, utterances: list[dict], agent_channel: int) -> dict:
         loaded = self._load(self.resolve(raw))

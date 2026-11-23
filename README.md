@@ -13,6 +13,15 @@ ISEmoTalk là ứng dụng **xem xét sau cuộc gọi**: người làm QA nghe 
 
 **Trạng thái mô hình phải đọc theo từng thành phần.** ASR faster-whisper-small có thể chạy thật bằng cache trên máy; SER mặc định vẫn là mô phỏng. Chín checkpoint H5 lịch sử đã được xác minh trong archive, nhưng để phục vụ từ audio thô vẫn cần khôi phục đúng encoder, tokenizer, tiền xử lý và factory. Không có kết quả benchmark hoặc hiệu năng laptop mới được suy ra từ test phần mềm.
 
+## Chạy web trên laptop, model trên server GPU nhóm (đường chính mới)
+
+- **Server Linux:** Express + SQLite + recording + FastAPI + ASR/SER thật cùng một máy. Không chuyển đường dẫn audio Windows sang Python trên Linux.
+- **Laptop:** chỉ chạy React/Vite, gọi backend qua SSH tunnel. Không lưu model, không train trên laptop.
+- Nhánh triển khai: `feat/remote-gpu-full-pipeline-20261123`. Server cần package SER private có encoder, tokenizer, weights, manifest kiểm chứng trước khi chạy; các script từ chối mock/weights chưa sẵn sàng.
+- Runbook: [REMOTE_GPU_DEPLOYMENT.md](docs/REMOTE_GPU_DEPLOYMENT.md).
+- Lệnh chính: trên server `npm run remote:preflight` rồi `npm run remote:server`; trên laptop SSH port forward `13001 -> 3101`, rồi `npm run build` và `npm run remote:web`. Kiểm tra model/server bằng `npm run remote:check`, thực nghiệm tích hợp bằng `npm run remote:smoke -- /absolute/path/audio.wav`.
+- **Không được nhầm:** CI/backend test chỉ kiểm tra code. Chưa có bằng chứng deployment SER thật trên GPU server cho tới khi chạy smoke và đánh giá corpus có nhãn.
+
 ## Chạy bản trình bày
 
 Yêu cầu: Node 22, Python 3.11 hoặc 3.12, FFmpeg/FFprobe trên PATH. Giữ môi trường Python hiện có nếu đã dùng được ASR. Hướng dẫn đầy đủ và xử lý lỗi: [DEMO_RUNBOOK.md](docs/DEMO_RUNBOOK.md).

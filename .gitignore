@@ -43,3 +43,6 @@ research_backups/
 inference/private/
 inference/verification.json
 dataset_package/
+
+# Local one-click launcher diagnostics (may contain private FTISU paths)
+.isemotalk-launcher/

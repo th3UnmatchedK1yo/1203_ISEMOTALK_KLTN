@@ -61,6 +61,7 @@ export function UploadCallPage() {
   const ser = inference?.components?.ser
   const realAsr = reachable && asr?.ready && !asr.mock
   const realSer = reachable && ser?.ready && !ser.mock
+  const noSerByDesign = reachable && ser?.adapter === 'not_configured' && !ser.ready && !ser.mock && inference?.qa?.ready === true
   const inputClass = 'mt-2 h-12 w-full rounded-lg border border-[#b5c9d2] bg-white px-3 text-sm focus:border-slate-600 focus:outline-none'
 
   async function submit(e: FormEvent<HTMLFormElement>) {
@@ -93,8 +94,8 @@ export function UploadCallPage() {
       setError('Chuyển giọng nói thành văn bản chưa sẵn sàng. Bạn có thể đính kèm transcript có mốc thời gian hoặc kiểm tra cấu hình ASR.')
       return
     }
-    if (mode === 'recording' && !ser?.ready) {
-      setError('SER chưa sẵn sàng. Hãy cấu hình checkpoint đã được xác minh hoặc chọn chế độ mock có ghi nhãn để kiểm tra workflow.')
+    if (mode === 'recording' && !ser?.ready && !noSerByDesign) {
+      setError('SER chưa sẵn sàng. Chỉ cho phép bỏ qua khi đang dùng chế độ QA thật có đánh dấu SER chưa cấu hình.')
       return
     }
 
@@ -124,9 +125,11 @@ export function UploadCallPage() {
   return <div className="mx-auto max-w-5xl space-y-6">
     <div>
       <Link to="/calls" className="inline-flex items-center gap-1 text-sm text-slate-700 hover:text-teal-800"><ArrowLeft size={16}/> Danh sách cuộc gọi</Link>
-      <h1 className="mt-2 text-3xl font-semibold tracking-tight text-[#12394d]">Thêm cuộc gọi</h1>
-      <p className="mt-2 text-base text-slate-700">Tải bản ghi âm để xử lý, hoặc nhập kết quả phân tích đã có. Nguồn mô phỏng, inference và dữ liệu nhập được ghi riêng.</p>
+      <h1 className="mt-2 text-3xl font-semibold tracking-tight text-[#12394d]">Nhập dữ liệu nâng cao</h1>
+      <p className="mt-2 text-base text-slate-700">Trang này dùng khi đã có transcript kèm timestamp hoặc tệp kết quả JSON/CSV từ pipeline khác. Nếu muốn tải WAV để máy chủ tự nghe và phân tích, hãy dùng Chạy AI.</p>
     </div>
+
+    <p className="border-l-[3px] border-teal-700 bg-white px-4 py-3 text-sm leading-6 text-slate-700">Tải file âm thanh mới? <Link to="/scan" className="font-bold text-teal-800 hover:underline">Vào Chạy AI để gửi một hoặc nhiều file tự động</Link>. Trang này dành cho các tình huống nhập và đối chiếu dữ liệu nghiên cứu.</p>
 
     <section className="rounded-xl border border-[#c4d4dc] bg-white p-5 shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -153,7 +156,20 @@ export function UploadCallPage() {
             <details className="mt-2 text-slate-700"><summary className="cursor-pointer">Chi tiết cấu hình</summary><p className="mt-2 break-words leading-6">{ser?.detail ?? 'Không có thông tin'}</p></details>
           </div>
         </div> : <p className="text-sm text-slate-700">{inference?.error || 'Khởi động dịch vụ xử lý để phân tích bản ghi âm.'}</p>}
-        {reachable && (!realAsr || !realSer) && <p className="text-sm leading-6 text-amber-900">Chưa có đủ cả hai bước ASR + SER bằng mô hình thật. Bước mô phỏng được ghi rõ trong kết quả.</p>}
+        <div className="mt-3 rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm leading-6 text-slate-800">
+          <strong>Quy trình AI tự động hiện tại</strong>
+          <p className="mt-2">ASR: {health.automation?.asr && realAsr ? 'Tự chạy khi tải audio và không có transcript nguồn' :
+            realAsr ? 'Model có sẵn nhưng chưa bật tự xử lý' : 'Chưa chạy (cần transcript nguồn để phân tích QA)'}</p>
+          <p>SER fusion: {health.automation?.ser && realSer && ser?.verified ? 'Tự chạy khi audio và lượt lời hợp lệ' :
+            'Chưa có checkpoint phục vụ được xác minh; không dự đoán cảm xúc giả'}</p>
+          <p>QA XLM-R: {health.automation?.qa && inference?.qa?.ready && inference.qa.loaded
+            ? 'Tự chạy sau khi transcript sẵn sàng, không cần bấm từng cuộc'
+            : inference?.qa?.ready ? 'Có checkpoint nhưng chưa nạp hoặc chưa bật tự chạy'
+            : 'Chưa sẵn sàng'}</p>
+          <p className="mt-2 text-slate-600">Đây là trạng thái backend đang phục vụ thật, không phải lựa chọn trang trí. Khi model lỗi, hệ thống ghi rõ thiếu bước nào; QA vẫn là người quyết định có tạo vụ việc.</p>
+        </div>
+        {noSerByDesign && <p className="text-sm leading-6 text-amber-900">Đang sử dụng QA thật theo transcript; bước SER chưa chạy và sẽ được ghi “Bỏ qua”, không có dự đoán cảm xúc hay fusion. {realAsr ? 'Có thể tải WAV để chạy PhoWhisper thật.' : 'Muốn chạy ASR từ audio, cần bật PhoWhisper; hiện chỉ có thể cung cấp transcript kèm timestamp.'}</p>}
+        {reachable && (!realAsr || !realSer) && !noSerByDesign && <p className="text-sm leading-6 text-amber-900">Chưa có đủ cả hai bước ASR + SER bằng mô hình thật. Không được trình bày dự đoán mô phỏng là kết quả nghiên cứu.</p>}
         {realSer && <p className="text-sm leading-6 text-slate-600">Xác minh gói mô hình không phải đánh giá độ chính xác trên cuộc gọi thực tế.</p>}
       </div>}
     </section>
@@ -162,7 +178,7 @@ export function UploadCallPage() {
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2" role="group" aria-label="Cách thêm cuộc gọi">
         <button type="button" disabled={uploading} aria-pressed={mode==='recording'} onClick={()=>changeMode('recording')} className={'flex items-start gap-2 rounded-md border p-4 text-left disabled:opacity-50 '+(mode==='recording'?'border-teal-700 bg-teal-50':'hover:bg-teal-50/70')}>
           <FileAudio className="mt-0.5 shrink-0" size={19}/>
-          <span><strong className="block text-sm">Tải bản ghi âm</strong><span className="mt-1 block text-sm text-slate-700">Audio + ASR + SER, hoặc audio kèm transcript</span></span>
+          <span><strong className="block text-sm">Tải bản ghi âm</strong><span className="mt-1 block text-sm text-slate-700">Ghi âm → ASR thật → QA; SER chỉ chạy nếu đã xác minh</span></span>
         </button>
         <button type="button" disabled={uploading} aria-pressed={mode==='results'} onClick={()=>changeMode('results')} className={'flex items-start gap-2 rounded-md border p-4 text-left disabled:opacity-50 '+(mode==='results'?'border-teal-700 bg-teal-50':'hover:bg-teal-50/70')}>
           <FileText className="mt-0.5 shrink-0" size={19}/>
@@ -170,6 +186,9 @@ export function UploadCallPage() {
         </button>
       </div>
 
+      {!reachable && mode === 'results' && !healthError && <p role="status" className="mt-4 rounded-md border border-teal-200 bg-teal-50 p-3 text-sm leading-6 text-teal-950">
+        Có thể nhập kết quả JSON/CSV <strong>không kèm audio</strong> khi FTISU đang chạy API-only preview. Dữ liệu được ghi nhận là nguồn nhập, không phải kết quả model vừa suy luận. Việc xử lý ghi âm cần đợi dịch vụ AI.
+      </p>}
       <form onSubmit={e=>void submit(e)} className="mt-5 space-y-4">
         <fieldset disabled={uploading} className="min-w-0 space-y-4 disabled:opacity-70">
         <legend className="sr-only">Thông tin và tệp của cuộc gọi</legend>
@@ -195,8 +214,9 @@ export function UploadCallPage() {
             <input type="file" accept=".json,.csv" required onChange={e=>setResults(e.target.files?.[0]??null)} className="mt-2 block w-full rounded-md border p-2 text-sm"/>
             <span className="mt-1 block text-sm font-normal text-slate-700">Mỗi câu: start, end, text, speaker, fused_emotion và fused_confidence (hoặc đối tượng fused). Chỉ nhập dự đoán đã được tạo trước đó; không tự suy luận.</span>
           </label>
-          <label className="block text-sm font-medium">File audio đi kèm (tùy chọn)
-            <input type="file" accept=".wav,.mp3,.m4a,audio/wav,audio/mpeg,audio/mp4" onChange={e=>setAudio(e.target.files?.[0]??null)} className="mt-2 block w-full rounded-md border p-2 text-sm"/>
+          <label className="block text-sm font-medium">File audio đi kèm (tùy chọn; chỉ khi inference hoạt động)
+            <input type="file" accept=".wav,.mp3,.m4a,audio/wav,audio/mpeg,audio/mp4" disabled={!reachable} onChange={e=>setAudio(e.target.files?.[0]??null)} className="mt-2 block w-full rounded-md border p-2 text-sm disabled:cursor-not-allowed disabled:bg-slate-100"/>
+            {!reachable && <span className="mt-1 block text-sm font-normal text-amber-900">Hiện chỉ nhập kết quả không kèm audio. Không có audio để phát lại trong phiên preview.</span>}
           </label>
         </>}</div>
         </fieldset>

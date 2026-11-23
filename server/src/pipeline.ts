@@ -64,6 +64,7 @@ export class Pipeline {
     private config: Config,
     private client: InferenceClient,
     private log: (msg: string, err?: unknown) => void = () => {},
+    private onReady: (callId: string) => void = () => {},
   ) {}
 
   /** Re-queue anything that was in flight when the server last stopped. */
@@ -190,6 +191,10 @@ export class Pipeline {
       }
     }
     this.save(id, log, { status: 'ready', stage: null, error: null, progress: 100 })
+    // QA is an independent *real* model. A failed or unavailable QA must not
+    // rewrite audio-pipeline history or mark valid ASR/SER processing as failed.
+    try { this.onReady(id) }
+    catch (error) { this.log('automatic QA scheduling failed for ' + id, error) }
   }
 
   private audioPath(row: Row): string {
@@ -231,7 +236,7 @@ export class Pipeline {
         const speakerSource: SpeakerSource = r.speakerSource === 'channel' ? 'channel' : r.speakerSource === 'mock' ? 'mock' : 'unassigned'
         const provenance = r.provenance === 'mock' || r.speakerSource === 'mock' || r.evidence?.mock ? 'mock' : 'real'
         return {
-          detail: `${r.segments.length} câu · ${provenance === 'mock' ? 'ASR mô phỏng' : 'ASR thật (cần đối chiếu transcript)'}`,
+          detail: `${r.segments.length} đoạn · ${r.evidence?.timingMode === 'audio_window' ? 'PhoWhisper đã chạy lại theo cửa sổ audio do word timestamp lỗi; mốc thời gian KHÔNG căn chỉnh từng từ' : provenance === 'mock' ? 'ASR mô phỏng' : 'ASR thật (cần đối chiếu transcript)'}`,
           provenance, evidence: r.evidence,
           commit: () => {
             repo.replaceUtterances(this.db, id, r.segments.map((s) => ({ speaker: s.speaker ?? 'unknown', text: s.text, start: s.start, end: s.end })))
@@ -261,20 +266,39 @@ export class Pipeline {
         const map: Record<string, Speaker> = {}
         current.forEach((u, i) => { if (u.speaker === 'unknown') map[u.id] = r.speakers[i] })
         const mock = r.method === 'mock' || r.evidence?.mock === true
+        const anonymous = !mock && r.method === 'model' && (r.turns?.length ?? 0) > 0
         const assigned = Object.values(map).filter((speaker) => speaker !== 'unknown').length
         return {
-          detail: assigned === 0
-            ? 'Chưa có căn cứ gán vai trò nhân viên/khách hàng; cần gán thủ công.'
-            : `${mock ? 'Gán nhãn mô phỏng' : 'Đã gán người nói bằng mô hình'} cho ${assigned} câu chưa có nhãn; giữ nguyên nhãn được cung cấp`,
-          provenance: mock ? 'mock' : 'real', evidence: r.evidence,
+          detail: anonymous
+            ? `Pyannote đã phát hiện ${new Set(r.turns!.map(t=>t.speakerId)).size} nhóm giọng ẩn danh trên ${r.turns!.length} đoạn tiếng nói. Chưa xác minh ai là nhân viên hoặc khách hàng; cần đối chiếu thủ công.`
+            : assigned === 0
+              ? 'Chưa có căn cứ gán vai trò nhân viên/khách hàng; cần gán thủ công.'
+              : `${mock ? 'Gán nhãn mô phỏng' : 'Đã gán người nói bằng mô hình'} cho ${assigned} câu chưa có nhãn; giữ nguyên nhãn được cung cấp`,
+          provenance: mock ? 'mock' : 'real',
+          evidence: { ...(r.evidence ?? {adapter:'diarizer',mock}), ...(anonymous ? {speakerTurns:r.turns} : {}) },
           commit: () => {
             repo.setSpeakers(this.db, id, map)
-            repo.updateCall(this.db, id, { speakerSource: (assigned === 0 ? 'unassigned' : mock ? 'mock' : 'model') satisfies SpeakerSource, ...(mock ? { provenance: 'mock' } : {}) })
+            repo.updateCall(this.db, id, { speakerSource: (anonymous || assigned > 0 ? mock ? 'mock' : 'model' : 'unassigned') satisfies SpeakerSource, ...(mock ? { provenance: 'mock' } : {}) })
           },
         }
       }
 
       case 'emotion': {
+        // An intentionally unavailable SER is not a fake SER and must not
+        // block genuine ASR + separately trained QA in a partial research MVP.
+        // Only skip when both Node and Python explicitly agree on "none".
+        // Missing/broken/unverified F4 packages still fail normally.
+        if (process.env.ISEMO_SER === 'none') {
+          const h = await this.client.health()
+          const ser = h.components.ser
+          if (ser.adapter !== 'not_configured' || ser.ready || ser.mock)
+            throw new PipelineError('Cấu hình SER giữa Express và FastAPI không khớp; không được tự bỏ qua bước cảm xúc.')
+          return {
+            skipped: true,
+            detail: 'Chưa cấu hình SER đã xác minh. ASR và QA có thể là model thật, nhưng cuộc gọi này KHÔNG có dự đoán cảm xúc.',
+            evidence: { adapter: 'not_configured', mock: false },
+          }
+        }
         const current = utts()
         const r = await this.client.emotion({
           path: this.audioPath(row),

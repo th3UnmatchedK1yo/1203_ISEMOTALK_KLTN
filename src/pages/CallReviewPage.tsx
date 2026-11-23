@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
-import { ArrowLeft, Check, Save, AlertTriangle, RefreshCw, Download } from 'lucide-react'
+import { Link, useNavigate, useParams } from 'react-router-dom'
+import { ArrowLeft, Check, Save, AlertTriangle, RefreshCw, Download, ChevronRight, Headphones, Sparkles, ClipboardCheck, BriefcaseBusiness, FileAudio } from 'lucide-react'
 import {
-  ApiError, clock, emotionLabels, getCall, percent, provenanceLabel, resolveApiUrl, saveReview,
+  ApiError, apiJson, clock, emotionLabels, getCall, getSystemStatus, percent, resolveApiUrl, saveReview,
   retryProcessing, speakerLabels, stageLabels, type CallDetail, type Emotion, type Moment, type ReviewPatch,
 } from '@/api/isemotalk'
 import { startPolling } from '@/lib/polling'
@@ -14,6 +14,13 @@ import { CallRecording, type SeekRequest } from '@/components/review/CallRecordi
 import { TranscriptList } from '@/components/review/TranscriptList'
 import { CallWorkflowPanel } from '@/components/review/CallWorkflowPanel'
 import { CallCaseLink } from '@/components/review/CallCaseLink'
+import { CallQaTriage } from '@/components/review/CallQaTriage'
+import { CallInsightsPanel } from '@/components/review/CallInsightsPanel'
+import { QaRubricEditor } from '@/components/review/QaRubricEditor'
+import { EmotionTrajectory } from '@/components/review/EmotionTrajectory'
+import { CallInferenceTrail } from '@/components/review/CallInferenceTrail'
+import { sourceDialogueTurns } from '@/lib/source-dialogue'
+import { speakerHintForInterval } from '@/lib/speaker-evidence'
 
 const allEmotions: Emotion[] = ['neutral', 'happy', 'sad', 'angry']
 const momentLabels: Record<string, string> = {
@@ -31,6 +38,9 @@ export function CallReviewPage() {
 }
 
 function CallReviewSession({ callId }: { callId: string }) {
+  const navigate = useNavigate()
+  const [realAsrAvailable, setRealAsrAvailable] = useState(false)
+  const [reanalyzing, setReanalyzing] = useState(false)
   const [call, setCall] = useState<CallDetail | null>(null)
   const [form, setForm] = useState<ReviewForm | null>(null)
   const [loading, setLoading] = useState(true)
@@ -86,6 +96,35 @@ function CallReviewSession({ callId }: { callId: string }) {
       intervalMs: 2500,
     })
   }, [callId, reload])
+
+  useEffect(() => {
+    const controller = new AbortController()
+    setRealAsrAvailable(false)
+    void getSystemStatus(controller.signal)
+      .then(status => {
+        if (!controller.signal.aborted)
+          setRealAsrAvailable(status.inference.reachable === true &&
+            status.inference.components?.asr?.ready === true &&
+            status.inference.components.asr.mock === false)
+      })
+      .catch(() => { if (!controller.signal.aborted) setRealAsrAvailable(false) })
+    return () => controller.abort()
+  }, [callId])
+
+  const analyzeSourceAudio = async () => {
+    if (!call || reanalyzing || !realAsrAvailable || !['imported', 'real'].includes(call.provenance || '') || !call.hasAudio) return
+    setReanalyzing(true)
+    setError('')
+    try {
+      const next = await apiJson<{id: string}>('/api/calls/' + encodeURIComponent(call.id) + '/reprocess', {
+        method: 'POST',
+      })
+      navigate('/calls/' + encodeURIComponent(next.id))
+    } catch (e) {
+      setError((e as Error).message)
+      setReanalyzing(false)
+    }
+  }
 
   const payload = useMemo(() => call && form ? buildReviewPayload(call, form) : null, [call, form])
   const dirty = !!payload && hasReviewChanges(payload)
@@ -205,11 +244,18 @@ function CallReviewSession({ callId }: { callId: string }) {
     <button type="button" className={button} onClick={() => setReload(value => value + 1)}><RefreshCw size={17}/> Thử tải lại</button>
   </div>
 
+  const sourceDialogue = call.provenance === 'imported' && call.title.startsWith('TTS TỔNG HỢP · OneVoice') && call.utterances.length === 1
+  const displayedTurns = sourceDialogue ? sourceDialogueTurns(form?.utterances[call.utterances[0].id]?.text ?? call.utterances[0].text).length : call.utterances.length
+  const noteIsImportedProvenance = call.provenance === 'imported' && call.reviewStatus !== 'reviewed' &&
+    (form?.overallNote ?? '').startsWith('NGUỒN: ')
+  const hasEmotionEvidence = call.utterances.some(u => !!(u.acoustic || u.lexical || u.fused))
   const selected = call.utterances.find(u => u.id === selectedId) ?? null
   const selectedPatch = selected ? form?.utterances[selected.id] : undefined
   const selectedMoment = call.moments.find(moment => moment.id === selectedMomentId)
   const momentPatch = selectedMoment ? form?.moments[selectedMoment.id] : undefined
   const unknownCount = call.utterances.filter(u => u.speaker === 'unknown').length
+  const speakerTurns = call.stageLog.find(step => step.stage === 'diarize')?.evidence?.speakerTurns ?? []
+  const speakerGroups = new Set(speakerTurns.map(turn => turn.speakerId))
   const reviewStatus = call.reviewStatus === 'reviewed' ? 'Đã xem xét' : call.reviewStatus === 'in_progress' ? 'Đang xem xét' : 'Chưa xem xét'
   const inputsChanged = selected && (selected.fused || selected.lexical || selected.acoustic) && (
     selected.predictionInputChanged || selected.textEdited || selected.speakerEdited
@@ -219,18 +265,79 @@ function CallReviewSession({ callId }: { callId: string }) {
   const canSave = dirty && !saving && !draftBackup && !versionConflict && call.status === 'ready'
 
   return <div className="space-y-5">
-    <header className="flex flex-wrap items-start justify-between gap-4">
-      <div className="min-w-0 space-y-2">
-        <Link to="/calls" className="inline-flex items-center gap-2 text-sm text-slate-700 hover:text-teal-800"><ArrowLeft size={17}/> Danh sách cuộc gọi</Link>
-        <p className="text-sm font-semibold tracking-wide text-slate-600">{call.id}</p>
-        <h1 className="break-words text-3xl font-semibold tracking-tight text-[#12394d]">{call.title}</h1>
-        <p className="text-base text-slate-700">{call.agentName || 'Chưa có tên nhân viên'} / {call.customerName || 'Chưa có tên khách hàng'} · {clock(call.duration)} · {reviewStatus}</p>
-      </div>
-      <div className="flex flex-wrap items-center gap-3">
-        <span className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-800">{provenanceLabel(call.provenance)}</span>
-        <button type="button" disabled={!canSave} onClick={() => void save()} className={primaryButton}><Save size={18}/>{saving ? 'Đang lưu…' : 'Lưu đánh giá'}</button>
+    <header className="rounded-xl border border-slate-200 bg-white px-5 py-5 shadow-sm sm:px-6">
+      <Link to="/calls" className="inline-flex items-center gap-2 text-sm font-medium text-teal-800 hover:underline"><ArrowLeft size={16}/> Trở lại danh sách</Link>
+      <div className="mt-3 flex flex-wrap items-start justify-between gap-4">
+        <div className="min-w-0">
+          <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">{call.id} · HỒ SƠ CUỘC GỌI</p>
+          <h1 className="mt-1 break-words text-2xl font-bold tracking-tight text-[#12394d] sm:text-[1.75rem]">{call.title}</h1>
+          <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-slate-700">
+            <span className="inline-flex items-center gap-1.5"><FileAudio size={16} className="text-slate-500" aria-hidden="true"/>{clock(call.duration)} audio</span>
+            <span>{sourceDialogue ? displayedTurns + ' lượt lời kịch bản' : call.utterances.length + ' câu/đoạn'}</span>
+            <span className={'rounded-full border px-2.5 py-1 font-semibold ' + (call.reviewStatus === 'reviewed'
+              ? 'border-teal-200 bg-teal-50 text-teal-900'
+              : 'border-slate-200 bg-slate-100 text-slate-700')}>{reviewStatus}</span>
+          </div>
+          {(call.agentName || call.customerName) && <p className="mt-2 text-sm text-slate-600">
+            {call.agentName || 'Nhân viên chưa xác định'} / {call.customerName || 'Khách hàng chưa xác định'}
+          </p>}
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          {call.provenance === 'real' && call.hasAudio && call.status === 'ready' &&
+            <button type="button" className={primaryButton + ' shrink-0'}
+              disabled={!realAsrAvailable || reanalyzing || saving || dirty}
+              onClick={() => void analyzeSourceAudio()}>
+              <RefreshCw size={17}/>{reanalyzing ? 'Đang tạo phân tích mới…' : 'Chạy lại ASR + QA'}
+            </button>}
+          <a href="#call-review" className={button + ' shrink-0'}><ClipboardCheck size={17}/> Đi tới phần đánh giá</a>
+        </div>
       </div>
     </header>
+    <nav aria-label="Các bước xem xét cuộc gọi" className="border-y border-slate-200 py-2">
+      <ol className="flex flex-wrap items-center gap-x-1 gap-y-2">
+        {([
+          {href:'#call-audio', label:'Nghe & đọc', icon:Headphones},
+          {href:'#call-ai', label:'Gợi ý AI', icon:Sparkles},
+          {href:'#call-review', label:'Kết luận QA', icon:ClipboardCheck},
+          {href:'#call-case', label:'Xử lý tiếp', icon:BriefcaseBusiness},
+        ] as const).map(step => <li key={step.href}>
+          <a href={step.href} className="inline-flex min-h-10 items-center gap-2 rounded-md px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-white hover:text-teal-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700">
+            <step.icon size={16} className="text-slate-500" aria-hidden="true"/>{step.label}
+          </a>
+        </li>)}
+      </ol>
+    </nav>
+    <CallInferenceTrail call={call}/>
+    {call.provenance === 'imported' &&
+      (call.title.startsWith('TTS TỔNG HỢP') || call.title.startsWith('GIỌNG THẬT') || call.title.startsWith('HỘI THOẠI ĐIỆN THOẠI THẬT')) &&
+      <details className="group rounded-xl border border-slate-200 bg-white text-sm leading-6 text-slate-700" role="note">
+        <summary className="flex min-h-12 cursor-pointer list-none flex-wrap items-center justify-between gap-2 px-4 py-3 marker:hidden">
+          <span className="inline-flex items-center gap-2 font-semibold text-slate-800"><FileAudio size={17} className="text-teal-700" aria-hidden="true"/>Nguồn: {call.title.startsWith('TTS TỔNG HỢP') ? 'OneVoice · hội thoại TTS' : call.title.startsWith('HỘI THOẠI ĐIỆN THOẠI THẬT') ? 'DataHive · hội thoại tự nhiên' : 'Bản ghi tiếng nói nguồn'}</span>
+          <span className="text-xs font-medium text-teal-800">Giấy phép & giới hạn <ChevronRight size={15} className="inline transition-transform group-open:rotate-90" aria-hidden="true"/></span>
+        </summary>
+        <div className="border-t border-slate-100 px-4 pb-4 pt-2">
+          <strong className="sr-only">Đây là âm thanh WAV từ bộ dữ liệu công bố, không phải âm thanh do web tạo.</strong>
+        <p className="mt-1">{call.title.startsWith('TTS TỔNG HỢP')
+          ? 'OneVoice là kịch bản tổng đài đọc bằng giọng TTS tổng hợp; không phải cuộc gọi CSKH ngoài đời.'
+          : call.title.startsWith('HỘI THOẠI ĐIỆN THOẠI THẬT')
+            ? 'DataHive là cuộc trò chuyện qua điện thoại có hai giọng người thật. Đây là đoạn trích từ bản ghi có sự đồng ý của người tham gia, không phải cuộc gọi CSKH; dataset không có transcript nên trang này không tự dựng lời thoại.'
+            : 'FOSD/FLEURS có tiếng nói của người thật nhưng chỉ là đoạn phát biểu, không phải hội thoại tổng đài.'}
+          {' '}{call.title.startsWith('HỘI THOẠI ĐIỆN THOẠI THẬT')
+            ? 'Chưa chạy ASR hoặc SER nên chưa có transcript và nhãn cảm xúc.'
+            : 'Transcript lấy từ nguồn và gắn toàn bộ thời lượng, không có căn chỉnh thời gian từng lượt. Chưa chạy ASR hoặc SER để dự đoán.'}</p>
+        <details className="mt-2"><summary className="cursor-pointer font-semibold">Nguồn, giấy phép và SHA256 của bản ghi</summary>
+          <p className="mt-2 break-all text-xs">{call.stageLog.find(step => step.stage === 'validate')?.detail}</p>
+          <a href={call.title.startsWith('TTS TỔNG HỢP')
+            ? 'https://huggingface.co/datasets/nhatminh/OneVoice'
+            : call.title.startsWith('HỘI THOẠI ĐIỆN THOẠI THẬT')
+              ? 'https://huggingface.co/datasets/datahiveai/multilingual-conversations-sample'
+              : call.title.includes('FLEURS')
+                ? 'https://huggingface.co/datasets/google/fleurs'
+                : 'https://huggingface.co/datasets/doof-ferb/fpt_fosd'}
+            target="_blank" rel="noopener noreferrer" className="mt-2 inline-block font-semibold underline underline-offset-2">Xem dữ liệu và giấy phép của nhà phát hành</a>
+        </details>
+        </div>
+      </details>}
     {call.provenance === 'mock' && <p className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-950">
       {call.source === 'results_import'
         ? 'Dữ liệu minh họa: âm thanh tổng hợp, transcript và nhãn cảm xúc mô phỏng. Dùng để trình bày luồng đánh giá, không phải kết quả nghiên cứu.'
@@ -274,24 +381,70 @@ function CallReviewSession({ callId }: { callId: string }) {
       <span>Có thay đổi chưa lưu{!storageError && ' · Bản nháp được giữ trong phiên trình duyệt này'}</span>
       <button type="button" onClick={downloadDraft} className="font-semibold underline underline-offset-4">Tải bản nháp</button>
     </div>}
-    {unknownCount > 0 && <p className="rounded-lg border border-slate-300 bg-white p-4 text-sm leading-6 text-slate-800">
+    {unknownCount > 0 && !sourceDialogue && <p className="rounded-lg border border-slate-300 bg-white p-4 text-sm leading-6 text-slate-800">
       <strong>{unknownCount} câu chưa xác định người nói.</strong> Những câu này không được tính vào cảm xúc khách hàng. Hãy nghe lại và gán vai trò nếu có căn cứ.
       {call.dominantEmotion === null && ' Chưa đủ dữ liệu để nhận định cảm xúc hoặc mức ưu tiên theo khách hàng.'}
     </p>}
-    <CallRecording callId={call.id} audioUrl={call.audioUrl} duration={call.duration} utterances={call.utterances}
-      seekRequest={seekRequest} onActiveChange={setActiveId} onSelect={selectUtterance}/>
+    {speakerTurns.length > 0 && unknownCount > 0 && <details className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm">
+      <summary className="cursor-pointer font-semibold text-[#12394d]">Pyannote phát hiện {speakerGroups.size} nhóm giọng (A/B) — xác nhận vai trò</summary>
+      <p className="mt-2 max-w-3xl leading-6 text-slate-700">Giọng A/B là các nhóm giọng do AI tách theo thời gian, <strong>chưa phải nhân viên/khách hàng</strong>. Với đoạn ASR 12 giây có nhiều giọng, hệ thống không ép gán. Hãy nghe thử cả hai giọng, rồi mới áp dụng một cách gán dưới đây. Những đoạn có bằng chứng lẫn giọng vẫn để chưa rõ.</p>
+      <div className="mt-3 flex flex-wrap gap-2">
+        {([['agent','customer','A = nhân viên, B = khách'],['customer','agent','A = khách, B = nhân viên']] as const).map(([aRole,bRole,label]) =>
+          <button key={label} className={button} type="button" onClick={() => {
+            if (!window.confirm('Bạn đã nghe và xác nhận vai trò của hai giọng? Chỉ các đoạn có bằng chứng rõ mới được gán; cần lưu đánh giá sau khi đối chiếu.')) return
+            updateForm(previous => {
+              const utterances = { ...previous.utterances }
+              for (const u of call.utterances) {
+                if (u.speaker !== 'unknown') continue
+                const hint = speakerHintForInterval(u.start,u.end,speakerTurns)
+                if (hint==='A' || hint==='B') utterances[u.id] = {...utterances[u.id],speaker:hint==='A'?aRole:bRole}
+              }
+              return {...previous, utterances}
+            })
+          }}>{label}</button>)}
+      </div>
+      <p className="mt-2 text-xs text-slate-500">Việc gán nhãn này là <strong>QA xác nhận</strong>, không được tính thành độ chính xác của diarization. Bản nháp sẽ được lưu bằng nút Lưu đánh giá QA.</p>
+    </details>}
     <div className="grid grid-cols-1 items-start gap-5 xl:grid-cols-[minmax(0,1.45fr)_minmax(360px,1fr)]">
-      <TranscriptList utterances={call.utterances} patches={form?.utterances ?? {}} selectedId={selectedId} activeId={activeId} onSelect={selectUtterance}/>
       <div className="min-w-0 space-y-5">
+        <div id="call-audio" className="scroll-mt-28">
+          <CallRecording callId={call.id} audioUrl={call.audioUrl} duration={call.duration} utterances={call.utterances}
+            seekRequest={seekRequest} onActiveChange={setActiveId} onSelect={selectUtterance}/>
+        </div>
+        <EmotionTrajectory call={call} onSeek={selectUtterance}/>
+        <TranscriptList utterances={call.utterances} patches={form?.utterances ?? {}} selectedId={selectedId} activeId={activeId} onSelect={selectUtterance} sourceDialogue={sourceDialogue} transcriptFromAudio={call.source === 'upload'} timingMode={call.stageLog.find(step => step.stage === 'transcribe')?.evidence?.timingMode} speakerTurns={speakerTurns}/>
+      </div>
+      <div className="min-w-0 space-y-5">
+        <div id="call-ai" className="scroll-mt-28">
+          {call.status === 'ready' && (call.utterances.length > 0
+            ? <CallQaTriage callId={call.id} version={call.version}
+                autoEligible={call.provenance === 'real' || (call.provenance === 'imported' && call.title.startsWith('TTS TỔNG HỢP · OneVoice'))}/>
+            : <p role="status" className="rounded-xl border border-slate-200 bg-white p-4 text-sm leading-6 text-slate-700">Chưa có transcript để sàng lọc QA. Cần ASR thật hoặc transcript có căn cứ trước khi chạy phân loại.</p>)}
+        </div>
+        {call.status === 'ready' && call.utterances.length > 0 && <CallInsightsPanel callId={call.id} utterances={call.utterances} onEvidence={selectUtterance}/>}
         <section className="rounded-xl border border-[#c4d4dc] bg-white p-5 shadow-sm">
-          <h2 className="text-lg font-semibold text-[#12394d]">Đánh giá từng câu</h2>
-          {!selected ? <p className="mt-3 text-slate-700">Chọn một câu từ transcript.</p> : <>
+          <h2 className="text-lg font-semibold text-[#12394d]">{sourceDialogue ? 'Đánh giá nghiệp vụ cuộc gọi' : hasEmotionEvidence ? 'Đối chiếu dự đoán cảm xúc' : 'Đối chiếu ASR (tùy chọn)'}</h2>
+          {sourceDialogue ? <div className="mt-3 space-y-3 text-sm leading-6 text-slate-700">
+            <p className="font-medium text-slate-800">Khi nghe, hãy kiểm tra:</p>
+            <ul className="list-inside list-disc space-y-1 text-slate-700">
+              <li>Khách đang yêu cầu giải quyết vấn đề gì?</li>
+              <li>Nhân viên đã đưa ra hướng xử lý cụ thể chưa?</li>
+              <li>Có cam kết hoặc bước tiếp theo nào cần theo dõi?</li>
+            </ul>
+            <p className="border-t border-slate-100 pt-3 text-xs leading-5 text-slate-600">Vai trò người nói do kịch bản OneVoice cung cấp, chưa có mốc thời gian từng lượt; không suy diễn nhãn cảm xúc.</p>
+            <a href="#call-review" className="inline-flex min-h-10 items-center gap-1.5 font-semibold text-teal-800 hover:underline">
+              Ghi nhận kết luận QA <ChevronRight size={16} aria-hidden="true"/>
+            </a>
+          </div> : !selected ? <p className="mt-3 text-slate-700">Chọn một câu từ transcript.</p> : <>
             <p className="mt-2 text-sm text-slate-600">Câu {selected.idx + 1} · {clock(selected.start)} · {speakerLabels[selectedPatch?.speaker ?? selected.speaker]}</p>
-            <div className="mt-4 space-y-3 rounded-lg bg-slate-50 p-4 text-sm">
+            {!hasEmotionEvidence && <p className="mt-3 rounded-lg bg-slate-50 p-3 text-sm leading-6 text-slate-700">
+              Chưa chạy SER trên bản ghi này. Không cần gán cảm xúc bằng tay để AI xử lý QA; chỉ sửa chữ hoặc vai trò người nói nếu nghe thấy ASR sai và có bằng chứng.
+            </p>}
+            {hasEmotionEvidence && <div className="mt-4 space-y-3 rounded-lg bg-slate-50 p-4 text-sm">
               {([['Âm thanh', selected.acoustic], ['Văn bản', selected.lexical], ['Kết hợp', selected.fused]] as const).map(([label, prediction]) =>
                 <div key={label} className="flex flex-wrap items-baseline justify-between gap-2"><span className="text-slate-700">{label}</span><strong className="text-slate-900">{prediction ? emotionLabels[prediction.emotion] + ' · ' + percent(prediction.confidence) : 'Chưa có đầu ra'}</strong></div>)}
               <p className="border-t border-slate-200 pt-3 leading-6 text-slate-600">Phần trăm là điểm của mô hình cho câu này, không phải độ chính xác đã được kiểm chứng. Nhánh chưa có đầu ra được để trống.</p>
-            </div>
+            </div>}
             {inputsChanged && <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm leading-6 text-amber-950">
               Transcript hoặc người nói đã được chỉnh sửa. Dự đoán vẫn dựa trên đầu vào ban đầu; mô hình chưa được chạy lại.
               {(selected.originalText !== undefined || selected.originalSpeaker !== undefined) && <details className="mt-2">
@@ -302,6 +455,7 @@ function CallReviewSession({ callId }: { callId: string }) {
             </div>}
             <fieldset disabled={editDisabled} className="mt-4 min-w-0 disabled:opacity-70">
               <legend className="sr-only">Quyết định của người đánh giá</legend>
+              {hasEmotionEvidence && <>
               <div className="flex flex-wrap gap-2">
                 <button type="button" disabled={!selected.fused} aria-pressed={selectedPatch?.decision === 'confirmed'}
                   onClick={() => edit(selected.id, { decision: 'confirmed', emotion: null })} className={button + (selectedPatch?.decision === 'confirmed' ? ' border-teal-700 bg-teal-50 text-teal-900' : '')}><Check size={17}/> Xác nhận dự đoán</button>
@@ -313,6 +467,7 @@ function CallReviewSession({ callId }: { callId: string }) {
                 <option value="" disabled>Chọn nhãn khác dự đoán…</option>
                 {allEmotions.filter(emotion => emotion !== selected.fused?.emotion).map(emotion => <option key={emotion} value={emotion}>{emotionLabels[emotion]}</option>)}
               </select>
+              </>}
               <label className="mt-4 block text-sm font-semibold" htmlFor="speaker-select">Người nói</label>
               <select id="speaker-select" className={input} value={selectedPatch?.speaker ?? selected.speaker} onChange={e => edit(selected.id, { speaker: e.target.value as 'agent' | 'customer' | 'unknown' })}>
                 <option value="unknown">Chưa xác định</option><option value="agent">Nhân viên</option><option value="customer">Khách hàng</option>
@@ -324,8 +479,8 @@ function CallReviewSession({ callId }: { callId: string }) {
             </fieldset>
           </>}
         </section>
-        <section className="rounded-xl border border-[#c4d4dc] bg-white p-5 shadow-sm">
-          <h2 className="text-lg font-semibold text-[#12394d]">Điểm cần xem xét <span className="font-normal text-slate-600">· {call.moments.length}</span></h2>
+        {call.moments.length > 0 && <section className="rounded-xl border border-amber-200 bg-white p-5 shadow-sm">
+          <h2 className="text-lg font-semibold text-[#12394d]">Đoạn SER gợi ý nghe lại <span className="font-normal text-slate-600">· {call.moments.length}</span></h2>
           <p className="mt-2 text-sm leading-6 text-slate-600">Các quy tắc từ nhãn cảm xúc gợi ý đoạn nên nghe lại. Người đánh giá quyết định mức liên quan.</p>
           <div className="custom-scrollbar mt-4 max-h-72 space-y-2 overflow-y-auto">
             {call.moments.map(moment => <button type="button" key={moment.id} onClick={() => selectMoment(moment)} aria-pressed={selectedMomentId === moment.id}
@@ -349,24 +504,96 @@ function CallReviewSession({ callId }: { callId: string }) {
             <textarea id="moment-note" rows={2} maxLength={2000} className={input} value={momentPatch?.note ?? selectedMoment.note}
               onChange={e => { const note = e.target.value; updateForm(previous => ({ ...previous, moments: { ...previous.moments, [selectedMoment.id]: { relevance: previous.moments[selectedMoment.id] ? previous.moments[selectedMoment.id].relevance : selectedMoment.relevance, note } } })) }}/>
           </fieldset>}
-        </section>
-        <section className="rounded-xl border border-[#c4d4dc] bg-white p-5 shadow-sm">
-          <h2 className="text-lg font-semibold text-[#12394d]">Hoàn tất đánh giá</h2>
+        </section>}
+        <section id="call-review" className="scroll-mt-28 rounded-xl border-2 border-teal-700 bg-white p-5 shadow-sm">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-teal-700 text-sm font-bold text-white">3</span>
+            <h2 className="text-lg font-bold text-[#12394d]">Kết luận của người QA</h2>
+          </div>
+          <p className="mt-2 text-sm leading-6 text-slate-600">Sau khi nghe và đối chiếu gợi ý AI, ghi nhận phát hiện của bạn. Chỉ chọn hoàn tất khi đã xem xét đủ bằng chứng.</p>
+          {call.status === 'ready' && <QaRubricEditor utterances={call.utterances} disabled={editDisabled}
+            onEvidence={selectUtterance} onApply={report => {
+              updateForm(previous => {
+                const start = '[PHIẾU QA CÓ BẰNG CHỨNG — NGƯỜI ĐÁNH GIÁ]'
+                const end = '[/PHIẾU QA]'
+                const prior = previous.overallNote
+                const startAt = prior.indexOf(start)
+                const endAt = prior.indexOf(end, startAt)
+                const base = startAt >= 0 && endAt >= 0
+                  ? (prior.slice(0,startAt) + prior.slice(endAt+end.length)).trim()
+                  : prior.trim()
+                const combined = [base, report].filter(Boolean).join('\n\n')
+                if (combined.length > 5000) {
+                  setMessage('Nhận xét đã vượt giới hạn 5.000 ký tự. Hãy rút ngắn ghi chú trước khi thêm phiếu QA.')
+                  return previous
+                }
+                setMessage('Đã đưa phiếu vào nhận xét. Bấm Lưu đánh giá QA để ghi vào lịch sử.')
+                return {...previous, overallNote:combined}
+              })
+            }}/>}
           <fieldset disabled={editDisabled} className="min-w-0">
             <legend className="sr-only">Ghi chú và trạng thái đánh giá</legend>
-            <label className="mt-4 block text-sm font-semibold" htmlFor="overall-note">Ghi chú tổng thể</label>
-            <textarea id="overall-note" value={form?.overallNote ?? ''} onChange={e => { const note = e.target.value; updateForm(previous => ({ ...previous, overallNote: note })) }} maxLength={5000} rows={3} className={input}/>
-            <label className="mt-4 flex items-start gap-3 text-sm leading-6"><input type="checkbox" className="mt-1 h-4 w-4 shrink-0" checked={form?.complete ?? false} onChange={e => { const complete = e.target.checked; updateForm(previous => ({ ...previous, complete })) }}/> Đã hoàn tất việc xem xét cuộc gọi</label>
+            <label className="mt-4 block text-sm font-semibold text-slate-800" htmlFor="overall-note">Nhận xét của QA</label>
+            <textarea id="overall-note"
+              placeholder="Ví dụ: Khách chưa được hỗ trợ đăng nhập thành công; nhân viên cần xác minh lại hướng xử lý và lịch liên hệ tiếp."
+              value={noteIsImportedProvenance ? '' : (form?.overallNote ?? '')}
+              onChange={e => { const note = e.target.value; updateForm(previous => ({ ...previous, overallNote: note })) }}
+              maxLength={5000} rows={4} className={input}/>
+            {noteIsImportedProvenance && <p className="mt-2 text-xs leading-5 text-slate-600">
+              Thông tin nguồn dataset đang được giữ trong lịch sử xử lý và mục giấy phép ở phía trên.
+              Ô này dành cho đánh giá nghiệp vụ, không cần chép lại metadata.
+            </p>}
+            <label className="mt-4 flex items-start gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm leading-6">
+              <input type="checkbox" className="mt-1 h-4 w-4 shrink-0 accent-teal-700" checked={form?.complete ?? false}
+                onChange={e => { const complete = e.target.checked; updateForm(previous => ({
+                  ...previous, complete,
+                  overallNote: noteIsImportedProvenance ? '' : previous.overallNote,
+                })) }}/>
+              <span><strong className="block text-slate-900">Đã kiểm tra và hoàn tất đánh giá QA</strong>
+                <span className="block text-slate-600">Chỉ đánh dấu sau khi nghe, đối chiếu. Hoàn tất QA không có nghĩa vụ việc đã được giải quyết.</span>
+              </span>
+            </label>
           </fieldset>
-          <button type="button" onClick={() => void save()} disabled={!canSave} className={primaryButton + ' mt-5 w-full'}><Save size={18}/>{saving ? 'Đang lưu…' : 'Lưu đánh giá'}</button>
-          {call.status === 'ready' && <a className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-teal-800 underline-offset-4 hover:underline" href={resolveApiUrl('/api/calls/' + encodeURIComponent(call.id) + '/export.csv')}><Download size={17}/> Xuất kết quả CSV đã lưu</a>}
-          {call.status === 'ready' && <a className="mt-3 block text-sm font-semibold text-teal-800 underline-offset-4 hover:underline" href={resolveApiUrl('/api/calls/' + encodeURIComponent(call.id) + '/export.json')}>Tải bằng chứng và đầu vào gốc (JSON)</a>}
-          {dirty && <p className="mt-2 text-sm text-slate-600">Tệp xuất chỉ gồm dữ liệu đã lưu; bản nháp chưa được đưa vào.</p>}
+          <button type="button" onClick={() => void save()} disabled={!canSave} className={primaryButton + ' mt-5 w-full'}><Save size={18}/>{saving ? 'Đang lưu…' : 'Lưu đánh giá QA'}</button>
+          {!dirty && call.status === 'ready' && <p className="mt-2 text-center text-xs text-slate-500">Nhập nhận xét hoặc thay đổi trạng thái để bật nút lưu.</p>}
+          {call.status === 'ready' && <details className="mt-4 border-t border-slate-100 pt-3">
+            <summary className="cursor-pointer text-xs font-semibold text-slate-700">Xuất kết quả hoặc bằng chứng gốc</summary>
+            <div className="mt-3 space-y-2">
+              <a className="inline-flex items-center gap-2 text-sm font-semibold text-teal-800 hover:underline" href={resolveApiUrl('/api/calls/' + encodeURIComponent(call.id) + '/export.csv')}>
+                <Download size={16}/> Xuất đánh giá đã lưu (CSV)
+              </a>
+              <a className="block text-sm font-semibold text-teal-800 hover:underline" href={resolveApiUrl('/api/calls/' + encodeURIComponent(call.id) + '/export.json')}>Tải bằng chứng gốc và lịch sử (JSON)</a>
+            </div>
+            {dirty && <p className="mt-2 text-xs text-slate-600">Tệp xuất chỉ gồm dữ liệu đã lưu, chưa bao gồm bản nháp.</p>}
+          </details>}
         </section>
       </div>
     </div>
-    <CallCaseLink callId={call.id} callDate={call.callDate}/>
-    <CallWorkflowPanel callId={call.id}/>
+    <div id="call-case" className="scroll-mt-28 space-y-4">
+      <div className="flex flex-wrap items-center gap-2 px-1">
+        <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-slate-700 text-sm font-bold text-white">4</span>
+        <h2 className="text-lg font-bold text-[#12394d]">Xử lý tiếp nếu cần</h2>
+        <span className="text-sm text-slate-600">Chỉ tạo vụ việc sau khi QA xác nhận có vấn đề cần theo dõi.</span>
+      </div>
+      <CallCaseLink callId={call.id} callDate={call.callDate}/>
+      <details className="rounded-xl border border-slate-200 bg-white p-4">
+        <summary className="cursor-pointer text-sm font-semibold text-slate-800">Thông tin ticket, lý do gọi và lịch sử xử lý (nếu sử dụng)</summary>
+        <div className="mt-4"><CallWorkflowPanel callId={call.id}/></div>
+      </details>
+    </div>
+    {(call.provenance === 'imported' || call.provenance === 'real') && call.hasAudio && !call.title.startsWith('HỘI THOẠI ĐIỆN THOẠI THẬT · DataHive') &&
+      <details className="rounded-lg border border-slate-200 bg-white p-4 text-sm leading-6 text-slate-700">
+        <summary className="cursor-pointer font-semibold text-[#12394d]">{call.provenance === 'real' ? 'Chạy lại ASR + QA trên ghi âm này' : 'Tùy chọn nghiên cứu: đối chiếu transcript nguồn với ASR thật'}</summary>
+        <p className="mt-1">{call.provenance === 'real' ? 'Tạo bản phân tích mới từ chính file âm thanh đã tải lên. ASR sẽ tạo các đoạn có timestamp và XLM-R sẽ chấm tự động. Hồ sơ cũ, ghi chú QA và file ghi âm không bị ghi đè.' : 'Tạo một hồ sơ mới từ chính file WAV này. ASR sẽ nghe và tạo transcript mới; transcript nguồn và bản ghi gốc vẫn giữ nguyên để đối chiếu. QA XLM-R được chạy riêng sau khi ASR hoàn tất. Nếu F4 chưa được xác minh, bước SER sẽ ghi rõ là bỏ qua.'}</p>
+        <button type="button" className={primaryButton + ' mt-3'}
+          disabled={!realAsrAvailable || reanalyzing || saving || dirty}
+          onClick={() => void analyzeSourceAudio()}>
+          <RefreshCw size={16}/>{reanalyzing ? 'Đang tạo tác vụ ASR…' : 'Phân tích WAV bằng ASR thật'}
+        </button>
+        {!realAsrAvailable && <p className="mt-2 text-amber-900">ASR hiện chưa sẵn sàng. Hệ thống vẫn tự chạy QA trên transcript nguồn khi model XLM-R được kết nối.</p>}
+        {dirty && <p className="mt-2 text-amber-900">Hãy lưu hoặc bỏ bản nháp review trước khi tạo hồ sơ phân tích mới.</p>}
+      </details>}
+
     {call.stageLog.length > 0 && call.status === 'ready' && <details className="rounded-xl border border-slate-300 bg-white p-5 text-sm">
       <summary className="cursor-pointer font-semibold text-slate-800">Nguồn xử lý và thời gian từng bước</summary>
       <ul className="mt-4 space-y-3">{call.stageLog.map(step => <li key={step.stage} className="border-t border-slate-200 pt-3 first:border-0 first:pt-0">

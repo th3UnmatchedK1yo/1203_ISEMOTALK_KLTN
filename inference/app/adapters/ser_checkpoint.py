@@ -192,7 +192,10 @@ class CheckpointSer:
         detail = f"{self.factory}: " + ("đã nạp; " + why if self._model is not None else "cấu hình sẵn; sẽ kiểm SHA256 và nạp khi dùng lần đầu")
         if self.allow_unverified:
             detail += " · cho phép chế độ gỡ lỗi chưa xác minh"
-        return Status(self.name, True, False, detail, verified=self.verified, loaded=self._model is not None)
+        # "verified" means the weights were checked in this *runtime*.
+        # The persisted held-out record only allows a cold start; full SHA256
+        # and original factory identity are checked again by _load on demand.
+        return Status(self.name, bool(ok), False, detail, verified=self.verified, loaded=self._model is not None)
 
     def _load(self):
         try:
@@ -216,6 +219,17 @@ class CheckpointSer:
             module_name, _, func_name = self.factory.partition(":")
             if cfg["_config_dir"] not in sys.path:
                 sys.path.insert(0, cfg["_config_dir"])
+            # Private model packages may live outside this public web project.
+            # Only add explicitly declared existing roots from the hashed config.
+            roots = cfg.get("importRoots", [])
+            if not isinstance(roots, list) or any(not isinstance(r, str) for r in roots):
+                raise ValueError("importRoots phải là danh sách đường dẫn module.")
+            for relative in roots:
+                root = (Path(cfg["_config_dir"]) / relative).resolve()
+                if not root.is_dir():
+                    raise ValueError(f"Import root không tồn tại: {root}")
+                if str(root) not in sys.path:
+                    sys.path.insert(0, str(root))
             factory = getattr(importlib.import_module(module_name), func_name)
             actual_source = inspect.getsourcefile(factory)
             if not actual_source or Path(actual_source).resolve() != Path(cfg["_factory_source"]):
