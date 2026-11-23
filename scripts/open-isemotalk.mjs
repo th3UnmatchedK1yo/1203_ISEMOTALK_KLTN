@@ -2,7 +2,8 @@
 // Uses an SSH tunnel; runs API + Python together on FTISU in isolated ports.
 // No mock inference, no overwriting the original dataset/DB, no user CMD chain.
 import { spawn } from 'node:child_process'
-import { existsSync, mkdirSync, openSync, readFileSync } from 'node:fs'
+import { closeSync, existsSync, mkdirSync, openSync, readFileSync } from 'node:fs'
+import { sshRuntimeArgs } from './oneclick-ssh.mjs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -37,11 +38,16 @@ function showLastLines(name) {
   if (existsSync(file)) console.error(readFileSync(file, 'utf8').split(/\r?\n/).slice(-18).join('\n'))
 }
 function start(name, command, args, options = {}) {
-  const fd = openSync(logFile(name), 'a')
+  // SSH MUST inherit the interactive Windows terminal to request a password
+  // when this user's remote VS Code connection is not backed by a loaded key.
+  // Never echo, collect, persist or forward passwords through JavaScript.
+  const fd = options.interactive ? null : openSync(logFile(name), 'a')
   const child = spawn(command, args, {
     cwd: root, env: options.env || process.env,
-    windowsHide: true, shell: false, stdio: ['ignore', fd, fd],
+    windowsHide: !options.interactive, shell: false,
+    stdio: options.interactive ? 'inherit' : ['ignore', fd, fd],
   })
+  if (fd !== null) closeSync(fd)
   child.on('error', e => { child.launchError = e.message; log(name + ': ' + e.message) })
   owned.push(child)
   return child
@@ -81,49 +87,37 @@ async function main() {
     log('Cài các phụ thuộc giao diện lần đầu...')
     await run('cmd.exe', ['/d', '/s', '/c', 'npm ci --no-audit --no-fund'])
   }
-  log('Cập nhật bản giao diện đang mở...')
-  await run('cmd.exe', ['/d', '/s', '/c', 'npm run build'])
-
-  const tunnel = start('tunnel', 'ssh', [
-    '-N', '-o', 'BatchMode=yes', '-o', 'ExitOnForwardFailure=yes',
-    '-o', 'ServerAliveInterval=30',
-    '-L', '127.0.0.1:' + apiPort + ':127.0.0.1:3102', 'ftisu-ser',
-  ])
-  let live = null
-  for (let i = 0; i < 5; i++) {
-    live = await health()
-    if (live) break
-    if (tunnel.exitCode !== null || tunnel.launchError) break
-    await delay(900)
-  }
-  if (tunnel.exitCode !== null || tunnel.launchError) {
-    showLastLines('tunnel')
-    throw Error('SSH ftisu-ser không kết nối được. Cần kiểm tra alias SSH/quyền truy cập trên máy này.')
-  }
+  // One SSH authentication instead of two non-interactive sessions.
+  // A key from ssh-agent works without prompting; otherwise Windows OpenSSH
+  // can ask for the user's normal FTISU account password in THIS console.
+  let live = await health()
   if (live && !valid(live)) {
-    throw Error('Port riêng 3102 đang phục vụ ứng dụng khác hoặc model chưa sẵn sàng. Không tự dừng dịch vụ của người khác.')
+    throw Error('Cổng 13002 đang có API không khớp với phiên QA thật. Không tự dừng tiến trình khác.')
   }
-
-  if (!live) {
-    log('Mở Python + Express ở FTISU (không đụng bản preview cũ)...')
-    const remote = "cd ~/services/isemotalk && git fetch origin && git switch feat/remote-gpu-full-pipeline-20261123 && git pull --ff-only origin feat/remote-gpu-full-pipeline-20261123 && . ~/.local/share/isemotalk-node-env.sh && PORT=3102 ISEMO_INFERENCE_PORT=8102 npm run remote:qa-auto"
-    const shellCommand = "bash -lc '" + remote.replaceAll("'", "'\\''") + "'"
-    const worker = start('gpu', 'ssh', [
-      '-o', 'BatchMode=yes', '-o', 'ConnectTimeout=10',
-      '-o', 'ServerAliveInterval=30',
-      'ftisu-ser', shellCommand,
-    ])
-    for (let i = 0; i < 45; i++) {
+  if (!valid(live)) {
+    log('Kết nối FTISU qua SSH. Nếu hệ thống hỏi mật khẩu, nhập mật khẩu FTISU rồi nhấn Enter.')
+    log('Ký tự mật khẩu có thể không hiển thị trong console. Không nhập mật khẩu vào chat.')
+    const sshProcess = start('ssh+gpu', 'ssh', sshRuntimeArgs(), {interactive: true})
+    for (let i = 0; i < 360; i++) {
       live = await health()
       if (valid(live)) break
-      if (worker.exitCode !== null || worker.launchError) break
-      await delay(2000)
+      if (sshProcess.exitCode !== null || sshProcess.launchError) break
+      await delay(1000)
     }
     if (!valid(live)) {
-      showLastLines('gpu')
-      throw Error('GPU QA chưa khởi động thành công. Ghi rõ lỗi trong .isemotalk-launcher/gpu.log; không giả vờ model chạy.')
+      if (sshProcess.exitCode !== null || sshProcess.launchError) {
+        throw Error('Không đăng nhập hoặc khởi động được FTISU. Xem lỗi SSH/GPU ở phía trên. ' +
+          'Nếu Permission denied thì kiểm tra đúng mật khẩu/SSH key của tài khoản emotalk; launcher không bỏ qua xác thực.')
+      }
+      throw Error('Đã kết nối SSH nhưng QA GPU chưa báo sẵn sàng. Xem lỗi mô hình trong console; ' +
+        'không tự chuyển sang mô phỏng.')
     }
+  } else {
+    log('Đang sử dụng phiên API GPU thật đã có tại 127.0.0.1:' + apiPort + '.')
   }
+  log('Kết nối API/Python thành công. Đang build giao diện hiện tại...')
+  await run('cmd.exe', ['/d', '/s', '/c', 'npm run build'])
+
   log('XLM-R QA thật đã kết nối. ASR: ' +
     (live.inference.components.asr.ready ? 'PhoWhisper thật' : 'chưa có checkpoint cached; dùng transcript nguồn') +
     '. SER: chưa xác minh, không dùng nhãn giả.')
@@ -155,6 +149,7 @@ async function main() {
 main().catch(error => {
   console.error('\n[ISEmoTalk] Không mở được phiên làm việc:', error.message)
   console.error('[ISEmoTalk] Không chuyển sang demo/mô phỏng khi model thật lỗi.')
+  console.error('[ISEmoTalk] Nếu SSH cần mật khẩu, launcher sẽ chỉ hỏi trong cửa sổ Windows; không gửi mật khẩu cho bất kỳ ai.')
   cleanup()
   process.exitCode = 1
 })
