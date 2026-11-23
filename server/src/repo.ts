@@ -170,6 +170,7 @@ export interface ListQuery {
   status?: string
   provenance?: string
   source?: string
+  datasetScope?: 'business' | 'speech_only' | 'all'
   attention?: boolean
   sort?: string
   dir?: 'asc' | 'desc'
@@ -203,6 +204,11 @@ export function listCalls(db: DB, q: ListQuery) {
   if (q.status) (where.push('c.status = ?'), args.push(q.status))
   if (q.provenance) (where.push('c.provenance = ?'), args.push(q.provenance))
   if (q.source) (where.push('c.source = ?'), args.push(q.source))
+  // The speech benchmarks/ordinary DataHive conversations are NOT CSKH
+  // cases. They remain accessible under the explicit research-data filter.
+  const otherSpeech = "(c.provenance = 'imported' AND (c.title LIKE 'GIỌNG THẬT · %' OR c.title LIKE 'HỘI THOẠI ĐIỆN THOẠI THẬT · DataHive%'))"
+  if (q.datasetScope === 'business') where.push('NOT ' + otherSpeech)
+  if (q.datasetScope === 'speech_only') where.push(otherSpeech)
   if (q.attention) where.push("c.status = 'ready' AND c.priority = 'high' AND c.review_status != 'reviewed'")
   const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : ''
 
