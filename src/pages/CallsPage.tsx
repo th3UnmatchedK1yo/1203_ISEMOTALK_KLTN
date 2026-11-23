@@ -56,53 +56,78 @@ export function CallsPage() {
 
   const select = 'mt-2 h-11 w-full rounded-lg border border-[#b5c9d2] bg-white px-3 text-sm font-medium text-slate-800'
   const pages = data ? Math.max(1, Math.ceil(data.total / data.pageSize)) : 1
+  const showSer = !!data?.items.some(call => call.dominantEmotion !== null)
   return <div className="space-y-5">
     <header className="flex flex-wrap items-start justify-between gap-4">
-      <div><h1 className="text-3xl font-semibold tracking-tight text-[#12394d]">Cuộc gọi cần xem xét</h1>
-        <p className="mt-2 text-base text-slate-700">Nghe lại bằng chứng, kiểm tra cảm xúc và ghi nhận hướng xử lý.</p>
+      <div><h1 className="text-3xl font-bold tracking-tight text-[#12394d]">Hàng đợi đánh giá QA</h1>
+        <p className="mt-2 text-base text-slate-700">Chọn cuộc gọi cần xem trước, nghe bằng chứng rồi ghi nhận quyết định.</p>
       </div>
       <div className="flex flex-wrap items-center gap-3">
         <button type="button" onClick={() => setRefresh(n => n + 1)} disabled={loading} className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-semibold hover:bg-teal-50 disabled:opacity-50"><RefreshCw size={17}/> Cập nhật</button>
         <Link to="/calls/new" className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-[#0E5665] px-4 py-2 text-sm font-semibold text-white hover:bg-[#0B4554]"><Upload size={17}/> Thêm cuộc gọi</Link>
       </div>
     </header>
-    {data && <p className="text-sm leading-6 text-slate-700">
-      Có <strong>{data.total}</strong> cuộc gọi theo bộ lọc · <strong>{data.counts.qaAttention ?? 0}</strong> gợi ý QA cần xem ·
-      <strong> {data.counts.qaPending ?? 0}</strong> chưa có kết quả QA ·
-      <strong> {data.counts.attention}</strong> ưu tiên cảm xúc SER ·
-      <strong> {data.counts.processing}</strong> đang xử lý ·
-      <strong> {data.counts.failed}</strong> cần thử lại
-    </p>}
-    {qaReady && <p role="status" className="text-sm leading-6 text-teal-800">XLM-R đang tự sàng lọc cuộc gọi đủ điều kiện. Điểm AI QA được cập nhật ngay trong danh sách, không cần bấm chấm thủ công.</p>}
+    {data && <div className="grid gap-3 sm:grid-cols-3" aria-label="Tình trạng hàng đợi QA">
+      <div className="rounded-xl border border-amber-200 border-l-4 border-l-amber-500 bg-white px-4 py-3">
+        <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">AI gợi ý xem trước</p>
+        <p className="mt-1 text-2xl font-bold tabular-nums text-slate-900">{data.counts.qaAttention ?? 0}</p>
+      </div>
+      <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
+        <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">Chưa có kết quả AI</p>
+        <p className="mt-1 text-2xl font-bold tabular-nums text-slate-900">{data.counts.qaPending ?? 0}</p>
+      </div>
+      <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
+        <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">Đang xử lý ghi âm</p>
+        <p className="mt-1 text-2xl font-bold tabular-nums text-slate-900">{data.counts.processing}</p>
+      </div>
+    </div>}
+    {qaReady && <p role="status" className="text-xs leading-5 text-teal-800">XLM-R đang tự sàng lọc transcript đủ điều kiện. Người QA vẫn quyết định sau khi nghe.</p>}
     <section className="rounded-xl border border-[#c4d4dc] bg-white p-4" aria-label="Tìm và lọc cuộc gọi">
       <label className="relative block"><span className="sr-only">Tìm mã, tiêu đề hoặc khách hàng</span><Search aria-hidden="true" className="absolute left-3 top-3.5 text-slate-600" size={18}/>
         <input type="search" className="h-12 w-full rounded-lg border border-[#b5c9d2] bg-white pl-11 pr-4 text-base" placeholder="Tìm mã, tiêu đề, khách hàng…" value={searchInput} onChange={e => setSearchInput(e.target.value)}/>
       </label>
-      <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+      <div className="mt-4 grid gap-3 sm:grid-cols-2">
         <label className="block text-sm font-semibold text-slate-700">Thứ tự xem xét
           <select className={select} value={listSort} onChange={e => { setListSort(e.target.value as 'qa_attention' | 'date'); setPage(1) }}>
             <option value="qa_attention">Gợi ý QA trước</option>
             <option value="date">Cuộc gọi mới nhất</option>
           </select>
         </label>
-        <label className="block text-sm font-semibold text-slate-700">Loại bản ghi<select className={select} value={datasetScope} onChange={e => { setDatasetScope(e.target.value as 'business'|'speech_only'|'all'); setPage(1) }}>
-          <option value="business">Cuộc gọi CSKH / OneVoice</option>
-          <option value="speech_only">Mẫu thử ASR / DataHive</option>
-          <option value="all">Tất cả bản ghi</option>
-        </select></label>
-        <label className="block text-sm font-semibold text-slate-700">Nguồn kết quả<select className={select} value={provenance} onChange={e => { setProvenance(e.target.value); setPage(1) }}>
-          <option value="">Tất cả nguồn</option><option value="real">Kết quả inference</option><option value="imported">Nhập từ tệp</option><option value="mock">Demo / mô phỏng</option>
-        </select></label>
-        <label className="block text-sm font-semibold text-slate-700">Mức ưu tiên<select className={select} value={priority} onChange={e => { setPriority(e.target.value); setPage(1) }}>
-          <option value="">Mọi mức ưu tiên</option><option value="high">Cao</option><option value="medium">Trung bình</option><option value="low">Thấp</option>
-        </select></label>
-        <label className="block text-sm font-semibold text-slate-700">Đánh giá của QA<select className={select} value={review} onChange={e => { setReview(e.target.value); setPage(1) }}>
-          <option value="">Mọi trạng thái</option><option value="unreviewed">Chưa xem xét</option><option value="in_progress">Đang xem xét</option><option value="reviewed">Đã xem xét</option>
-        </select></label>
-        <label className="block text-sm font-semibold text-slate-700">Xử lý dữ liệu<select className={select} value={status} onChange={e => { setStatus(e.target.value); setPage(1) }}>
-          <option value="">Mọi trạng thái</option><option value="ready">Sẵn sàng</option><option value="queued">Đang chờ</option><option value="processing">Đang xử lý</option><option value="failed">Cần thử lại</option>
-        </select></label>
+        <label className="block text-sm font-semibold text-slate-700">Loại dữ liệu
+          <select className={select} value={datasetScope} onChange={e => { setDatasetScope(e.target.value as 'business'|'speech_only'|'all'); setPage(1) }}>
+            <option value="business">Cuộc gọi CSKH / OneVoice</option>
+            <option value="speech_only">Mẫu thử ASR / DataHive</option>
+            <option value="all">Tất cả bản ghi</option>
+          </select>
+        </label>
       </div>
+      <details className="group mt-4 border-t border-slate-100 pt-3">
+        <summary className="cursor-pointer text-sm font-semibold text-teal-900">Bộ lọc nâng cao
+          <span className="ml-2 font-normal text-slate-600">(nguồn, đánh giá, trạng thái)</span>
+        </summary>
+        <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <label className="block text-sm font-semibold text-slate-700">Nguồn kết quả
+            <select className={select} value={provenance} onChange={e => { setProvenance(e.target.value); setPage(1) }}>
+              <option value="">Tất cả nguồn</option><option value="real">Kết quả inference</option><option value="imported">Nhập từ tệp</option><option value="mock">Demo / mô phỏng</option>
+            </select>
+          </label>
+          <label className="block text-sm font-semibold text-slate-700">Mức ưu tiên SER
+            <select className={select} value={priority} onChange={e => { setPriority(e.target.value); setPage(1) }}>
+              <option value="">Mọi mức ưu tiên</option><option value="high">Cao</option><option value="medium">Trung bình</option><option value="low">Thấp</option>
+            </select>
+          </label>
+          <label className="block text-sm font-semibold text-slate-700">Đánh giá của QA
+            <select className={select} value={review} onChange={e => { setReview(e.target.value); setPage(1) }}>
+              <option value="">Mọi trạng thái</option><option value="unreviewed">Chưa xem xét</option><option value="in_progress">Đang xem xét</option><option value="reviewed">Đã xem xét</option>
+            </select>
+          </label>
+          <label className="block text-sm font-semibold text-slate-700">Xử lý dữ liệu
+            <select className={select} value={status} onChange={e => { setStatus(e.target.value); setPage(1) }}>
+              <option value="">Mọi trạng thái</option><option value="ready">Sẵn sàng</option><option value="queued">Đang chờ</option><option value="processing">Đang xử lý</option><option value="failed">Cần thử lại</option>
+            </select>
+          </label>
+        </div>
+      </details>
     </section>
     {error && <div role="alert" className="flex items-start gap-3 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-900"><AlertCircle size={19} className="shrink-0"/>{error}</div>}
     <div className="overflow-x-auto rounded-xl border border-[#c4d4dc] bg-white shadow-sm" aria-busy={loading}>
