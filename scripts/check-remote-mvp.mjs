@@ -24,6 +24,11 @@ try {
   const calls = await getJson(direct + '/api/calls')
   if (!Number.isInteger(calls?.total) || !Array.isArray(calls.items))
     throw Error('/api/calls is not returning the list contract.')
+  if (api.demoData === true) {
+    if (calls.total < 1 || !calls.items.some(item => item.provenance === 'mock'))
+      throw Error('Mock-data demo flag is on but no labeled sample calls are available.')
+    console.log('[mvp] MIDTERM MOCK DATA WORKSPACE — synthetic audio has no speech; model predictions are not real.')
+  }
   const cases = await getJson(direct + '/api/cases')
   if (!Number.isInteger(cases?.total) || !Array.isArray(cases.items))
     throw Error('/api/cases is not returning the list contract.')
