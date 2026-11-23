@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { apiJson } from '@/api/isemotalk'
+import { apiJson, getSystemStatus } from '@/api/isemotalk'
 
 // A second, independent QA model: predicts synthetic-dataset attention need.
 // F4 SER remains on the audio timeline; this is NOT a human QA verdict.
@@ -22,6 +22,7 @@ export function CallQaTriage({ callId, version }: { callId: string; version: num
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const [modelAvailable, setModelAvailable] = useState<boolean | null>(null)
 
   useEffect(() => {
     const controller = new AbortController()
@@ -35,8 +36,19 @@ export function CallQaTriage({ callId, version }: { callId: string; version: num
     return () => controller.abort()
   }, [callId, version])
 
+  useEffect(() => {
+    const controller = new AbortController()
+    setModelAvailable(null)
+    void getSystemStatus(controller.signal)
+      .then(status => {
+        if (!controller.signal.aborted) setModelAvailable(status.inference.reachable && status.inference.qa?.ready === true)
+      })
+      .catch(() => { if (!controller.signal.aborted) setModelAvailable(false) })
+    return () => controller.abort()
+  }, [callId])
+
   const run = async () => {
-    if (busy) return
+    if (busy || modelAvailable !== true) return
     setBusy(true)
     setError('')
     try {
@@ -58,11 +70,12 @@ export function CallQaTriage({ callId, version }: { callId: string; version: num
         <h2 id="qa-model-title" className="text-lg font-semibold text-[#12394d]">AI gợi ý cuộc gọi cần QA</h2>
         <p className="mt-1 text-sm text-slate-600">Model phân loại mức cần chú ý của cả cuộc gọi, độc lập với các nhãn cảm xúc SER.</p>
       </div>
-      <button type="button" onClick={() => void run()} disabled={busy || loading}
+      <button type="button" onClick={() => void run()} disabled={busy || loading || modelAvailable !== true}
         className="inline-flex min-h-11 items-center rounded-lg border border-teal-800 bg-white px-4 py-2 text-sm font-semibold text-teal-900 hover:bg-teal-50 disabled:opacity-50">
         {busy ? 'Đang chạy trên GPU…' : prediction ? 'Chạy lại model QA' : 'Phân tích bằng model QA'}
       </button>
     </div>
+    {modelAvailable !== true && <p role="status" className="mt-3 text-sm text-amber-900">{modelAvailable === null ? 'Đang kiểm tra model QA…' : 'Model QA chưa sẵn sàng trên GPU. Có thể xem kết quả đã lưu, nhưng chưa thể chạy lại model trong chế độ preview.'}</p>}
     {loading && <p role="status" className="mt-3 text-sm text-slate-600">Đang đọc kết quả QA đã lưu…</p>}
     {error && <p role="alert" className="mt-3 rounded-lg bg-red-50 p-3 text-sm text-red-800">{error}</p>}
     {prediction && <div className="mt-4 space-y-2 rounded-lg border border-slate-200 bg-slate-50 p-4">
