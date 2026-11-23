@@ -15,6 +15,7 @@ import { TranscriptList } from '@/components/review/TranscriptList'
 import { CallWorkflowPanel } from '@/components/review/CallWorkflowPanel'
 import { CallCaseLink } from '@/components/review/CallCaseLink'
 import { CallQaTriage } from '@/components/review/CallQaTriage'
+import { CallInferenceTrail } from '@/components/review/CallInferenceTrail'
 import { sourceDialogueTurns } from '@/lib/source-dialogue'
 
 const allEmotions: Emotion[] = ['neutral', 'happy', 'sad', 'angry']
@@ -296,6 +297,7 @@ function CallReviewSession({ callId }: { callId: string }) {
         </li>)}
       </ol>
     </nav>
+    <CallInferenceTrail call={call}/>
     {call.provenance === 'imported' &&
       (call.title.startsWith('TTS TỔNG HỢP') || call.title.startsWith('GIỌNG THẬT') || call.title.startsWith('HỘI THOẠI ĐIỆN THOẠI THẬT')) &&
       <details className="group rounded-xl border border-slate-200 bg-white text-sm leading-6 text-slate-700" role="note">
