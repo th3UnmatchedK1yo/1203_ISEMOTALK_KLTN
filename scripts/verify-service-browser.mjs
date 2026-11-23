@@ -152,7 +152,7 @@ try{
  evidence.screenshots.push(path.join(outputDir,'calls-queue-desktop.png'),path.join(outputDir,'calls-queue-mobile.png'))
  await page.setViewportSize({width:1440,height:900})
  await page.goto(base+'/analytics')
- await page.getByRole('heading',{name:'XLM-R đã chấm bao nhiêu cuộc gọi?'}).waitFor()
+ await page.getByRole('heading',{name:'XLM-R đã sàng lọc bao nhiêu cuộc gọi?'}).waitFor()
  await page.getByText(/hồ sơ đủ điều kiện đã có kết quả/).waitFor()
  evidence.checks.push('Analytics exposes XLM-R QA coverage separately from SER; no fabricated 10000-call claims')
  await page.screenshot({path:path.join(outputDir,'qa-analytics-desktop.png'),fullPage:true})
