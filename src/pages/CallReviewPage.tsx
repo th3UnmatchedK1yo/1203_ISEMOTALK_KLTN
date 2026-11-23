@@ -238,6 +238,7 @@ function CallReviewSession({ callId }: { callId: string }) {
     <button type="button" className={button} onClick={() => setReload(value => value + 1)}><RefreshCw size={17}/> Thử tải lại</button>
   </div>
 
+  const sourceDialogue = call.provenance === 'imported' && call.title.startsWith('TTS TỔNG HỢP · OneVoice') && call.utterances.length === 1
   const selected = call.utterances.find(u => u.id === selectedId) ?? null
   const selectedPatch = selected ? form?.utterances[selected.id] : undefined
   const selectedMoment = call.moments.find(moment => moment.id === selectedMomentId)
@@ -273,7 +274,7 @@ function CallReviewSession({ callId }: { callId: string }) {
           onClick={() => void analyzeSourceAudio()}>
           <RefreshCw size={16}/>{reanalyzing ? 'Đang tạo tác vụ ASR…' : 'Phân tích WAV bằng ASR thật'}
         </button>
-        {!realAsrAvailable && <p className="mt-2 text-amber-900">ASR hiện chưa sẵn sàng. Mày vẫn có thể chạy QA model thật trên transcript nguồn nếu dịch vụ QA đã được bật.</p>}
+        {!realAsrAvailable && <p className="mt-2 text-amber-900">ASR hiện chưa sẵn sàng. Hệ thống vẫn tự chạy QA trên transcript nguồn khi model XLM-R được kết nối.</p>}
         {dirty && <p className="mt-2 text-amber-900">Hãy lưu hoặc bỏ bản nháp review trước khi tạo hồ sơ phân tích mới.</p>}
       </div>}
     {call.provenance === 'imported' &&
@@ -343,7 +344,7 @@ function CallReviewSession({ callId }: { callId: string }) {
       <span>Có thay đổi chưa lưu{!storageError && ' · Bản nháp được giữ trong phiên trình duyệt này'}</span>
       <button type="button" onClick={downloadDraft} className="font-semibold underline underline-offset-4">Tải bản nháp</button>
     </div>}
-    {unknownCount > 0 && <p className="rounded-lg border border-slate-300 bg-white p-4 text-sm leading-6 text-slate-800">
+    {unknownCount > 0 && !sourceDialogue && <p className="rounded-lg border border-slate-300 bg-white p-4 text-sm leading-6 text-slate-800">
       <strong>{unknownCount} câu chưa xác định người nói.</strong> Những câu này không được tính vào cảm xúc khách hàng. Hãy nghe lại và gán vai trò nếu có căn cứ.
       {call.dominantEmotion === null && ' Chưa đủ dữ liệu để nhận định cảm xúc hoặc mức ưu tiên theo khách hàng.'}
     </p>}
@@ -353,11 +354,14 @@ function CallReviewSession({ callId }: { callId: string }) {
       ? <CallQaTriage callId={call.id} version={call.version}/>
       : <p role="status" className="rounded-lg border border-slate-200 bg-white p-4 text-sm text-slate-700">Bản ghi này chưa có transcript nên chưa thể chạy bộ phân loại QA từ văn bản. Audio vẫn phát bình thường; cần ASR thực hoặc transcript đã xác minh trước khi chấm QA.</p>)}
     <div className="grid grid-cols-1 items-start gap-5 xl:grid-cols-[minmax(0,1.45fr)_minmax(360px,1fr)]">
-      <TranscriptList utterances={call.utterances} patches={form?.utterances ?? {}} selectedId={selectedId} activeId={activeId} onSelect={selectUtterance}/>
+      <TranscriptList utterances={call.utterances} patches={form?.utterances ?? {}} selectedId={selectedId} activeId={activeId} onSelect={selectUtterance} sourceDialogue={sourceDialogue}/>
       <div className="min-w-0 space-y-5">
         <section className="rounded-xl border border-[#c4d4dc] bg-white p-5 shadow-sm">
-          <h2 className="text-lg font-semibold text-[#12394d]">Đánh giá từng câu</h2>
-          {!selected ? <p className="mt-3 text-slate-700">Chọn một câu từ transcript.</p> : <>
+          <h2 className="text-lg font-semibold text-[#12394d]">{sourceDialogue ? 'Đánh giá nghiệp vụ cuộc gọi' : 'Đánh giá từng câu'}</h2>
+          {sourceDialogue ? <div className="mt-3 space-y-3 text-sm leading-6 text-slate-700">
+            <p>Đây là hội thoại nguồn OneVoice có nhiều lượt lời nhưng <strong>chưa có timestamp từng lượt</strong>. Không chấm cảm xúc hoặc gán vai trò cho toàn bộ đoạn như thể một người nói.</p>
+            <p>AI QA tự gợi ý mức cần xem trên toàn transcript ở phần phía trên. Hãy nghe, ghi nhận vào mục <strong>Hoàn tất đánh giá</strong>, rồi liên kết <strong>Vụ việc</strong> nếu còn vấn đề cần theo dõi.</p>
+          </div> : !selected ? <p className="mt-3 text-slate-700">Chọn một câu từ transcript.</p> : <>
             <p className="mt-2 text-sm text-slate-600">Câu {selected.idx + 1} · {clock(selected.start)} · {speakerLabels[selectedPatch?.speaker ?? selected.speaker]}</p>
             <div className="mt-4 space-y-3 rounded-lg bg-slate-50 p-4 text-sm">
               {([['Âm thanh', selected.acoustic], ['Văn bản', selected.lexical], ['Kết hợp', selected.fused]] as const).map(([label, prediction]) =>
