@@ -29,6 +29,11 @@ try {
       throw Error('Mock-data demo flag is on but no labeled sample calls are available.')
     console.log('[mvp] MIDTERM MOCK DATA WORKSPACE — synthetic audio has no speech; model predictions are not real.')
   }
+  if (api.speechDemo === true) {
+    if (calls.total < 1 || !calls.items.some(item => item.provenance === 'imported'))
+      throw Error('Speech demo reported running but no imported WAV recordings are visible.')
+    console.log('[mvp] ORIGINAL WAV SPEECH DATASET WORKSPACE — OneVoice is TTS; FOSD/FLEURS are genuine voices, not support calls. ASR/SER not executed.')
+  }
   const cases = await getJson(direct + '/api/cases')
   if (!Number.isInteger(cases?.total) || !Array.isArray(cases.items))
     throw Error('/api/cases is not returning the list contract.')
