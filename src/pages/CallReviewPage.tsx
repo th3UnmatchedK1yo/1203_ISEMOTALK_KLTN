@@ -108,7 +108,7 @@ function CallReviewSession({ callId }: { callId: string }) {
   }, [callId])
 
   const analyzeSourceAudio = async () => {
-    if (!call || reanalyzing || !realAsrAvailable || call.provenance !== 'imported' || !call.hasAudio) return
+    if (!call || reanalyzing || !realAsrAvailable || !['imported', 'real'].includes(call.provenance || '') || !call.hasAudio) return
     setReanalyzing(true)
     setError('')
     try {
@@ -524,10 +524,10 @@ function CallReviewSession({ callId }: { callId: string }) {
         <div className="mt-4"><CallWorkflowPanel callId={call.id}/></div>
       </details>
     </div>
-    {call.provenance === 'imported' && call.hasAudio && !call.title.startsWith('HỘI THOẠI ĐIỆN THOẠI THẬT · DataHive') &&
+    {(call.provenance === 'imported' || call.provenance === 'real') && call.hasAudio && !call.title.startsWith('HỘI THOẠI ĐIỆN THOẠI THẬT · DataHive') &&
       <details className="rounded-lg border border-slate-200 bg-white p-4 text-sm leading-6 text-slate-700">
-        <summary className="cursor-pointer font-semibold text-[#12394d]">Tùy chọn nghiên cứu: đối chiếu transcript nguồn với ASR thật</summary>
-        <p className="mt-1">Tạo một hồ sơ mới từ chính file WAV này. ASR sẽ nghe và tạo transcript mới; transcript nguồn và bản ghi gốc vẫn giữ nguyên để đối chiếu. QA XLM-R được chạy riêng sau khi ASR hoàn tất. Nếu F4 chưa được xác minh, bước SER sẽ ghi rõ là bỏ qua.</p>
+        <summary className="cursor-pointer font-semibold text-[#12394d]">{call.provenance === 'real' ? 'Chạy lại ASR + QA trên ghi âm này' : 'Tùy chọn nghiên cứu: đối chiếu transcript nguồn với ASR thật'}</summary>
+        <p className="mt-1">{call.provenance === 'real' ? 'Tạo bản phân tích mới từ chính file âm thanh đã tải lên. ASR sẽ tạo các đoạn có timestamp và XLM-R sẽ chấm tự động. Hồ sơ cũ, ghi chú QA và file ghi âm không bị ghi đè.' : 'Tạo một hồ sơ mới từ chính file WAV này. ASR sẽ nghe và tạo transcript mới; transcript nguồn và bản ghi gốc vẫn giữ nguyên để đối chiếu. QA XLM-R được chạy riêng sau khi ASR hoàn tất. Nếu F4 chưa được xác minh, bước SER sẽ ghi rõ là bỏ qua.'}</p>
         <button type="button" className={primaryButton + ' mt-3'}
           disabled={!realAsrAvailable || reanalyzing || saving || dirty}
           onClick={() => void analyzeSourceAudio()}>
