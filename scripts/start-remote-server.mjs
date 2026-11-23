@@ -29,6 +29,7 @@ const childEnv = {
  ...process.env,
  NODE_ENV:'production',
  ISEMO_AUTO_SEED:'0',
+ ISEMO_QA_AUTOMATION: '1',
  ISEMO_DATA_DIR:dataDir,
  ISEMO_UPLOADS_DIR:resolve(dataDir,'uploads'),
  PORT:String(apiPort),
