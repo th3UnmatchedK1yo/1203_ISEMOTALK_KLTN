@@ -6,6 +6,7 @@ import { AnalyticsPage } from './pages/AnalyticsPage'
 import { UploadCallPage } from './pages/UploadCallPage'
 import { BatchScanPage } from './pages/BatchScanPage'
 import { ResearchPage } from './pages/ResearchPage'
+import { GuidePage } from './pages/GuidePage'
 import { CasesPage } from './pages/CasesPage'
 import { NewCasePage } from './pages/NewCasePage'
 import { CaseDetailPage } from './pages/CaseDetailPage'
@@ -22,6 +23,7 @@ function App() {
         <Route path="/calls/:callId" element={<CallReviewPage />} />
         <Route path="/analytics" element={<AnalyticsPage />} />
         <Route path="/research" element={<ResearchPage />} />
+        <Route path="/guide" element={<GuidePage />} />
         <Route path="/cases" element={<CasesPage />} />
         <Route path="/cases/new" element={<NewCasePage />} />
         <Route path="/cases/:caseId" element={<CaseDetailPage />} />
