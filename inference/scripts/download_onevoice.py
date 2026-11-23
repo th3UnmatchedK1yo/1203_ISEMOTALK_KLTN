@@ -81,18 +81,20 @@ def main() -> None:
     from huggingface_hub import HfApi, hf_hub_download
     out = args.output.expanduser().resolve()
     out.mkdir(parents=True, exist_ok=True)
-    info = HfApi().dataset_info(REPO)
-    commit = info.sha
-    if not isinstance(commit, str) or len(commit) != 40:
+    records_file = out / "records.jsonl"
+    manifest_file = out / "source_manifest.json"
+    # For a resumed download, keep the ORIGINAL pinned revision. Never mix
+    # new HEAD audio with old training metadata if the repository updates.
+    pinned = json.loads(manifest_file.read_text(encoding="utf-8")) if manifest_file.exists() else None
+    commit = pinned.get("commit") if pinned else HfApi().dataset_info(REPO).sha
+    if not isinstance(commit, str) or len(commit) != 40 or any(c not in "0123456789abcdef" for c in commit):
         raise ValueError("Cannot pin immutable OneVoice dataset commit")
     source = Path(hf_hub_download(REPO, "metadata.csv", repo_type="dataset", revision=commit))
     records = prepare_rows(source)
-    records_file = out / "records.jsonl"
-    manifest_file = out / "source_manifest.json"
     if manifest_file.exists():
         original = json.loads(manifest_file.read_text(encoding="utf-8"))
         if original.get("commit") != commit:
-            raise RuntimeError("Dataset remote HEAD changed: keep the existing snapshot, do not mix revisions.")
+            raise RuntimeError("Saved OneVoice commit differs from the immutable revision; refusing mixed snapshot.")
         if original.get("source_sha256") != sha(source):
             raise RuntimeError("Metadata hash changed since previous download.")
     else:
