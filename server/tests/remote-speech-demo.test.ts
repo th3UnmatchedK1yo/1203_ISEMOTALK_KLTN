@@ -62,7 +62,7 @@ describe.skipIf(process.platform !== 'linux')('isolated speech source import', (
     // Stub ffprobe JSON for the two TEST fixtures; the real deployment
     // uses system ffprobe to validate duration, 16kHz and channel count.
     const ffprobe = path.join(bin, 'ffprobe')
-    writeFileSync(ffprobe, '#!/bin/sh\\ncase "$*" in\\n  *phone_01.wav*) echo \'{"streams":[{"channels":2,"sample_rate":"16000"}],"format":{"duration":"2.0"}}\' ;;\\n  *) echo \'{"streams":[{"channels":1,"sample_rate":"16000"}],"format":{"duration":"2.0"}}\' ;;\\nesac\\n')
+    writeFileSync(ffprobe, '#!/bin/sh\ncase "$*" in\n  *phone_01.wav*) echo \'{"streams":[{"channels":2,"sample_rate":"16000"}],"format":{"duration":"2.0"}}\' ;;\n  *) echo \'{"streams":[{"channels":1,"sample_rate":"16000"}],"format":{"duration":"2.0"}}\' ;;\nesac\n')
     chmodSync(ffprobe, 0o755)
     const input = makeTestWav()
     const original = path.join(audioDir, '00000.wav')
