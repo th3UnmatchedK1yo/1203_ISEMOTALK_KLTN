@@ -84,6 +84,7 @@ const Evidence = z.object({
   device: z.string().max(200).optional(), mock: z.boolean(), verified: z.boolean().optional(),
   timingMode: z.enum(['word_aligned', 'audio_window']).optional(),
   timingWarning: z.string().max(240).optional(),
+  speakerTurns: z.array(z.object({start:z.number().nonnegative(),end:z.number().positive(),speakerId:z.enum(['A','B'])}).refine(t=>t.end>t.start)).max(15000).optional(),
 })
 const SpeakerValue = z.enum(['agent', 'customer', 'unknown'])
 const PredictionValue = z.object({ emotion: z.enum(EMOTIONS), confidence: z.number().min(0).max(1) })
@@ -91,7 +92,7 @@ const Segment = z.object({ start: z.number().nonnegative(), end: z.number().posi
   .refine((s) => s.end > s.start, { message: 'end must be greater than start' })
 const Probe = z.object({ duration: z.number().positive(), channels: z.number().int().min(1).max(32), sampleRate: z.number().int().positive(), peaks: z.array(z.number().min(0).max(1)).max(10_000), evidence: Evidence.optional() })
 const Transcription = z.object({ segments: z.array(Segment).max(5000), speakerSource: z.enum(['channel', 'mock', 'none']), provenance: z.enum(['mock', 'real']), evidence: Evidence.optional() })
-const Diarization = z.object({ speakers: z.array(SpeakerValue).max(5000), method: z.enum(['model', 'mock', 'none']), detail: z.string().optional(), evidence: Evidence.optional() })
+const Diarization = z.object({ speakers: z.array(SpeakerValue).max(5000), method: z.enum(['model', 'mock', 'none']), detail: z.string().optional(), turns: z.array(z.object({start:z.number().nonnegative(),end:z.number().positive(),speakerId:z.enum(['A','B'])}).refine(t=>t.end>t.start)).max(15000).optional(), evidence: Evidence.optional() })
 const Emotions = z.object({ provenance: z.enum(['mock', 'real']), predictions: z.array(z.object({ id: z.string().min(1), acoustic: PredictionValue.nullable(), lexical: PredictionValue.nullable(), fused: PredictionValue })).max(5000), evidence: Evidence.optional() })
 const Component = z.object({ adapter: z.string(), ready: z.boolean(), mock: z.boolean(), verified: z.boolean().optional(), detail: z.string() }).passthrough()
 const Health = z.object({ status: z.enum(['ok', 'degraded']), mode: z.enum(['mock', 'real', 'mixed']), device: z.string(), ffmpeg: z.boolean(), components: z.object({ asr: Component, diarization: Component, ser: Component }) }).passthrough()
