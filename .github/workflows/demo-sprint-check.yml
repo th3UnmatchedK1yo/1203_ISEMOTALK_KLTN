@@ -74,6 +74,7 @@ jobs:
           node --check scripts/start-remote-midterm-demo.mjs
           node --check scripts/start-remote-speech-demo.mjs
           node --check scripts/start-remote-qa-runtime.mjs
+          node --check scripts/open-isemotalk.mjs
           node --check scripts/check-remote-qa.mjs
           node --check scripts/choose-midterm-call.mjs
       - name: Validate Linux GPU setup script without running installs
