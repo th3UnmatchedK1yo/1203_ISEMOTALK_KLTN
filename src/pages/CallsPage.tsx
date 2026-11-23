@@ -66,7 +66,13 @@ export function CallsPage() {
         <Link to="/calls/new" className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-[#0E5665] px-4 py-2 text-sm font-semibold text-white hover:bg-[#0B4554]"><Upload size={17}/> Thêm cuộc gọi</Link>
       </div>
     </header>
-    {data && <p className="text-sm leading-6 text-slate-700">Tổng cộng <strong>{data.counts.total}</strong> cuộc gọi · <strong>{data.counts.attention}</strong> ưu tiên cao · <strong>{data.counts.processing}</strong> đang xử lý · <strong>{data.counts.failed}</strong> cần thử lại</p>}
+    {data && <p className="text-sm leading-6 text-slate-700">
+      Có <strong>{data.total}</strong> cuộc gọi theo bộ lọc · <strong>{data.counts.qaAttention ?? 0}</strong> gợi ý QA cần xem ·
+      <strong> {data.counts.qaPending ?? 0}</strong> chưa có kết quả QA ·
+      <strong> {data.counts.attention}</strong> ưu tiên cảm xúc SER ·
+      <strong> {data.counts.processing}</strong> đang xử lý ·
+      <strong> {data.counts.failed}</strong> cần thử lại
+    </p>}
     {qaReady && <p role="status" className="text-sm leading-6 text-teal-800">XLM-R đang tự sàng lọc cuộc gọi đủ điều kiện. Điểm AI QA được cập nhật ngay trong danh sách, không cần bấm chấm thủ công.</p>}
     <section className="rounded-xl border border-[#c4d4dc] bg-white p-4" aria-label="Tìm và lọc cuộc gọi">
       <label className="relative block"><span className="sr-only">Tìm mã, tiêu đề hoặc khách hàng</span><Search aria-hidden="true" className="absolute left-3 top-3.5 text-slate-600" size={18}/>
