@@ -351,7 +351,8 @@ function CallReviewSession({ callId }: { callId: string }) {
     <CallRecording callId={call.id} audioUrl={call.audioUrl} duration={call.duration} utterances={call.utterances}
       seekRequest={seekRequest} onActiveChange={setActiveId} onSelect={selectUtterance}/>
     {call.status === 'ready' && (call.utterances.length > 0
-      ? <CallQaTriage callId={call.id} version={call.version}/>
+      ? <CallQaTriage callId={call.id} version={call.version}
+          autoEligible={call.provenance === 'real' || (call.provenance === 'imported' && call.title.startsWith('TTS TỔNG HỢP · OneVoice'))}/>
       : <p role="status" className="rounded-lg border border-slate-200 bg-white p-4 text-sm text-slate-700">Bản ghi này chưa có transcript nên chưa thể chạy bộ phân loại QA từ văn bản. Audio vẫn phát bình thường; cần ASR thực hoặc transcript đã xác minh trước khi chấm QA.</p>)}
     <div className="grid grid-cols-1 items-start gap-5 xl:grid-cols-[minmax(0,1.45fr)_minmax(360px,1fr)]">
       <TranscriptList utterances={call.utterances} patches={form?.utterances ?? {}} selectedId={selectedId} activeId={activeId} onSelect={selectUtterance} sourceDialogue={sourceDialogue}/>
