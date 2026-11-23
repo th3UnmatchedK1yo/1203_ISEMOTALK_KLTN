@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { Link, useLocation } from 'react-router-dom'
-import { Headphones, BarChart3, Menu, X, ListChecks, UploadCloud, BookOpen, BriefcaseBusiness } from 'lucide-react'
+import { Headphones, BarChart3, Menu, X, ListChecks, UploadCloud, BookOpen, BriefcaseBusiness, ChevronDown, CircleCheck, AlertCircle } from 'lucide-react'
 import { getSystemStatus } from '@/api/isemotalk'
 
 interface AppShellProps { children: ReactNode }
@@ -16,7 +16,7 @@ const navItems = [
 export function AppShell({ children }: AppShellProps) {
   const location = useLocation()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
-  const [serviceNotice, setServiceNotice] = useState<string | null>(null)
+  const [serviceNotice, setServiceNotice] = useState<{title: string; detail: string; tone: 'ready' | 'warning' | 'error'} | null>(null)
   useEffect(() => {
     const controller = new AbortController()
     getSystemStatus(controller.signal)
@@ -28,22 +28,30 @@ export function AppShell({ children }: AppShellProps) {
           status.inference.components.asr.mock === false
         const serUnavailable = status.inference.components?.ser?.adapter === 'not_configured'
         if (qaReal && serUnavailable) {
-          setServiceNotice((qaAuto ? 'ĐANG CHẠY QA TỰ ĐỘNG: ' : 'QA MODEL ĐÃ NẠP (CHƯA BẬT TỰ ĐỘNG): ') +
-            'XLM-R xử lý transcript và gợi ý cuộc gọi cần xem. ' +
-            (asrReal && status.automation?.asr ? 'ASR PhoWhisper đã cấu hình tự xử lý audio. ' :
-              'ASR chưa hoạt động; với dữ liệu đã nhập đang sử dụng transcript nguồn. ') +
-            'SER fusion F4 chưa được xác minh nên không có dự đoán cảm xúc. OneVoice là hội thoại TTS tổng hợp, chưa phải QA tổng đài thực tế.')
+          setServiceNotice({
+            title: qaAuto
+              ? (asrReal && status.automation?.asr ? 'QA tự động và ASR đã sẵn sàng' : 'QA tự động đang hoạt động')
+              : 'Model QA đã nạp · cần bật chế độ tự xử lý',
+            detail: 'XLM-R gợi ý cuộc gọi cần xem từ transcript. ' +
+              (asrReal && status.automation?.asr ? 'PhoWhisper có thể xử lý file âm thanh mới. ' : 'Các bản ghi nhập sẵn đang dùng transcript nguồn. ') +
+              'SER F4 chưa được xác minh, vì vậy không có dự đoán cảm xúc. OneVoice là hội thoại TTS tổng hợp, không phải ghi âm tổng đài thật.',
+            tone: qaAuto ? 'ready' : 'warning',
+          })
         } else if (status.speechDemo) {
-          setServiceNotice('DEMO CÓ TIẾNG NÓI: DataHive (nếu đã tải) là hội thoại người thật, OneVoice là cuộc gọi TTS, FOSD/FLEURS là đoạn nói người thật. Chưa chạy model trên các bản ghi nguồn.')
+          setServiceNotice({ title: 'Đang sử dụng dữ liệu tiếng nói nguồn',
+            detail: 'OneVoice là hội thoại TTS; DataHive/FOSD/FLEURS là mẫu thử tiếng nói, không chứng minh hiệu quả QA tổng đài. Chưa chạy model trên các bản ghi nguồn.', tone: 'warning' })
         } else if (status.demoData) {
-          setServiceNotice('BẢN MẪU GIỮA KỲ: dữ liệu và cảm xúc đều mô phỏng; âm thanh chỉ là sóng âm tổng hợp, không có lời nói. Đây không phải dự đoán AI thật. GPU inference đang tạm dừng.')
+          setServiceNotice({ title: 'Chế độ demo mô phỏng',
+            detail: 'Dữ liệu, cảm xúc và âm thanh minh họa không phải kết quả mô hình thật. GPU inference đang tạm dừng.', tone: 'warning' })
         } else if (!status.inference.reachable) {
-          setServiceNotice('Chế độ giao diện/QA: API đã kết nối, nhưng dịch vụ AI chưa hoạt động. Không gửi audio để phân tích cho đến khi model chạy thật trên GPU.')
+          setServiceNotice({ title: 'AI chưa kết nối',
+            detail: 'API đã hoạt động, nhưng Python inference chưa sẵn sàng. Không đưa kết quả mô phỏng vào báo cáo nghiên cứu.', tone: 'error' })
         } else if (status.inference.components?.asr?.mock || status.inference.components?.ser?.mock) {
-          setServiceNotice('Dịch vụ đang dùng mô hình mô phỏng. Không sử dụng kết quả này làm số liệu nghiên cứu.')
+          setServiceNotice({ title: 'Đang dùng mô hình mô phỏng',
+            detail: 'Mô hình ASR/SER đang dùng mock. Không sử dụng dự đoán này để đánh giá chất lượng hoặc làm số liệu nghiên cứu.', tone: 'warning' })
         } else setServiceNotice(null)
       })
-      .catch(() => { if (!controller.signal.aborted) setServiceNotice('Không kết nối được API của hệ thống. Kiểm tra VS Code Port Forwarding và server FTISU.') })
+      .catch(() => { if (!controller.signal.aborted) setServiceNotice({ title:'Không kết nối được máy chủ', detail:'Kiểm tra kết nối FTISU, SSH tunnel và API.', tone:'error' }) })
     return () => controller.abort()
   }, [])
   const active = (path: string) =>
@@ -99,8 +107,22 @@ export function AppShell({ children }: AppShellProps) {
         {navItems.map(item => navLink(item.path, item.label, item.icon, true))}
       </nav>}
     </header>
-    {serviceNotice && <div role="status" className="mx-auto mt-4 max-w-[1680px] rounded-lg border border-amber-300 bg-amber-50 px-5 py-3 text-sm font-medium text-amber-950 md:mx-8" data-testid="gpu-preview-notice">
-      {serviceNotice}
+    {serviceNotice && <div className="mx-auto max-w-[1680px] px-5 pt-4 md:px-8 xl:px-10">
+      <details data-testid="gpu-preview-notice"
+        className={'group rounded-xl border bg-white shadow-sm ' +
+          (serviceNotice.tone === 'ready' ? 'border-teal-200' :
+            serviceNotice.tone === 'error' ? 'border-rose-300' : 'border-amber-300')}>
+        <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-4 px-4 py-3 text-sm marker:hidden">
+          <span className="flex min-w-0 items-center gap-2.5 font-semibold text-slate-900">
+            {serviceNotice.tone === 'ready'
+              ? <CircleCheck size={18} className="shrink-0 text-teal-700" aria-hidden="true"/>
+              : <AlertCircle size={18} className={'shrink-0 ' + (serviceNotice.tone === 'error' ? 'text-rose-700' : 'text-amber-700')} aria-hidden="true"/>}
+            {serviceNotice.title}
+          </span>
+          <span className="inline-flex shrink-0 items-center gap-1 text-xs font-medium text-slate-600">Chi tiết kỹ thuật <ChevronDown size={15} className="transition-transform group-open:rotate-180" aria-hidden="true"/></span>
+        </summary>
+        <p className="border-t border-slate-100 px-4 py-3 text-sm leading-6 text-slate-700">{serviceNotice.detail}</p>
+      </details>
     </div>}
     <main className="mx-auto w-full max-w-[1680px] px-5 pb-12 pt-7 md:px-8 xl:px-10">
       {children}
