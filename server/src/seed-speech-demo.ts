@@ -180,12 +180,21 @@ function loadHumanPhoneCalls(limit: number) {
 
 function probe(wav: string) {
   const output = execFileSync('ffprobe', [
-    '-v','error','-show_entries','format=duration','-of','default=noprint_wrappers=1:nokey=1',wav,
+    '-v', 'error', '-select_streams', 'a:0',
+    '-show_entries', 'format=duration:stream=channels,sample_rate',
+    '-of', 'json', wav,
   ], { encoding: 'utf8', timeout: 12000 }).trim()
-  const duration = Number(output)
-  if (!Number.isFinite(duration) || duration < 1 || duration > MAX_DURATION)
-    throw Error('Unsupported recording duration ' + output + ' (' + wav + ')')
-  return duration
+  const raw = JSON.parse(output) as {
+    streams?: Array<{channels?: number; sample_rate?: string}>;
+    format?: {duration?: string}
+  }
+  const duration = Number(raw.format?.duration)
+  const channels = Number(raw.streams?.[0]?.channels)
+  const sampleRate = Number(raw.streams?.[0]?.sample_rate)
+  if (!Number.isFinite(duration) || duration < 1 || duration > MAX_DURATION ||
+      ![1, 2].includes(channels) || sampleRate !== 16000)
+    throw Error('Invalid WAV duration/channels/16kHz sample rate: ' + wav)
+  return { duration, channels }
 }
 function sha(file: string) {
   return createHash('sha256').update(fs.readFileSync(file)).digest('hex')
@@ -208,9 +217,12 @@ try {
   const exists = db.prepare('SELECT id FROM calls WHERE title=? LIMIT 1')
   for (const [rank, rec] of refs.entries()) {
     if (exists.get(rec.title)) { reused++; continue }
-    let duration: number
-    try { duration = probe(rec.wav) }
+    let audioInfo: {duration: number; channels: number}
+    try { audioInfo = probe(rec.wav) }
     catch (error) { skipped++; console.warn('[speech-demo] Unusable recording', rec.id, String(error)); continue }
+    const { duration, channels } = audioInfo
+    if (rec.origin === 'human_phone_call' && channels !== 2)
+      throw Error('Pinned two-speaker phone excerpt unexpectedly lost its stereo channels: ' + rec.id)
     const callId = repo.nextCallId(db)
     const dir = path.join(config.uploadsDir, callId)
     const relative = path.join(callId, 'audio.wav')
@@ -266,7 +278,7 @@ try {
         }])
         repo.updateCall(db, callId, {
           status: 'ready', progress: 100, duration,
-          channels: rec.origin === 'human_phone_call' ? 2 : 1,
+          channels,
           overallNote: note,
         })
         repo.refreshDerived(db, callId)
