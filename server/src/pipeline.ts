@@ -275,6 +275,21 @@ export class Pipeline {
       }
 
       case 'emotion': {
+        // An intentionally unavailable SER is not a fake SER and must not
+        // block genuine ASR + separately trained QA in a partial research MVP.
+        // Only skip when both Node and Python explicitly agree on "none".
+        // Missing/broken/unverified F4 packages still fail normally.
+        if (process.env.ISEMO_SER === 'none') {
+          const h = await this.client.health()
+          const ser = h.components.ser
+          if (ser.adapter !== 'not_configured' || ser.ready || ser.mock)
+            throw new PipelineError('Cấu hình SER giữa Express và FastAPI không khớp; không được tự bỏ qua bước cảm xúc.')
+          return {
+            skipped: true,
+            detail: 'Chưa cấu hình SER đã xác minh. ASR và QA có thể là model thật, nhưng cuộc gọi này KHÔNG có dự đoán cảm xúc.',
+            evidence: { adapter: 'not_configured', mock: false },
+          }
+        }
         const current = utts()
         const r = await this.client.emotion({
           path: this.audioPath(row),
