@@ -19,6 +19,20 @@ const TranscriptRow = memo(function TranscriptRow({ utterance: u, patch, selecte
   const speaker = patch?.speaker ?? u.speaker
   const isCustomer = speaker === 'customer'
   const isUnknown = speaker === 'unknown'
+  // ASR chunks are NOT speaker turns. Unknown audio must appear as a neutral
+  // time-coded transcript, not as misleading left/right chat bubbles.
+  if (isUnknown) return <div className="border-b border-slate-100 px-4 py-1 last:border-b-0">
+    <button type="button" onClick={() => onSelect(u.id, u.start)} aria-pressed={selected}
+      className={'flex w-full items-start gap-4 rounded-md px-3 py-3 text-left transition-colors ' +
+        (selected ? 'bg-[#e9f4f2] ring-1 ring-[#0e7580]' : active ? 'bg-slate-100' : 'hover:bg-slate-50')}>
+      <span className="mt-0.5 shrink-0 font-mono text-xs tabular-nums text-slate-500">{clock(u.start)}–{clock(u.end)}</span>
+      <div className="min-w-0">
+        <p className="mb-1 text-xs font-medium text-slate-500">Đoạn âm thanh · chưa xác định người nói{active ? ' · đang phát' : ''}</p>
+        <p className="whitespace-pre-wrap break-words text-[15px] leading-7 text-slate-900">{patch?.text ?? u.text}</p>
+        {patch?.decision === 'corrected' && patch.emotion && <span className="mt-1 block text-xs font-medium text-amber-900">QA sửa nhãn cảm xúc: {emotionLabels[patch.emotion]}</span>}
+      </div>
+    </button>
+  </div>
   return <div className={'flex px-4 py-2 ' + (isCustomer ? 'justify-end' : 'justify-start')}>
     <button type="button" onClick={() => onSelect(u.id, u.start)} aria-pressed={selected}
       className={'w-fit max-w-[94%] rounded-2xl border px-4 py-3 text-left shadow-sm transition-colors sm:max-w-[86%] ' +
@@ -43,12 +57,13 @@ const TranscriptRow = memo(function TranscriptRow({ utterance: u, patch, selecte
 export const TranscriptList = memo(function TranscriptList({ utterances, patches, selectedId, activeId, onSelect, sourceDialogue = false, transcriptFromAudio = false, timingMode }: Props) {
   const source = sourceDialogue && utterances.length === 1 ? utterances[0] : null
   const turns = source ? sourceDialogueTurns(patches[source.id]?.text ?? source.text) : []
+  const hasAssignedRoles = utterances.some(u => (patches[u.id]?.speaker ?? u.speaker) !== 'unknown')
   return <section className="min-w-0 overflow-hidden rounded-xl border border-[#c4d4dc] bg-white shadow-sm" aria-labelledby="transcript-title">
-    <div className="border-b border-[#d6e2e8] px-5 py-4">
+    <div className="border-b border-[#e0e8ed] px-5 py-4">
       <h2 id="transcript-title" className="text-lg font-semibold text-[#12394d]">
         {source && turns.length > 1
           ? <>Hội thoại nguồn <span className="font-normal text-slate-600">· {turns.length} lượt lời</span></>
-          : <>{transcriptFromAudio ? 'Transcript do ASR tạo' : 'Bản ghi hội thoại'} <span className="font-normal text-slate-600">· {utterances.length} đoạn</span></>}
+          : <>{transcriptFromAudio && !hasAssignedRoles ? 'Bản phiên âm theo thời gian' : transcriptFromAudio ? 'Transcript do ASR tạo' : 'Bản ghi hội thoại'} <span className="font-normal text-slate-600">· {utterances.length} đoạn</span></>}
       </h2>
       <p className="mt-1 text-sm text-slate-700">
         {source && turns.length > 1
@@ -74,7 +89,7 @@ export const TranscriptList = memo(function TranscriptList({ utterances, patches
         Không thể nhảy chính xác tới từng lượt vì dataset chưa cung cấp mốc thời gian.
         Để có transcript theo thời gian, cần ASR/alignment thật.
       </p>
-    </div> : <div className="custom-scrollbar max-h-[75vh] space-y-1 overflow-y-auto bg-[#f8fbfb] py-3">
+    </div> : <div className="custom-scrollbar max-h-[75vh] overflow-y-auto bg-white py-2">
       {utterances.map(u => <TranscriptRow key={u.id} utterance={u} patch={patches[u.id]} selected={selectedId === u.id} active={activeId === u.id} onSelect={onSelect}/>)}
       {!utterances.length && <p className="p-6 text-sm text-slate-700">Transcript sẽ xuất hiện sau khi xử lý hoàn tất.</p>}
     </div>}
