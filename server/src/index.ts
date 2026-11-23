@@ -5,6 +5,7 @@ import { openDb } from './db'
 import { HttpInferenceClient } from './inference/client'
 import { Pipeline } from './pipeline'
 import { seedDemo } from './seed'
+import { AutoQa } from './auto-qa'
 
 const config = loadConfig()
 fs.mkdirSync(config.uploadsDir, { recursive: true })
@@ -20,9 +21,20 @@ if (process.env.NODE_ENV !== 'production' && process.env.ISEMO_AUTO_SEED !== '0'
   }
 }
 const client = new HttpInferenceClient(config.inferenceUrl)
-const pipeline = new Pipeline(db, config, client, (m, e) => console.error(`[pipeline] ${m}`, e ?? ''))
-if (process.env.ISEMO_API_PREVIEW_ONLY !== '1') pipeline.resume()
-else console.warn('[api] PREVIEW ONLY: queued calls will NOT resume until real inference is running.')
+// Automatic genuine QA runs only in an explicitly configured real deployment.
+// Preview and mock environments never create model predictions.
+const qaAutomationEnabled = process.env.ISEMO_API_PREVIEW_ONLY !== '1' &&
+  process.env.ISEMO_QA_AUTOMATION === '1' && !!process.env.ISEMO_QA_MODEL_DIR
+const autoQa = qaAutomationEnabled
+  ? new AutoQa(db, config, (m, e) => console.error('[auto-qa]', m, e ?? ''))
+  : null
+const pipeline = new Pipeline(db, config, client,
+  (m, e) => console.error(`[pipeline] ${m}`, e ?? ''),
+  id => autoQa?.onCallReady(id))
+if (process.env.ISEMO_API_PREVIEW_ONLY !== '1') {
+  pipeline.resume()
+  autoQa?.start()
+} else console.warn('[api] PREVIEW ONLY: queued calls will NOT resume until real inference is running.')
 
 const app = createApp({ db, config, client, pipeline })
 const server = app.listen(config.port, '127.0.0.1', () => {
@@ -37,7 +49,7 @@ const shutdown = () => {
   const closed = new Promise<void>((resolve) => server.close(() => resolve()))
   const forceClose = setTimeout(() => server.closeAllConnections(), 10_000)
   forceClose.unref()
-  void Promise.all([drain, closed]).then(() => {
+  void Promise.all([drain, closed, autoQa?.stop()]).then(() => {
     clearTimeout(forceClose)
     db.close()
     process.exit(0)
