@@ -24,7 +24,7 @@ const childEnv = {
  PORT:String(apiPort),
  INFERENCE_URL:'http://127.0.0.1:8001',
 }
-console.log('[remote] Starting Python :8001 and API :${apiPort}, both loopback-only on this GPU host.')
+console.log(`[remote] Starting Python :8001 and API :${apiPort}, both loopback-only on this GPU host.`)
 console.log('[remote] All DB/recording files remain on this host; connect using SSH local-forward.')
 const commands=[
  {name:'inference',command:'node scripts/run-python.mjs -m uvicorn app.main:app --host 127.0.0.1 --port 8001 --workers 1',env:childEnv},
