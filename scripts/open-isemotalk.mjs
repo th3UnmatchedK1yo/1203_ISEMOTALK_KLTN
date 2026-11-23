@@ -42,7 +42,7 @@ function start(name, command, args, options = {}) {
     cwd: root, env: options.env || process.env,
     windowsHide: true, shell: false, stdio: ['ignore', fd, fd],
   })
-  child.on('error', e => log(name + ': ' + e.message))
+  child.on('error', e => { child.launchError = e.message; log(name + ': ' + e.message) })
   owned.push(child)
   return child
 }
@@ -93,10 +93,10 @@ async function main() {
   for (let i = 0; i < 5; i++) {
     live = await health()
     if (live) break
-    if (tunnel.exitCode !== null) break
+    if (tunnel.exitCode !== null || tunnel.launchError) break
     await delay(900)
   }
-  if (tunnel.exitCode !== null) {
+  if (tunnel.exitCode !== null || tunnel.launchError) {
     showLastLines('tunnel')
     throw Error('SSH ftisu-ser không kết nối được. Cần kiểm tra alias SSH/quyền truy cập trên máy này.')
   }
@@ -116,7 +116,7 @@ async function main() {
     for (let i = 0; i < 45; i++) {
       live = await health()
       if (valid(live)) break
-      if (worker.exitCode !== null) break
+      if (worker.exitCode !== null || worker.launchError) break
       await delay(2000)
     }
     if (!valid(live)) {
@@ -137,7 +137,7 @@ async function main() {
   })
   for (let i = 0; i < 25; i++) {
     if (await webAlive()) break
-    if (web.exitCode !== null) break
+    if (web.exitCode !== null || web.launchError) break
     await delay(600)
   }
   if (!(await webAlive())) {
