@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { spawn, type ChildProcess } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync, chmodSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
@@ -72,6 +73,25 @@ describe.skipIf(process.platform !== 'linux')('isolated speech source import', (
     writeFileSync(path.join(work, 'asr_eval.jsonl'), JSON.stringify({
       id: 'fpt-fosd-sample:0', wav: original, text: 'Đây chỉ là transcript của fixture kiểm thử.',
     }) + '\n')
+    const datahiveDir = path.join(home, 'services/isemotalk-private/datasets/datahive-vi-call-excerpts')
+    const phoneAudio = path.join(datahiveDir, 'audio/phone_01.wav')
+    mkdirSync(path.dirname(phoneAudio), { recursive: true })
+    // Same test WAV for byte-level fixture verification ONLY, not a claimed
+    // real conversation. Production loader uses pinned human source WAVs.
+    writeFileSync(phoneAudio, input)
+    const checksum = createHash('sha256').update(input).digest('hex')
+    writeFileSync(path.join(datahiveDir, 'source_manifest.json'), JSON.stringify({
+      dataset_id: 'datahiveai/multilingual-conversations-sample',
+      dataset_revision: 'd'.repeat(40),
+      dataset_license: 'cc-by-4.0',
+      source_type: 'consented_human_phone_conversation_not_call_center',
+      transcripts_available: false,
+      records: [{
+        id: 'datahive:vi:01', wav: phoneAudio, source_mp3: 'preview/vi_000001.mp3',
+        source_sha256: 'a'.repeat(64), audio_sha256: checksum,
+        human_recorded: true, transcript: null,
+      }],
+    }))
     const port = await freePort()
     const child = spawn(process.execPath, ['scripts/start-remote-speech-demo.mjs'], {
       cwd: root, env: { ...process.env, HOME: home, PORT: String(port), PATH: bin + ':' + process.env.PATH },
@@ -99,10 +119,13 @@ describe.skipIf(process.platform !== 'linux')('isolated speech source import', (
     const list = await (await fetch('http://127.0.0.1:' + port + '/api/calls')).json() as {
       total: number; items: Array<{ id: string; title: string; provenance: string }>
     }
-    expect(list.total).toBe(1)
-    expect(list.items[0].title).toContain('GIỌNG THẬT')
-    expect(list.items[0].provenance).toBe('imported')
-    const id = list.items[0].id
+    expect(list.total).toBe(2)
+    const fosd = list.items.find(item => item.title.includes('GIỌNG THẬT'))
+    const humanPhone = list.items.find(item => item.title.includes('HỘI THOẠI ĐIỆN THOẠI THẬT'))
+    expect(fosd).toBeDefined()
+    expect(humanPhone).toBeDefined()
+    expect(list.items.every(item => item.provenance === 'imported')).toBe(true)
+    const id = fosd!.id
     const detail = await (await fetch('http://127.0.0.1:' + port + '/api/calls/' + id)).json() as {
       utterances: Array<{ text: string; fused: unknown; acoustic: unknown; lexical: unknown; speaker: string }>;
       stageLog: Array<{stage: string; state: string; detail?: string}>
@@ -118,6 +141,17 @@ describe.skipIf(process.platform !== 'linux')('isolated speech source import', (
     const audio = await fetch('http://127.0.0.1:' + port + '/api/calls/' + id + '/audio')
     expect(audio.status).toBe(200)
     expect(Buffer.from(await audio.arrayBuffer())).toEqual(input)
+    const phone = await (await fetch('http://127.0.0.1:' + port + '/api/calls/' + humanPhone!.id)).json() as {
+      utterances: unknown[]; channels: number;
+      stageLog: Array<{stage: string; state: string; detail: string}>
+    }
+    expect(phone.utterances).toHaveLength(0)
+    expect(phone.channels).toBe(2)
+    expect(phone.stageLog.find(step => step.stage === 'transcribe')?.detail).toContain('KHÔNG cung cấp transcript')
+    expect(phone.stageLog.find(step => step.stage === 'emotion')?.state).toBe('skipped')
+    const phoneResponse = await fetch('http://127.0.0.1:' + port + '/api/calls/' + humanPhone!.id + '/audio')
+    expect(phoneResponse.status).toBe(200)
+    expect(Buffer.from(await phoneResponse.arrayBuffer())).toEqual(input)
     expect(readFileSync(productionMarker, 'utf8')).toBe('not touched')
     expect(existsSync(path.join(operational, 'isemotalk.db'))).toBe(false)
     expect(existsSync(path.join(home, 'services/isemotalk-speech-demo/isemotalk.db'))).toBe(true)
