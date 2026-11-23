@@ -18,7 +18,7 @@ for (const [name,url] of endpoints) {
       if(!c)throw Error('Missing '+kind+' health')
       console.log('  '+kind+': '+c.adapter+', ready='+c.ready+', mock='+c.mock+', verified='+(c.verified??'not reported')+', loaded='+(c.loaded??'not reported'))
       if(kind !== 'diarization' && (!c.ready || c.mock)){console.error('  ERROR: '+kind+' must be genuine and ready.');failed=true}
-      if(kind==='ser' && c.verified !== true)console.warn('  WARNING: SER checkpoint not marked verified in this process yet; run full package verification and audio smoke test.')
+      if(kind==='ser' && c.verified !== true){console.error('  ERROR: SER checkpoint not verified in the running inference process. Run held-out package verification and real audio smoke test.');failed=true}
     }
   }catch(e){failed=true;console.error(name+' unavailable:',e.message)}
 }
