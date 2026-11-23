@@ -10,6 +10,10 @@ import net from 'node:net'
 import concurrently from 'concurrently'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
+const runtimeCommit = execFileSync('git', ['rev-parse', 'HEAD'], {
+  cwd: root, encoding: 'utf8', timeout: 5000,
+}).trim()
+if (!/^[a-f0-9]{40}$/.test(runtimeCommit)) throw Error('Cannot identify deployed source commit.')
 if (process.platform !== 'linux') throw Error('FTISU Linux GPU host only.')
 const home = process.env.HOME
 if (!home || !home.startsWith('/')) throw Error('HOME must be absolute.')
@@ -82,6 +86,7 @@ if (asrRequested || autoAsr) {
 }
 const env = {
   ...process.env,
+  ISEMO_RUNTIME_COMMIT: runtimeCommit,
   NODE_ENV: 'production',
   PORT: String(port),
   INFERENCE_URL: 'http://127.0.0.1:' + inferencePort,
