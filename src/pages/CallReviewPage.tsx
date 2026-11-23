@@ -421,7 +421,7 @@ function CallReviewSession({ callId }: { callId: string }) {
               {([['Âm thanh', selected.acoustic], ['Văn bản', selected.lexical], ['Kết hợp', selected.fused]] as const).map(([label, prediction]) =>
                 <div key={label} className="flex flex-wrap items-baseline justify-between gap-2"><span className="text-slate-700">{label}</span><strong className="text-slate-900">{prediction ? emotionLabels[prediction.emotion] + ' · ' + percent(prediction.confidence) : 'Chưa có đầu ra'}</strong></div>)}
               <p className="border-t border-slate-200 pt-3 leading-6 text-slate-600">Phần trăm là điểm của mô hình cho câu này, không phải độ chính xác đã được kiểm chứng. Nhánh chưa có đầu ra được để trống.</p>
-            </div>}}
+            </div>}
             {inputsChanged && <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm leading-6 text-amber-950">
               Transcript hoặc người nói đã được chỉnh sửa. Dự đoán vẫn dựa trên đầu vào ban đầu; mô hình chưa được chạy lại.
               {(selected.originalText !== undefined || selected.originalSpeaker !== undefined) && <details className="mt-2">
