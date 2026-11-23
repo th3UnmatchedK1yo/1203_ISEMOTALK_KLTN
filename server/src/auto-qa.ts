@@ -19,6 +19,22 @@ export class AutoQa {
   private stopped = false
   private warned = false
   private lastScannedId = ''
+  private currentId: string | null = null
+  private readonly lastErrors = new Map<string, string>()
+
+  /** Live worker diagnostics; never turns failed/missing scores into predictions. */
+  statusFor(id: string): { state: 'running' | 'queued' | 'retrying' | 'idle'; detail?: string } {
+    if (this.currentId === id) return { state: 'running' }
+    if (this.pending.has(id)) return { state: 'queued', detail: this.lastErrors.get(id) }
+    const detail = this.lastErrors.get(id)
+    return detail ? { state: 'retrying', detail } : { state: 'idle' }
+  }
+
+  private rememberError(id: string, message: string) {
+    // Bound in-memory diagnostics, without adding a new schema or storing audio.
+    if (this.lastErrors.size >= 200) this.lastErrors.delete(this.lastErrors.keys().next().value!)
+    this.lastErrors.set(id, message.slice(0, 500))
+  }
 
   constructor(
     private db: DB,
@@ -36,7 +52,10 @@ export class AutoQa {
 
   onCallReady(id: string) {
     if (this.stopped) return
-    this.pending.add(id)
+    // Fresh user uploads must not sit behind hundreds of demo/backfill calls.
+    this.pending.delete(id)
+    this.pending = new Set([id, ...this.pending])
+    this.lastErrors.delete(id)
     void this.pump()
   }
 
@@ -55,15 +74,22 @@ export class AutoQa {
     return previous?.input_sha256 !== hash || (!!previous?.truncated && !previous.model_name.includes('/window-max-v2'))
   }
 
-  private async qaAvailable(signal: AbortSignal) {
+  private async qaAvailable(signal: AbortSignal): Promise<{ ready: boolean; detail: string }> {
     try {
       const response = await fetch(this.config.inferenceUrl + '/v1/qa/health', {
         signal: AbortSignal.any([signal, AbortSignal.timeout(5000)]),
       })
-      if (!response.ok) return false
-      const value = await response.json() as {ready?:boolean; loaded?:boolean}
-      return value.ready === true && value.loaded === true
-    } catch { return false }
+      if (!response.ok) return { ready: false, detail: 'XLM-R health HTTP ' + response.status }
+      const value = await response.json() as {ready?:boolean; loaded?:boolean; detail?: string}
+      return {
+        ready: value.ready === true && value.loaded === true,
+        detail: value.ready !== true ? (value.detail || 'XLM-R checkpoint chưa sẵn sàng')
+          : value.loaded !== true ? 'XLM-R checkpoint có sẵn nhưng chưa được nạp vào GPU'
+            : 'XLM-R loaded',
+      }
+    } catch (error) {
+      return { ready: false, detail: 'Không kết nối được XLM-R health: ' + (error as Error).message }
+    }
   }
 
   async sweep() {
@@ -93,10 +119,12 @@ export class AutoQa {
     const controller = new AbortController()
     this.abort = controller
     try {
-      if (!(await this.qaAvailable(controller.signal))) {
+      const availability = await this.qaAvailable(controller.signal)
+      if (!availability.ready) {
+        for (const id of this.pending) this.rememberError(id, availability.detail)
         if (!this.warned && this.pending.size) {
           this.warned = true
-          this.log('QA model chưa sẵn sàng; giữ nguyên hồ sơ. Sẽ tự kiểm tra lại.')
+          this.log('QA model chưa sẵn sàng; sẽ thử lại: ' + availability.detail)
         }
         this.pending.clear() // next periodic sweep will safely discover missing scores
         return
@@ -105,16 +133,21 @@ export class AutoQa {
       while (this.pending.size && !this.stopped && !controller.signal.aborted) {
         const id = this.pending.values().next().value as string
         this.pending.delete(id)
-        if (!this.eligible(id)) continue
+        if (!this.eligible(id)) { this.lastErrors.delete(id); continue }
+        this.currentId = id
         try {
           const result = await predictAndStoreQa(this.db, this.config, id, controller.signal)
+          this.lastErrors.delete(id)
           this.log('Real QA finished for ' + id + ' (' + result.result?.model + ')')
         } catch (error) {
           if (this.stopped || controller.signal.aborted) break
+          this.rememberError(id, error instanceof Error ? error.message : String(error))
           this.log('QA could not analyze ' + id + '; will retry on next sweep', error)
           // Avoid hammering the same unavailable checkpoint or stale text in
           // a single batch. Other cases remain safe to process next sweep.
           break
+        } finally {
+          this.currentId = null
         }
       }
     } finally { this.abort = null }
@@ -127,5 +160,6 @@ export class AutoQa {
     this.abort?.abort()
     await this.busy
     this.pending.clear()
+    this.lastErrors.clear()
   }
 }
