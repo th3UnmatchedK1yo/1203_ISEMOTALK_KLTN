@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { ArrowRight, AudioLines, BookOpen, ClipboardCheck } from 'lucide-react'
+import { ArrowRight, AudioLines, BookOpen, ClipboardCheck, UploadCloud, ListChecks, BarChart3, BriefcaseBusiness } from 'lucide-react'
 
 const endpoints = [
   { rq: 'RQ1 · Tính bổ sung', model: 'F1 · XLS-R + XLM-R', question: 'Văn bản có bổ sung thông tin khi đánh giá trên người nói tách biệt?', decision: 'Giữ danh tính mô hình và từng nguồn bằng chứng. Chỉ so sánh âm thanh, văn bản và hợp nhất khi có đầu ra thật tương ứng.', limit: 'Điểm benchmark không phải độ chính xác trên cuộc gọi khách hàng.' },
@@ -12,15 +12,31 @@ export function ResearchPage() {
     <header className="border-b border-[#b7cbd5] pb-7">
       <p className="mb-3 inline-flex items-center gap-2 text-sm font-semibold text-[#0E5665]"><BookOpen size={18} aria-hidden="true"/> Nghiên cứu & phạm vi ứng dụng</p>
       <h1 className="max-w-4xl text-3xl font-semibold leading-tight tracking-tight text-[#102D43]">Từ nhận diện cảm xúc đến bằng chứng để QA xem xét.</h1>
-      <p className="mt-4 max-w-4xl text-lg leading-relaxed">ISEmoTalk hỗ trợ người kiểm soát chất lượng tìm đoạn cần nghe lại trong cuộc gọi tiếng Việt, kiểm tra dự đoán và ghi nhận việc cần xử lý tiếp.</p>
-      <Link to="/calls" className="mt-5 inline-flex items-center gap-2 font-semibold text-[#0E5665] underline underline-offset-4">Mở hàng đợi xem xét <ArrowRight size={18} aria-hidden="true"/></Link>
+      <p className="mt-4 max-w-4xl text-lg leading-relaxed">Trang này giải thích các mô hình nghiên cứu và giới hạn ứng dụng. <strong>Đây không phải màn hình chạy AI.</strong> Để sử dụng hệ thống, đi theo các bước nghiệp vụ bên dưới.</p>
+      <Link to="/calls" className="mt-5 inline-flex items-center gap-2 font-semibold text-[#0E5665] underline underline-offset-4">Trở lại hàng đợi QA <ArrowRight size={18} aria-hidden="true"/></Link>
     </header>
+
+    <section aria-labelledby="research-navigation" className="rounded-xl border border-teal-200 bg-white p-5">
+      <h2 id="research-navigation" className="text-lg font-bold text-[#102D43]">Muốn làm việc gì thì vào tab nào?</h2>
+      <div className="mt-3 grid gap-3 sm:grid-cols-2">
+        {([
+          {to:'/calls/new',title:'Tải lên',text:'Nạp file ghi âm để chạy ASR khi model sẵn sàng; hoặc nhập kết quả đã có', icon:UploadCloud},
+          {to:'/calls',title:'Cuộc gọi',text:'Xem AI sàng lọc, mở audio, transcript và lưu kết luận QA',icon:ListChecks},
+          {to:'/analytics',title:'Phân tích',text:'Đếm hồ sơ đã được XLM-R quét, cảnh báo và công việc QA còn tồn',icon:BarChart3},
+          {to:'/cases',title:'Vụ việc',text:'Giao người xử lý, đặt hạn, ghi kết quả gọi lại và đóng khi hoàn tất',icon:BriefcaseBusiness},
+        ] as const).map(item=><Link key={item.to} to={item.to} className="flex gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3 hover:border-teal-300 hover:bg-teal-50">
+          <item.icon size={21} className="mt-0.5 shrink-0 text-teal-800" aria-hidden="true"/>
+          <span><strong className="block text-sm text-slate-900">{item.title}</strong><span className="mt-1 block text-xs leading-5 text-slate-600">{item.text}</span></span>
+          <ArrowRight size={16} className="ml-auto shrink-0 text-teal-700" aria-hidden="true"/>
+        </Link>)}
+      </div>
+    </section>
 
     <section aria-labelledby="process-heading">
       <h2 id="process-heading" className="text-xl font-semibold text-[#102D43]">Một cuộc gọi đi qua hệ thống như thế nào?</h2>
       <ol className="mt-4 grid gap-0 overflow-hidden rounded-lg border border-[#b7cbd5] bg-white md:grid-cols-3">
         {[
-          { icon: AudioLines, title: '01 · Tiếp nhận & phân tích', body: 'Nhập ghi âm hoặc kết quả có nguồn gốc. ASR tạo văn bản; gán vai người nói; SER trả dự đoán theo từng đoạn. Job lưu tiến độ và lỗi để thử lại.' },
+          { icon: AudioLines, title: '01 · Tiếp nhận & phân tích', body: 'Với audio mới, ASR chỉ tạo văn bản khi checkpoint đã sẵn sàng. OneVoice có sẵn transcript nguồn nên không chạy ASR. XLM-R sàng lọc nội dung riêng; SER chỉ trả cảm xúc khi checkpoint được xác minh.' },
           { icon: ClipboardCheck, title: '02 · Người đánh giá kiểm tra', body: 'Nghe audio tại timestamp, đọc transcript, so sánh bằng chứng đang có. Xác nhận hoặc sửa nhãn, ghi chú và lưu đánh giá.' },
           { icon: ArrowRight, title: '03 · Chốt hành động nghiệp vụ', body: 'Liên kết mã ticket, ghi kết quả xử lý, người phụ trách và hạn gọi lại. Lưu lịch sử thay đổi; trạng thái xử lý vụ việc tách khỏi trạng thái AI và QA.' },
         ].map(({ icon: Icon, title, body }) => <li key={title} className="border-b border-[#d4e0e6] p-5 last:border-b-0 md:border-b-0 md:border-r md:last:border-r-0">
@@ -64,7 +80,7 @@ export function ResearchPage() {
     </section>
 
     <footer className="border-t border-[#b7cbd5] pt-4 text-sm leading-relaxed text-slate-700">
-      <p>ASR demo faster-whisper-small và ASR PhoWhisper của nghiên cứu là các cấu hình khác nhau. Trạng thái mô hình thực tế nằm trong màn hình tải lên và bằng chứng xử lý của từng cuộc gọi.</p>
+      <p>XLM-R QA phân loại <strong>mức cần QA chú ý từ transcript</strong>, còn SER fusion F4 thuộc nhánh nghiên cứu cảm xúc âm thanh–văn bản. Cả hai không đồng nghĩa đã chứng minh độ chính xác trên cuộc gọi CSKH thật. Trạng thái model thực nằm ở Tải lên và nguồn xử lý của từng cuộc gọi.</p>
     </footer>
   </article>
 }
