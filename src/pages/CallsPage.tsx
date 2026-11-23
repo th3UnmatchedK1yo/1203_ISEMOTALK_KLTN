@@ -110,7 +110,7 @@ export function CallsPage() {
               ? <span className="font-medium text-amber-900">Cần chạy lại (transcript đã sửa)</span>
               : <div className="space-y-1"><span className={'font-semibold ' + (call.qaTriage.label === 'needs_attention' ? 'text-amber-900' : 'text-teal-900')}>
                 {call.qaTriage.label === 'needs_attention' ? 'Gợi ý xem lại' : 'Chưa cần ưu tiên'}
-              </span><p className="text-xs text-slate-600">P(cần xem) {(call.qaTriage.score * 100).toFixed(0)}%{call.qaTriage.truncated ? ' · text bị cắt' : ''}</p></div>}</td>
+              </span><p className="text-xs text-slate-600">Điểm AI QA {(call.qaTriage.score * 100).toFixed(0)}%{call.qaTriage.truncated ? ' · text bị cắt' : ''}</p></div>}</td>
             <td className="px-4 py-4">{reviews[call.reviewStatus]}</td>
             <td className="px-4 py-4"><span className={'inline-flex rounded-md border px-2 py-1 font-medium ' + (call.status === 'failed' ? 'border-amber-200 bg-amber-50 text-amber-900' : call.status === 'ready' ? 'border-teal-200 bg-teal-50 text-teal-900' : 'border-slate-200 bg-slate-50 text-slate-800')}>{processing[call.status]}</span></td>
           </tr>)}
@@ -127,6 +127,6 @@ export function CallsPage() {
         <button type="button" disabled={loading || page * data.pageSize >= data.total} onClick={() => setPage(p => p + 1)} className="min-h-11 rounded-lg border border-slate-300 bg-white px-3 py-2 disabled:opacity-40">Sau</button>
       </div>
     </nav>}
-    <p className="text-sm leading-6 text-slate-600">Ưu tiên (SER) dựa trên các câu có vai trò khách hàng được xác định, còn “AI QA” là kết quả riêng của XLM-R phân loại transcript. Điểm model không phải độ chính xác hay kết luận nhân viên sai. Kết quả cũ khi sửa transcript sẽ được đánh dấu cần chạy lại.</p>
+    <p className="text-sm leading-6 text-slate-600">Ưu tiên (SER) dựa trên các câu có vai trò khách hàng được xác định, còn “AI QA” là kết quả riêng của XLM-R phân loại transcript. Điểm model là gợi ý sàng lọc (với transcript dài có thể dùng điểm tối đa theo cửa sổ), không phải xác suất đã hiệu chuẩn hoặc kết luận nhân viên sai. Kết quả cũ khi sửa transcript sẽ được đánh dấu cần chạy lại.</p>
   </div>
 }
