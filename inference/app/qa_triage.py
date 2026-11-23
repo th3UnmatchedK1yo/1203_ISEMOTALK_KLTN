@@ -35,6 +35,23 @@ def window_starts(total: int, payload: int, max_windows: int = 48) -> tuple[list
     return sorted(set(starts[i] for i in picks)), True
 
 
+def xlmr_window_ids(tokenizer, all_token_ids: list[int], start: int, payload: int) -> list[int]:
+    """Construct the documented XLM-R single-sequence format: <s> X </s>.
+
+    Transformers 5 removed some old tokenizer internals (notably
+    prepare_for_model). Use explicit, validated token IDs instead so window
+    inference follows the pretrained XLM-R sequence classification contract.
+    """
+    if start < 0 or payload < 1 or start >= len(all_token_ids):
+        raise ValueError("Invalid QA token window boundaries.")
+    if tokenizer.num_special_tokens_to_add(pair=False) != 2:
+        raise ModelNotReady("Expected exactly two XLM-R special tokens for single-sequence QA.")
+    cls_id, sep_id = tokenizer.cls_token_id, tokenizer.sep_token_id
+    if not isinstance(cls_id, int) or not isinstance(sep_id, int):
+        raise ModelNotReady("XLM-R CLS/SEP token IDs are missing.")
+    return [cls_id, *all_token_ids[start:start + payload], sep_id]
+
+
 class QATriageModel:
     def __init__(self):
         raw = os.getenv("ISEMO_QA_MODEL_DIR", "").strip()
@@ -77,6 +94,13 @@ class QATriageModel:
             if labels.get(0) != "routine" or labels.get(1) != "needs_attention":
                 raise ValueError("QA head label order differs from training contract.")
             tok = AutoTokenizer.from_pretrained(str(self.root))
+            # Verify the explicit XLM-R template against the *actual* model
+            # tokenizer once, before claiming that inference is available.
+            probe = "Xin chào, tôi cần hỗ trợ tài khoản."
+            raw_ids = tok(probe, add_special_tokens=False)["input_ids"]
+            encoded = tok(probe, add_special_tokens=True)["input_ids"]
+            if xlmr_window_ids(tok, raw_ids, 0, len(raw_ids)) != encoded:
+                raise ModelNotReady("XLM-R tokenizer special-token template differs from the checkpoint; refuse inference.")
             weight = self.root / "model.safetensors"
             h = hashlib.sha256()
             with weight.open("rb") as source:
@@ -112,12 +136,12 @@ class QATriageModel:
             scores = []
             with torch.inference_mode():
                 for start in starts:
-                    batch = self._tokenizer.prepare_for_model(
-                        ids[start:start + payload],
-                        add_special_tokens=True, return_attention_mask=True,
-                        return_tensors="pt",
-                    )
-                    logits = self._model(**{k: v.to("cuda:0") for k, v in batch.items()}).logits
+                    window_ids = xlmr_window_ids(self._tokenizer, ids, start, payload)
+                    # No use of removed Transformers 5 tokenizer APIs.
+                    # XLM-R single sequences have no required token_type_ids.
+                    input_ids = torch.tensor([window_ids], dtype=torch.long, device="cuda:0")
+                    attention_mask = torch.ones_like(input_ids, dtype=torch.long)
+                    logits = self._model(input_ids=input_ids, attention_mask=attention_mask).logits
                     scores.append(float(torch.softmax(logits.float(), dim=-1)[0, 1].cpu().item()))
             if not scores:
                 raise ModelNotReady("Tokenizer returned no usable QA window.")
