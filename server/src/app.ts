@@ -18,6 +18,7 @@ import { attachWorkflowRoutes, getWorkflow } from './workflow'
 
 import { attachServiceRoutes } from './service-routes'
 import { recordCaseRecordingDeletion } from './service-operations'
+import { attachQaTriageRoutes } from './qa-routes'
 
 const AUDIO_EXT: Record<string, string> = { '.wav': 'audio/wav', '.mp3': 'audio/mpeg', '.m4a': 'audio/mp4' }
 const DATA_EXT = new Set(['.json', '.csv'])
@@ -322,6 +323,7 @@ export function createApp({ db, config, client, pipeline }: AppDeps) {
 
   attachServiceRoutes(app, db)
   attachWorkflowRoutes(app, db)
+  attachQaTriageRoutes(app, db, config)
   app.use('/api', (_req, _res, next) => next(new HttpError(404, 'Đường dẫn API không tồn tại.')))
 
   // ---- Errors --------------------------------------------------------------
