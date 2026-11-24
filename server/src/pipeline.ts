@@ -191,6 +191,7 @@ export class Pipeline {
         const current = utts()
         const r = await this.client.emotion({
           path: this.audioPath(row),
+          agentChannel: row.agent_channel,
           utterances: current.map((u) => ({ id: u.id, start: u.start, end: u.end, text: u.text, speaker: u.speaker })),
         })
         const byId: Record<string, (typeof r.predictions)[number]> = {}
@@ -198,7 +199,7 @@ export class Pipeline {
         const missing = current.filter((u) => !byId[u.id])
         if (missing.length) throw new PipelineError(`Mô hình không trả kết quả cho ${missing.length} câu.`)
         repo.setPredictions(this.db, id, byId)
-        const prov: Provenance = r.provenance === 'mock' || row.provenance === 'mock' ? 'mock' : 'real'
+        const prov: Provenance = r.provenance === 'mock' || row.provenance === 'mock' || row.speaker_source === 'mock' ? 'mock' : 'real'
         repo.updateCall(this.db, id, { provenance: prov })
         return { detail: `${current.length} câu${prov === 'mock' ? ' · mô phỏng' : ''}` }
       }

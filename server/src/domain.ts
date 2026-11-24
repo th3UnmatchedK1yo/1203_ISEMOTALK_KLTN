@@ -65,6 +65,7 @@ export type MomentType =
   | 'sustained_negative'
   | 'modality_disagreement'
   | 'high_confidence_change'
+  | 'uncertain_prediction'
 
 export const MOMENT_TYPES: MomentType[] = [
   'escalation',
@@ -72,6 +73,7 @@ export const MOMENT_TYPES: MomentType[] = [
   'sustained_negative',
   'modality_disagreement',
   'high_confidence_change',
+  'uncertain_prediction',
 ]
 
 export interface Moment {
@@ -135,7 +137,7 @@ export function detectMoments(utterances: Utterance[]): Moment[] {
   const hasCustomer = ordered.some((u) => u.speaker === 'customer')
   // The customer's emotional arc is what QA cares about. If speakers are not
   // assigned yet, fall back to every utterance rather than reporting nothing.
-  const arc = ordered.filter((u) => u.fused && (hasCustomer ? u.speaker === 'customer' : true))
+  const arc = ordered.filter((u) => u.fused && (hasCustomer ? u.speaker === 'customer' : u.speaker === 'agent'))
 
   for (let i = 1; i < arc.length; i++) {
     const prev = arc[i - 1]
@@ -152,7 +154,7 @@ export function detectMoments(utterances: Utterance[]): Moment[] {
         end: cur.end,
         emotion: c.emotion,
         fromEmotion: p.emotion,
-        description: `Khách hàng chuyển từ "${EMOTION_LABELS_VI[p.emotion]}" sang "${EMOTION_LABELS_VI[c.emotion]}" lúc ${fmtClock(cur.start)}.`,
+        description: `Nhãn mô hình chuyển từ "${EMOTION_LABELS_VI[p.emotion]}" sang "${EMOTION_LABELS_VI[c.emotion]}" lúc ${fmtClock(cur.start)}.`,
         utteranceIds: [prev.id, cur.id],
       })
     } else if (isNegative(p.emotion) && !isNegative(c.emotion) && c.confidence >= CONF_RECOVERY) {
@@ -163,7 +165,7 @@ export function detectMoments(utterances: Utterance[]): Moment[] {
         end: cur.end,
         emotion: c.emotion,
         fromEmotion: p.emotion,
-        description: `Khách hàng hồi phục từ "${EMOTION_LABELS_VI[p.emotion]}" về "${EMOTION_LABELS_VI[c.emotion]}" lúc ${fmtClock(cur.start)}.`,
+        description: `Nhãn mô hình chuyển từ "${EMOTION_LABELS_VI[p.emotion]}" về "${EMOTION_LABELS_VI[c.emotion]}" lúc ${fmtClock(cur.start)}.`,
         utteranceIds: [prev.id, cur.id],
       })
     } else if (c.confidence >= CONF_HIGH) {
@@ -217,11 +219,21 @@ export function detectMoments(utterances: Utterance[]): Moment[] {
       end: u.end,
       emotion: u.fused?.emotion ?? null,
       fromEmotion: null,
-      description: `Giọng nói cho thấy "${EMOTION_LABELS_VI[u.acoustic.emotion]}" nhưng nội dung cho thấy "${EMOTION_LABELS_VI[u.lexical.emotion]}" (${fmtClock(u.start)}).`,
+      description: `Mô hình âm học dự đoán "${EMOTION_LABELS_VI[u.acoustic.emotion]}" nhưng mô hình văn bản dự đoán "${EMOTION_LABELS_VI[u.lexical.emotion]}" (${fmtClock(u.start)}).`,
       utteranceIds: [u.id],
     })
   }
 
+  // Low top-1 score is a heuristic for review, not a calibrated error probability.
+  for (const u of ordered) {
+    if (!u.fused || u.fused.confidence >= 0.55) continue
+    moments.push({
+      id: `uncertain_prediction:${u.id}`, type: 'uncertain_prediction',
+      start: u.start, end: u.end, emotion: u.fused.emotion, fromEmotion: null,
+      description: `Điểm top-1 thấp (${Math.round(u.fused.confidence * 100)}%); cần nghe lại. Ngưỡng thử nghiệm 55%.`,
+      utteranceIds: [u.id],
+    })
+  }
   return moments.sort((a, b) => a.start - b.start || a.type.localeCompare(b.type))
 }
 
@@ -291,7 +303,8 @@ export function derive(utterances: Utterance[]): CallDerived {
   const avgConfidence = predicted.reduce((a, u) => a + u.fused!.confidence, 0) / predicted.length
 
   const score = priorityScore({ negativeRatio, escalationCount, disagreementCount }, sustained)
-  const priority: Priority = score >= 50 ? 'high' : score >= 25 ? 'medium' : 'low'
+  const needsReliabilityReview = moments.some((m) => m.type === 'uncertain_prediction' || m.type === 'modality_disagreement')
+  const priority: Priority = score >= 50 ? 'high' : score >= 25 || needsReliabilityReview ? 'medium' : 'low'
 
   return {
     priority,

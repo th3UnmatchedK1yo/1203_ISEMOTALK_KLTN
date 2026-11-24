@@ -38,7 +38,7 @@ describe('detectMoments', () => {
 
   it('ignores low-confidence changes and agent emotion when computing the arc', () => {
     const utts = [u('customer', 0, 5, 'neutral'), u('agent', 5, 9, 'angry', 0.99), u('customer', 9, 14, 'angry', 0.4)]
-    expect(detectMoments(utts)).toHaveLength(0)
+    expect(detectMoments(utts).map(m => m.type)).toEqual(['uncertain_prediction'])
   })
 
   it('flags strong acoustic/lexical conflicts for any speaker', () => {
@@ -52,6 +52,16 @@ describe('detectMoments', () => {
   })
 })
 
+describe('reliability triage', () => {
+  it('does not interpret alternating unknown speakers as a customer arc', () => {
+    expect(detectMoments([u('unknown',0,5,'neutral'),u('unknown',5,10,'angry',0.9)]).some(m=>m.type==='escalation')).toBe(false)
+  })
+  it('surfaces low top-1 scores and gives the call at least medium priority', () => {
+    const utts=[u('unknown',0,5,'neutral',0.4)]
+    expect(detectMoments(utts).map(m=>m.type)).toEqual(['uncertain_prediction'])
+    expect(derive(utts).priority).toBe('medium')
+  })
+})
 describe('derive', () => {
   it('rates a calm call low and a hostile one high', () => {
     expect(derive([u('customer', 0, 10, 'neutral'), u('customer', 10, 20, 'happy')]).priority).toBe('low')
