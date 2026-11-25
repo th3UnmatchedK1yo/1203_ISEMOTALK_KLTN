@@ -1,0 +1,19 @@
+name: Phase 2 data contract checks
+on:
+  push:
+    branches: [feat/phase2-data-foundation-20261125]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m py_compile data_pipeline/audit.py data_pipeline/test_audit.py
+      - run: python -m unittest data_pipeline.test_audit -v
+      - run: bash -n scripts/phase2_restore_data.sh

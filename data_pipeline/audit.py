@@ -135,7 +135,7 @@ def lucee(root):
 def vnemos(root):
     for folder in sorted(p for p in root.iterdir() if p.is_dir()):
         raw = folder.name.lower()
-        for path in sorted(folder.rglob("*.wav")):
+        for path in sorted(p for p in folder.rglob("*") if p.is_file() and p.suffix.lower()==".wav"):
             rel = path.relative_to(root).as_posix()
             row = base("vnemos", rel, rel, raw, VNEMOS.get(raw), recording_type="media",
                        benchmark="historical_external_only")
@@ -146,7 +146,12 @@ def vnemos(root):
             yield row
 
 def iemocap(root):
-    for session in sorted(root.glob("Session[1-5]")):
+    sessions = sorted(p for p in root.glob("Session[1-5]") if p.is_dir())
+    if {p.name for p in sessions} != {f"Session{i}" for i in range(1,6)}:
+        raise ValueError("Expected all five IEMOCAP sessions")
+    for session in sessions:
+        if not list((session / "dialog" / "EmoEvaluation").glob("*.txt")):
+            raise ValueError("Missing session emotion annotations")
         for ann in sorted((session / "dialog" / "EmoEvaluation").glob("*.txt")):
             transcript = session / "dialog" / "transcriptions" / (ann.stem + ".txt")
             texts = {}
@@ -158,6 +163,8 @@ def iemocap(root):
             for line in ann.read_text(encoding="utf-8", errors="replace").splitlines():
                 m = EVAL_LINE.match(line)
                 if not m:
+                    if line.lstrip().startswith("["):
+                        raise ValueError("Malformed IEMOCAP evaluation row")
                     continue
                 start, end, uid, raw = m.groups()
                 if not re.fullmatch(r"Ses\d\d[FM]_.+_[FM]\d+", uid):
@@ -314,11 +321,15 @@ def run_audit(raw, out, sources):
                 "speaker_count":len({r["speaker_id"] for r in rr if r["speaker_id"]}),
                 "hours_valid_audio":round(sum(r.get("duration_ms",0) for r in rr if r["status"]!="invalid")/3600000,6),
                 "text_source_counts":dict(Counter(r["text_source"] for r in rr)),
+                "issue_counts":dict(Counter(issue.split(":")[0] for r in rr for issue in r["issues"])),
+                "audio_verified_rows":sum(bool(r.get("sha256")) and r["status"]!="invalid" for r in rr),
                 "duplicate_rows":sum(r["sample_id"] in dup_ids for r in rr)}
         # Only rows eligible for that source's strict group analysis.
         grouped = [r for r in rr if r["status"] in ("candidate","synthetic_only","metadata_only","auxiliary")]
         stat["component_sizes"] = sorted((len(c) for c in components(grouped)),reverse=True)
         report["sources"][s] = stat
+        if s == "vnemos" and Counter(r["label_raw"] for r in rr) != Counter({label:50 for label in VNEMOS}):
+            failures[s] = "Unexpected VNEMOS class counts or folder names"
         if not rr or (s in EXPECTED and len(rr) != EXPECTED[s]):
             failures[s] = "Missing or unexpected row count; confirm exact source version"
         if any(r["status"] == "invalid" for r in rr):
@@ -381,7 +392,7 @@ def fold_manifest(inventory_dir, out, sources, rights_path, seed=20261125):
                 result.append({"sample_id":r["sample_id"],"source":s,"fold":i,"sha256":r["sha256"],
                                "emotion":r["emotion"],"group_keys":r["group_keys"]})
         summary[s] = {"groups":len(cc),"eligible":len(eligible),"folds":fold_stats}
-    new_private_dir(out)
+    new_private_dir(out, inventory_dir)
     write_jsonl(out/"development_folds.jsonl",sorted(result,key=lambda r:r["sample_id"]))
     write_json(out/"split_report.json",{"source_inventory_sha256":digest(p),"rights_snapshot_sha256":digest(rights_path),
               "seed":seed,"protocol":"development only; not novel independent test; near-duplicate and cross-source speaker audit still required",
