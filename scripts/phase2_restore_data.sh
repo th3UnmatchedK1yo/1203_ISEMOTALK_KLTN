@@ -33,7 +33,7 @@ if [[ "$remote" == *":SER_BACKUP_20260928" ]]; then
     copy_one "$remote/$name" "$target/$name"
   done
 else
-  source_name="${remote##*/}"
+  source_name="$(basename "${remote#*:}")"
   copy_one "$remote" "$target/$source_name"
 fi
 echo "Restore stage finished in $mode; run corpus audit before training."

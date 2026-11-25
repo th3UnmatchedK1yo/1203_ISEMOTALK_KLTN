@@ -1,0 +1,344 @@
+{
+  "schema_version": 2,
+  "project": "ISEmoTalk KLTN — academic/non-commercial research prototype",
+  "strategy": "Use all accessible existing datasets in the task for which they provide supervision; keep source/corpus identity and original labels; use multi-task/multi-corpus learning rather than forcing incompatible labels into one label set.",
+  "tasks": {
+    "asr": [
+      {
+        "id": "vlsp2023",
+        "name": "VLSP2023",
+        "language": "vi",
+        "reported_size": "300 hours",
+        "supervision": "audio+transcript; paper also reports ASR+SER usage",
+        "role": "ASR training; investigate emotion annotations for SER",
+        "priority": "P0",
+        "source": "VLSP 2025 paper; VLSP Resources"
+      },
+      {
+        "id": "phoaudiobook",
+        "name": "PhoAudiobook",
+        "language": "vi",
+        "reported_size": "1494 hours",
+        "supervision": "audio+transcript",
+        "role": "large-scale ASR acoustic/language adaptation",
+        "priority": "P0",
+        "source": "thivux/phoaudiobook"
+      },
+      {
+        "id": "vivoice",
+        "name": "viVoice",
+        "language": "vi",
+        "reported_size": "887,772 samples; 1,016.97 hours",
+        "supervision": "audio+transcript",
+        "role": "ASR multi-speaker/accent training",
+        "priority": "P0",
+        "source": "capleaf/viVoice"
+      },
+      {
+        "id": "viet_bud500",
+        "name": "Bud500",
+        "language": "vi",
+        "reported_size": "~500 hours",
+        "supervision": "audio+transcript",
+        "role": "ASR domain/accent training",
+        "priority": "P0",
+        "source": "linhtran92/viet_bud500"
+      },
+      {
+        "id": "vigbigdata",
+        "name": "28k_VigBigData",
+        "language": "vi",
+        "reported_size": "460k utterances (VLSP 2025 paper)",
+        "supervision": "audio+transcript",
+        "role": "ASR training after source/schema verification",
+        "priority": "P1",
+        "source": "VLSP 2025 paper / VLSP resources"
+      },
+      {
+        "id": "vimd",
+        "name": "ViMD",
+        "language": "vi",
+        "reported_size": "100 hours",
+        "supervision": "audio+transcript",
+        "role": "ASR regional/news speech adaptation",
+        "priority": "P0",
+        "source": "VLSP 2025 paper / EMNLP 2024"
+      },
+      {
+        "id": "vivos",
+        "name": "VIVOS",
+        "language": "vi",
+        "reported_size": "15 hours",
+        "supervision": "audio+transcript",
+        "role": "ASR training/benchmark",
+        "priority": "P0",
+        "source": "AILAB-VNUHCM/vivos"
+      },
+      {
+        "id": "fosd",
+        "name": "FPT Open Speech Dataset",
+        "language": "vi",
+        "reported_size": "25,921 recordings; ~30 hours",
+        "supervision": "audio+transcript",
+        "role": "ASR training/diagnostic",
+        "priority": "P0",
+        "source": "FPT Open Speech Dataset v4"
+      },
+      {
+        "id": "fleurs",
+        "name": "FLEURS vi_vn",
+        "language": "vi",
+        "reported_size": "official train/dev/test",
+        "supervision": "audio+human transcript",
+        "role": "train on train; dev for selection; test frozen",
+        "priority": "P0",
+        "source": "google/fleurs"
+      },
+      {
+        "id": "vietmed",
+        "name": "VietMed",
+        "language": "vi",
+        "reported_size": "16h labeled + 1000h unlabeled medical + 1200h unlabeled general",
+        "supervision": "labeled/unlabeled audio; task/domain specific",
+        "role": "ASR domain adaptation and representation learning",
+        "priority": "P1",
+        "source": "LREC-COLING 2024"
+      },
+      {
+        "id": "viet_superspeech",
+        "name": "VietSuperSpeech",
+        "language": "vi",
+        "reported_size": "paper reports 267.39h; counts need reconciliation",
+        "supervision": "audio + pseudo/ASR transcript",
+        "role": "ASR training with transcript-quality filtering",
+        "priority": "P1",
+        "source": "VietSuperSpeech paper and HF card"
+      },
+      {
+        "id": "gigaspeech2_vi",
+        "name": "GigaSpeech2 Vietnamese",
+        "language": "vi",
+        "reported_size": "6039h refined / 7324h raw; 10.2h dev / 11h test",
+        "supervision": "large pseudo-labeled train; human-annotated dev/test",
+        "role": "large-scale ASR pretraining/fine-tuning; refined preferred initially, raw for ablation",
+        "priority": "P1",
+        "source": "SpeechColab/GigaSpeech2"
+      },
+      {
+        "id": "datahive_phone",
+        "name": "DataHive multilingual phone conversations",
+        "language": "vi",
+        "reported_size": "small public preview; bounded downloader exists on remote-GPU branch",
+        "supervision": "real recorded stereo conversation, no transcript",
+        "role": "telephone-channel and diarization robustness; not customer-service data",
+        "priority": "P1",
+        "source": "datahiveai/multilingual-conversations-sample"
+      },
+      {
+        "id": "callfriend",
+        "name": "CALLFRIEND Vietnamese",
+        "language": "vi",
+        "reported_size": "60 telephone conversations; ~25h; 8kHz stereo",
+        "supervision": "telephone audio and corpus transcripts/metadata subject to access",
+        "role": "phone-channel/diarization evaluation and adaptation",
+        "priority": "P2",
+        "source": "LDC96S60"
+      }
+    ],
+    "ser": [
+      {
+        "id": "visec",
+        "name": "ViSEC",
+        "language": "vi",
+        "reported_size": "5280 verified metadata rows",
+        "labels": [
+          "neutral",
+          "happy",
+          "sad",
+          "angry"
+        ],
+        "role": "primary Vietnamese 4-class SER head"
+      },
+      {
+        "id": "lucee",
+        "name": "LUCEE / VI_FINAL",
+        "language": "vi",
+        "reported_size": "701 approved rows",
+        "labels": [
+          "neutral",
+          "happy",
+          "sad",
+          "angry"
+        ],
+        "role": "human-reviewed transcript and multimodal adaptation; small, group-aware"
+      },
+      {
+        "id": "vnemos",
+        "name": "VNEMOS",
+        "language": "vi",
+        "reported_size": "250; five original classes",
+        "labels": [
+          "angry",
+          "fear",
+          "happiness",
+          "neutral",
+          "sadness"
+        ],
+        "role": "multi-corpus SER; retain fear as auxiliary class; preserve historic paper result separately"
+      },
+      {
+        "id": "iemocap",
+        "name": "IEMOCAP",
+        "language": "en",
+        "reported_size": "~10k utterances",
+        "labels": [
+          "neutral",
+          "happy",
+          "sad",
+          "angry",
+          "excited",
+          "frustrated",
+          "fearful",
+          "disgust",
+          "surprise"
+        ],
+        "role": "cross-lingual auxiliary SER with session/speaker-disjoint splits"
+      },
+      {
+        "id": "emodb",
+        "name": "EMO-DB",
+        "language": "de",
+        "reported_size": "535 utterances",
+        "labels": [
+          "anger",
+          "boredom",
+          "disgust",
+          "fear",
+          "happiness",
+          "sadness",
+          "neutral"
+        ],
+        "role": "cross-lingual auxiliary SER"
+      },
+      {
+        "id": "ravdess",
+        "name": "RAVDESS speech",
+        "language": "en",
+        "reported_size": "1440 speech recordings",
+        "labels": [
+          "neutral",
+          "calm",
+          "happy",
+          "sad",
+          "angry",
+          "fearful",
+          "disgust",
+          "surprised"
+        ],
+        "role": "cross-lingual auxiliary SER; keep calm distinct unless protocol defines mapping"
+      },
+      {
+        "id": "crema_d",
+        "name": "CREMA-D",
+        "language": "en",
+        "reported_size": "7442 utterances",
+        "labels": [
+          "anger",
+          "disgust",
+          "fear",
+          "happy",
+          "sad",
+          "neutral"
+        ],
+        "role": "cross-lingual auxiliary SER"
+      },
+      {
+        "id": "emov_db",
+        "name": "EmoV-DB",
+        "language": "en",
+        "reported_size": "~7000 utterances",
+        "labels": "source ontology to inspect",
+        "role": "cross-lingual auxiliary SER"
+      },
+      {
+        "id": "sentiv",
+        "name": "SentiV / VietSpeech",
+        "language": "vi",
+        "reported_size": "source card / access manifest to inspect",
+        "labels": [
+          "anger",
+          "enjoyment",
+          "fear",
+          "neutral",
+          "sadness",
+          "surprise"
+        ],
+        "role": "Vietnamese multi-class auxiliary; preserve original ontology"
+      },
+      {
+        "id": "vlsp2025_ser",
+        "name": "VLSP 2025 SER task data",
+        "language": "vi",
+        "reported_size": "access/official split to obtain",
+        "labels": [
+          "neutral",
+          "negative"
+        ],
+        "role": "binary auxiliary task; do not relabel negative as angry"
+      },
+      {
+        "id": "meld_viet",
+        "name": "MELD_VIET_CLEANED_DATA archive on Drive",
+        "language": "vi",
+        "reported_size": "stage_04_synthetic_technical_clean.zip; 1.19GB",
+        "labels": "unknown until archive manifest audit",
+        "role": "inspect schema; use as conversational SER auxiliary if it contains suitable labels"
+      }
+    ],
+    "conversation": [
+      {
+        "id": "onevoice",
+        "name": "OneVoice",
+        "language": "vi",
+        "reported_size": "1200 synthetic calls",
+        "labels": [
+          "needs_attention",
+          "topic/metadata labels"
+        ],
+        "role": "call-level business/attention classifier and workflow demo; synthetic source tag retained"
+      },
+      {
+        "id": "meld_viet",
+        "name": "MELD-VIET archive",
+        "language": "vi",
+        "reported_size": "1.19GB zip in Drive",
+        "labels": "pending archive inspection",
+        "role": "potential conversation emotion/context data"
+      }
+    ]
+  },
+  "training_policy": {
+    "use_all_accessible": "Every usable corpus contributes to at least one relevant train/validation/evaluation/robustness role. No corpus is discarded only because it is non-commercial; KLTN is academic/non-commercial.",
+    "no_blind_concatenation": "Do not flatten incompatible emotion ontologies into one label set. Preserve original labels and corpus ID; use common-label head plus corpus-specific auxiliary heads or task-specific losses.",
+    "four_class_target": [
+      "neutral",
+      "happy",
+      "sad",
+      "angry"
+    ],
+    "asr": "Use Vietnamese transcript corpora for ASR training; preserve human vs pseudo transcript source. FLEURS/GigaSpeech2 official dev/test remain evaluation partitions, not training data.",
+    "ser": "Multi-corpus/multi-task learning with shared acoustic representation, corpus-specific emotion heads and a target 4-class head. Compare acoustic-only, text-only and fusion on aligned corpora. Audio-only corpora still contribute to acoustic branch.",
+    "transcript": "Prefer human transcript where available; run ASR on audio-only emotion corpora and store ASR hypothesis separately. Never treat generated ASR text as gold transcript.",
+    "business": "OneVoice supports call-level needs_attention/topic learning and workflow simulation; do not convert call-level labels into utterance emotion labels.",
+    "quality_filtering": "Quality-score, deduplicate and weight; do not delete entire lower-quality corpus. Compare raw vs filtered and corpus-balanced sampling.",
+    "telephone_adaptation": "Use telephone recordings where available and 8kHz/codec/noise/reverb augmentation on training data; retain original group IDs.",
+    "speed": "More data can improve generalization when useful and compatible, but increases training time. Inference speed is optimized separately through model size, batching, caching, quantization and serving design.",
+    "holdouts": "Every sample is assigned a declared role; no sample is silently wasted. Maintain fixed benchmark holdouts for honest evaluation; use grouped cross-validation for small corpora."
+  },
+  "local_drive_discovery": {
+    "meld_viet_archive": "/Google Drive/MELD_VIET_CLEANED_DATA/stage_04_synthetic_technical_clean.zip",
+    "meld_viet_archive_size_bytes": 1190709785,
+    "ser_backup_test": "/Google Drive/SER_BACKUP_TEST (currently empty)",
+    "ser_backup_root": "/Google Drive/SER_BACKUP_20260928"
+  }
+}
