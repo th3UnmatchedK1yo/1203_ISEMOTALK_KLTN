@@ -1,0 +1,46 @@
+{
+  "visec": {
+    "allowed": [],
+    "reference": ""
+  },
+  "lucee": {
+    "allowed": [],
+    "reference": ""
+  },
+  "vnemos": {
+    "allowed": [],
+    "reference": ""
+  },
+  "iemocap": {
+    "allowed": [],
+    "reference": ""
+  },
+  "onevoice": {
+    "allowed": [],
+    "reference": ""
+  },
+  "fleurs": {
+    "allowed": [],
+    "reference": ""
+  },
+  "fosd": {
+    "allowed": [],
+    "reference": ""
+  },
+  "sentiv": {
+    "allowed": [],
+    "reference": ""
+  },
+  "vlsp2025": {
+    "allowed": [],
+    "reference": ""
+  },
+  "target_roleplay": {
+    "allowed": [],
+    "reference": ""
+  },
+  "target_real": {
+    "allowed": [],
+    "reference": ""
+  }
+}

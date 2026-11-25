@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "call_id": "fictional-template",
+  "recording_type": "human_roleplay_or_authorized_real",
+  "script_family_id": null,
+  "session_group_id": null,
+  "speaker_group_ids": [],
+  "audio_relpath": null,
+  "audio_sha256": null,
+  "rights": {
+    "analysis": false,
+    "research_train": false,
+    "commercial_train": false,
+    "reference": null
+  },
+  "segments": [
+    {
+      "segment_id": null,
+      "start_ms": null,
+      "end_ms": null,
+      "speaker_cluster": null,
+      "verified_role": "unknown",
+      "role_evidence": null,
+      "overlap": null,
+      "quality_flags": [],
+      "reference_transcript": null,
+      "emotion_annotations": [],
+      "adjudicated_emotion": null,
+      "abstain_reason": null
+    }
+  ],
+  "business": {
+    "intents": [],
+    "evidence_spans": [],
+    "follow_up": "unknown",
+    "stated_outcome": null,
+    "verified_outcome": null,
+    "qa_relevance": "unknown",
+    "policy_reference": null,
+    "reviewer_annotations": []
+  }
+}
