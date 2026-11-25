@@ -30,7 +30,7 @@ def inspect(archive: Path) -> dict:
     previews=[]
     with zipfile.ZipFile(archive) as z:
         for info in z.infolist():
-            name=info.filename.replace("\\\\","/")
+            name=info.filename.replace(chr(92), "/")
             parts=Path(name).parts
             if name.startswith("/") or ".." in parts or re.match(r"^[A-Za-z]:",name):
                 suspicious+=1
@@ -84,7 +84,7 @@ def main():
     if out.exists():
         p.error("Output exists; choose a new versioned report path")
     out.parent.mkdir(parents=True,exist_ok=True)
-    out.write_text(json.dumps(report,ensure_ascii=False,indent=2)+"\\n",encoding="utf-8")
+    out.write_text(json.dumps(report,ensure_ascii=False,indent=2)+chr(10),encoding="utf-8")
     print(json.dumps({k:v for k,v in report.items() if k not in ("metadata_previews","metadata_candidates")},indent=2))
     if report["suspicious_member_path_count"]:
         raise SystemExit("Archive contains suspicious member paths; do not extract without review")
